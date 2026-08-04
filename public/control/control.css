@@ -1,0 +1,237 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f2f1ec;
+  color: #222;
+}
+
+main {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+select, button, input[type="range"] {
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.row select {
+  flex: 1;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+section {
+  margin-bottom: 24px;
+}
+
+h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #777;
+  margin: 0 0 8px;
+}
+
+.map-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1a1a;
+  margin-bottom: 10px;
+}
+
+.map-preview .media-wrap {
+  position: absolute;
+}
+
+.map-preview .fit-box {
+  position: absolute;
+}
+
+.map-preview .media-img,
+.map-preview .map-placeholder,
+.map-preview .fog-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.map-preview .media-img {
+  object-fit: contain;
+  display: block;
+  -webkit-user-drag: none;
+  user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.map-preview .map-placeholder {
+  background-color: #1a1a1a;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 15px, #333 15px 16px),
+    repeating-linear-gradient(90deg, transparent 0 15px, #333 15px 16px);
+}
+
+.map-preview .fog-overlay {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.map-preview .fog-overlay.revealed {
+  background: transparent;
+  outline: 1.5px dashed rgba(55, 138, 221, 0.7);
+  outline-offset: -1px;
+}
+
+.opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #777;
+  margin-bottom: 10px;
+}
+
+.opacity-row input {
+  flex: 1;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  color: #378add;
+  margin-bottom: 8px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  background: #fff;
+  font-size: 15px;
+}
+
+.fow-row.revealed {
+  background: #e6f1fb;
+  border-color: #85b7eb;
+  color: #0c447c;
+}
+
+.fow-state {
+  font-size: 12px;
+  color: #999;
+}
+
+.fow-row.revealed .fow-state {
+  color: #0c447c;
+}
+
+.thumb-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.image-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  overflow: hidden;
+  padding: 0;
+  background: #fff;
+}
+
+.image-thumb.active {
+  border: 2px solid #378add;
+}
+
+.image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hint {
+  font-size: 13px;
+  color: #999;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+  padding: 10px 14px;
+}
+
+button.primary {
+  width: 100%;
+  background: #222;
+  color: #fff;
+  border: none;
+  padding: 12px;
+}
+
+.pan-zoom {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.pad {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  grid-template-rows: repeat(3, 40px);
+  gap: 4px;
+}
+
+.pad button, .pad span {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.zoom {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zoom input {
+  flex: 1;
+}

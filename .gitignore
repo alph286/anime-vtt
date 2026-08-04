@@ -1,0 +1,7 @@
+node_modules/
+.env
+data/state.json
+storage/maps/*
+storage/images/*
+!storage/maps/.gitkeep
+!storage/images/.gitkeep

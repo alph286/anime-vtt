@@ -1,0 +1,98 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+#viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+#map-layer, #image-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: center center;
+}
+
+#image-layer {
+  display: none;
+}
+
+.media-wrap {
+  position: absolute;
+}
+
+.fit-box {
+  position: absolute;
+}
+
+.media-img, .map-placeholder, .fog-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.fog-layer {
+  z-index: 1;
+}
+
+.media-img {
+  object-fit: contain;
+  display: block;
+}
+
+.map-placeholder {
+  background-color: #1a1a1a;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 39px, #333 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, #333 39px 40px);
+}
+
+.fog-overlay {
+  position: absolute;
+  inset: 0;
+  background: #000;
+}
+
+.grid-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+#wifi-dot {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: background-color 0.3s;
+}
+
+#wifi-dot.ok {
+  background: #2e7d32;
+}
+
+#wifi-dot.bad {
+  background: #c62828;
+}
+
+#wifi-dot svg {
+  width: 18px;
+  height: 18px;
+  fill: #fff;
+}

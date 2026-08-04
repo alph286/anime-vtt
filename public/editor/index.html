@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anime VTT — Editor</title>
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<svg style="display:none">
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 4v11M8 8l4-4 4 4M4 20h16"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v5h-5"/></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24"><path d="M9 3H3v6M15 3h6v6M9 21H3v-6M15 21h6v-6"/></symbol>
+  <symbol id="i-select" viewBox="0 0 24 24"><path d="M5 3l6 16 2-6.5L20 10z"/></symbol>
+  <symbol id="i-polygon" viewBox="0 0 24 24"><path d="M12 3l7 5-2.5 8h-9L5 8z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16"/></symbol>
+  <symbol id="i-align" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></symbol>
+  <symbol id="i-zoom-reset" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-5.2-5.2M7 10h6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></symbol>
+  <symbol id="i-fog" viewBox="0 0 24 24"><path d="M3 15h18M6 19h12M4 11h16M7 7h10"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+</svg>
+
+<header class="topbar">
+  <select id="location-select"></select>
+</header>
+
+<main class="editor-layout">
+  <section class="col col-map">
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <label class="icon-btn" title="Carica mappa">
+          <svg class="icon"><use href="#i-upload"></use></svg>
+          <input type="file" id="map-upload" accept="image/*" hidden>
+        </label>
+        <button id="flip-180" class="icon-btn" title="Ruota mappa 180°">
+          <svg class="icon"><use href="#i-rotate"></use></svg>
+        </button>
+        <label class="icon-num" title="Scala mappa">
+          <svg class="icon"><use href="#i-scale"></use></svg>
+          <input type="number" id="map-scale-num" min="25" max="300" value="100">
+          <span class="unit">%</span>
+        </label>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <div class="toolbar-group">
+        <button id="tool-select" class="icon-btn tool active" title="Seleziona">
+          <svg class="icon"><use href="#i-select"></use></svg>
+        </button>
+        <button id="tool-draw" class="icon-btn tool" title="Nuovo poligono">
+          <svg class="icon"><use href="#i-polygon"></use></svg>
+        </button>
+        <button id="draw-finish" class="icon-btn" hidden title="Termina poligono">
+          <svg class="icon"><use href="#i-check"></use></svg>
+        </button>
+        <button id="draw-cancel" class="icon-btn" hidden title="Annulla disegno">
+          <svg class="icon"><use href="#i-x"></use></svg>
+        </button>
+        <button id="delete-polygon" class="icon-btn" disabled title="Elimina selezionato">
+          <svg class="icon"><use href="#i-trash"></use></svg>
+        </button>
+        <label class="icon-num" title="Opacità fog (solo anteprima editor)">
+          <svg class="icon"><use href="#i-fog"></use></svg>
+          <input type="number" id="fog-opacity-num" min="0" max="100" value="45">
+          <span class="unit">%</span>
+        </label>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <div class="toolbar-group">
+        <button id="grid-toggle" class="icon-btn tool" title="Mostra/nascondi griglia">
+          <svg class="icon"><use href="#i-grid"></use></svg>
+        </button>
+        <button id="grid-align-tool" class="icon-btn tool" title="Allinea alla griglia della mappa">
+          <svg class="icon"><use href="#i-align"></use></svg>
+        </button>
+        <input type="color" id="grid-color" class="color-swatch" value="#ffffff" title="Colore griglia">
+        <label class="icon-num" title="Spessore tratto griglia">
+          <input type="number" id="grid-width-num" min="0.2" max="5" step="0.1" value="0.3">
+        </label>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <div class="toolbar-group">
+        <button id="editor-zoom-reset" class="icon-btn" title="Reset zoom">
+          <svg class="icon"><use href="#i-zoom-reset"></use></svg>
+        </button>
+        <span id="editor-zoom-readout" class="zoom-readout">100%</span>
+      </div>
+    </div>
+    <p class="hint">click destro su un vertice selezionato per eliminarlo singolarmente · con "allinea alla griglia" attivo, trascina un rettangolo su una cella già disegnata nella mappa.</p>
+
+    <div id="map-canvas" class="map-canvas">
+      <div id="map-canvas-zoom" class="map-canvas-zoom">
+        <div id="map-media-wrap" class="media-wrap">
+          <div id="overlay-box" class="overlay-box fit-box">
+            <img id="map-preview-img" class="map-canvas-img" draggable="false" hidden>
+            <div id="map-canvas-placeholder" class="map-canvas-placeholder"></div>
+            <svg id="grid-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+            <svg id="polygon-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="col col-sidebar">
+    <section>
+      <h2>Immagini</h2>
+      <div id="image-list" class="image-editor-list"></div>
+      <label class="file-btn">Carica immagine<input type="file" id="image-upload" accept="image/*"></label>
+    </section>
+
+    <section>
+      <h2>Fog of war</h2>
+      <div id="polygon-list" class="list"></div>
+    </section>
+
+    <section>
+      <h2>Fine tuning griglia</h2>
+      <div class="tv-controls">
+        <label class="num-row">
+          <span class="grid-label">cella</span>
+          <input type="number" id="grid-size-num" min="4" max="1000" value="100">
+          <span class="unit">px</span>
+        </label>
+        <div class="grid-move">
+          <label class="grid-label">sposta</label>
+          <div class="pad">
+            <span></span>
+            <button data-grid-move="0,-1">▲</button>
+            <span></span>
+            <button data-grid-move="-1,0">◀</button>
+            <span></span>
+            <button data-grid-move="1,0">▶</button>
+            <span></span>
+            <button data-grid-move="0,1">▼</button>
+            <span></span>
+          </div>
+        </div>
+        <div class="grid-offsets">
+          <label>offset X <input type="number" id="grid-offset-x-num" value="0"></label>
+          <label>offset Y <input type="number" id="grid-offset-y-num" value="0"></label>
+        </div>
+        <button id="grid-save-preset">salva come predefinita</button>
+        <button id="grid-apply-preset">applica predefinita</button>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<div id="lightbox" class="lightbox" hidden>
+  <img id="lightbox-img" alt="">
+  <p id="lightbox-caption" class="lightbox-caption"></p>
+  <button id="lightbox-close" class="lightbox-close" title="Chiudi (Esc)">
+    <svg class="icon"><use href="#i-x"></use></svg>
+  </button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/shared/media.js"></script>
+<script src="editor.js"></script>
+</body>
+</html>
