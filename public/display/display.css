@@ -80,15 +80,17 @@ html, body {
   align-items: center;
   justify-content: center;
   z-index: 10;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.3s;
 }
 
 #wifi-dot.ok {
   background: #2e7d32;
+  opacity: 0;
 }
 
 #wifi-dot.bad {
   background: #c62828;
+  opacity: 1;
 }
 
 #wifi-dot svg {

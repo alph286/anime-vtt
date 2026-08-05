@@ -248,6 +248,7 @@ function renderPolygonsSvg() {
   drawFinishBtn.hidden = drawingPoints.length < 3;
   drawCancelBtn.hidden = drawingPoints.length === 0;
   deletePolygonBtn.disabled = !selectedPolygonId;
+  if (deleteArmedFor !== selectedPolygonId) resetDeleteArm();
 }
 
 function pointFromClientXY(clientX, clientY) {
@@ -467,9 +468,33 @@ drawCancelBtn.addEventListener('click', () => {
   renderPolygonsSvg();
 });
 
+// Deletions are permanent (the image variant unlinks the file on disk too), and
+// this button sits right next to the tool icons in constant use — one imprecise
+// click must not be enough to lose something. First click arms a 2.5s confirm
+// window (visually + via title), second click within it actually deletes.
+let deleteArmedFor = null;
+let deleteArmTimeout = null;
+
+function resetDeleteArm() {
+  deleteArmedFor = null;
+  clearTimeout(deleteArmTimeout);
+  deletePolygonBtn.classList.remove('confirm');
+  deletePolygonBtn.title = 'Elimina selezionato';
+}
+
 deletePolygonBtn.addEventListener('click', () => {
   if (!selectedPolygonId) return;
-  socket.emit('polygon:delete', { locationId: state.activeLocationId, polygonId: selectedPolygonId });
+  if (deleteArmedFor !== selectedPolygonId) {
+    deleteArmedFor = selectedPolygonId;
+    deletePolygonBtn.classList.add('confirm');
+    deletePolygonBtn.title = 'Click di nuovo per confermare';
+    clearTimeout(deleteArmTimeout);
+    deleteArmTimeout = setTimeout(resetDeleteArm, 2500);
+    return;
+  }
+  const polygonId = selectedPolygonId;
+  resetDeleteArm();
+  socket.emit('polygon:delete', { locationId: state.activeLocationId, polygonId });
   selectedPolygonId = null;
 });
 
@@ -527,7 +552,7 @@ locationSelect.addEventListener('change', () => {
   socket.emit('location:set', { locationId: locationSelect.value });
 });
 
-bindNumberCommit(mapScaleNum, 25, 300, (v) => {
+bindNumberCommit(mapScaleNum, 25, 1000, (v) => {
   currentMapScale = v / 100;
   updateZoomBox();
   updateOverlayBox();
@@ -570,7 +595,8 @@ document.querySelectorAll('[data-grid-move]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const location = getActiveLocation();
     const [dx, dy] = btn.dataset.gridMove.split(',').map(Number);
-    const step = 10;
+    const cellSize = location.map.grid.cellSize || 100;
+    const step = Math.max(1, Math.round(cellSize * 0.1));
     socket.emit('grid:update', {
       locationId: location.id,
       offsetX: (location.map.grid.offsetX || 0) + dx * step,
@@ -597,6 +623,12 @@ mapUpload.addEventListener('change', async () => {
   mapUpload.value = '';
 });
 
+// Same arm-then-confirm pattern as the polygon delete button, but per-row: rows
+// are torn down and rebuilt on every render, so the "armed" set lives outside
+// the DOM and is consulted again each time the list redraws.
+const armedImageDeletes = new Set();
+const imageDeleteTimers = new Map();
+
 function renderImageList(location) {
   const images = location.images || [];
   if (!images.length) {
@@ -604,8 +636,9 @@ function renderImageList(location) {
     return;
   }
   imageList.innerHTML = images
-    .map(
-      (img) => `
+    .map((img) => {
+      const armed = armedImageDeletes.has(img.id);
+      return `
         <div class="image-editor-row" data-id="${img.id}">
           <button class="image-thumb-btn" data-preview="${img.id}" title="Anteprima a schermo intero">
             <img src="/storage/images/${img.file}" alt="${escapeHtml(img.name)}">
@@ -613,12 +646,13 @@ function renderImageList(location) {
           </button>
           <input type="text" class="image-name-input" value="${escapeHtml(img.name)}"
                  data-name-for="${img.id}" placeholder="etichetta">
-          <button class="icon-btn image-delete" data-delete="${img.id}" title="Elimina immagine">
+          <button class="icon-btn image-delete ${armed ? 'confirm' : ''}" data-delete="${img.id}"
+                  title="${armed ? 'Click di nuovo per confermare' : 'Elimina immagine'}">
             <svg class="icon"><use href="#i-trash"></use></svg>
           </button>
         </div>
-      `
-    )
+      `;
+    })
     .join('');
 }
 
@@ -632,10 +666,23 @@ imageList.addEventListener('click', (e) => {
 
   const deleteBtn = e.target.closest('[data-delete]');
   if (deleteBtn) {
-    socket.emit('image:delete', {
-      locationId: state.activeLocationId,
-      imageId: deleteBtn.dataset.delete
-    });
+    const imageId = deleteBtn.dataset.delete;
+    if (!armedImageDeletes.has(imageId)) {
+      armedImageDeletes.add(imageId);
+      renderImageList(getActiveLocation());
+      clearTimeout(imageDeleteTimers.get(imageId));
+      imageDeleteTimers.set(
+        imageId,
+        setTimeout(() => {
+          armedImageDeletes.delete(imageId);
+          renderImageList(getActiveLocation());
+        }, 2500)
+      );
+      return;
+    }
+    clearTimeout(imageDeleteTimers.get(imageId));
+    armedImageDeletes.delete(imageId);
+    socket.emit('image:delete', { locationId: state.activeLocationId, imageId });
   }
 });
 

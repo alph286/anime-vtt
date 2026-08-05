@@ -82,7 +82,7 @@ h2 {
 
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
   margin-bottom: 10px;
@@ -90,16 +90,19 @@ h2 {
   border: 1px solid #ddd;
   border-radius: 8px;
   padding: 8px;
+  overflow-x: auto;
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .toolbar-sep {
   width: 1px;
+  flex-shrink: 0;
   align-self: stretch;
   background: #e2e2e2;
   margin: 4px 6px;
@@ -138,6 +141,12 @@ h2 {
 .icon-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.icon-btn.confirm {
+  background: #a32d2d;
+  border-color: #a32d2d;
+  color: #fff;
 }
 
 .icon-num {
