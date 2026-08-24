@@ -20,6 +20,7 @@ const toolDrawBtn = document.getElementById('tool-draw');
 const drawFinishBtn = document.getElementById('draw-finish');
 const drawCancelBtn = document.getElementById('draw-cancel');
 const deletePolygonBtn = document.getElementById('delete-polygon');
+const removeMapBtn = document.getElementById('remove-map');
 const flip180Btn = document.getElementById('flip-180');
 const fogOpacityNum = document.getElementById('fog-opacity-num');
 const mapScaleNum = document.getElementById('map-scale-num');
@@ -40,11 +41,14 @@ const mapCanvas = document.getElementById('map-canvas');
 const mapCanvasZoom = document.getElementById('map-canvas-zoom');
 const mapMediaWrap = document.getElementById('map-media-wrap');
 const mapImg = document.getElementById('map-preview-img');
+const mapVideo = document.getElementById('map-preview-video');
+let activeMapEl = mapImg;
 const mapPlaceholder = document.getElementById('map-canvas-placeholder');
 const overlayBox = document.getElementById('overlay-box');
 const gridSvg = document.getElementById('grid-svg');
 const polygonSvg = document.getElementById('polygon-svg');
 const mapUpload = document.getElementById('map-upload');
+const mapUploadWarning = document.getElementById('map-upload-warning');
 
 const polygonList = document.getElementById('polygon-list');
 const imageList = document.getElementById('image-list');
@@ -56,6 +60,7 @@ const lightboxCaption = document.getElementById('lightbox-caption');
 const lightboxCloseBtn = document.getElementById('lightbox-close');
 
 mapImg.addEventListener('dragstart', (e) => e.preventDefault());
+mapVideo.addEventListener('dragstart', (e) => e.preventDefault());
 overlayBox.addEventListener('dragstart', (e) => e.preventDefault());
 
 socket.on('connect', () => socket.emit('hello', { role: 'editor' }));
@@ -111,11 +116,17 @@ function render() {
   gridWidthNum.value = String(grid.lineWidth || 0.3);
 
   if (location.map.file) {
-    mapImg.src = `/storage/maps/${location.map.file}`;
-    mapImg.hidden = false;
+    activeMapEl = loadMapMedia(
+      mapImg,
+      mapVideo,
+      location.map.file,
+      `/storage/maps/${location.map.file}`,
+      updateOverlayBox
+    );
     mapPlaceholder.hidden = true;
   } else {
     mapImg.hidden = true;
+    mapVideo.hidden = true;
     mapPlaceholder.hidden = false;
   }
 
@@ -136,14 +147,17 @@ function updateZoomBox() {
 function updateOverlayBox() {
   const location = getActiveLocation();
 
-  currentRotation = location.map.file && mapImg.naturalWidth
-    ? computeTotalRotation(mapImg.naturalWidth, mapImg.naturalHeight, location.map.flip180)
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+
+  currentRotation = location.map.file && nw
+    ? computeTotalRotation(nw, nh, location.map.flip180)
     : 0;
 
   const effective = layoutMapWrap(mapCanvasZoom, mapMediaWrap, currentRotation);
 
-  if (location.map.file && mapImg.naturalWidth) {
-    currentImageRect = fitRect(effective.width, effective.height, mapImg.naturalWidth, mapImg.naturalHeight);
+  if (location.map.file && nw) {
+    currentImageRect = fitRect(effective.width, effective.height, nw, nh);
   } else {
     currentImageRect = { left: 0, top: 0, width: effective.width, height: effective.height };
   }
@@ -152,10 +166,6 @@ function updateOverlayBox() {
   renderGrid(location);
   renderPolygonsSvg();
 }
-
-mapImg.addEventListener('load', () => {
-  updateOverlayBox();
-});
 
 mapCanvas.addEventListener(
   'wheel',
@@ -189,7 +199,7 @@ editorZoomResetBtn.addEventListener('click', () => {
 });
 
 function renderGrid(location) {
-  renderGridSvg(gridSvg, location.map.grid, mapImg.naturalWidth, mapImg.naturalHeight);
+  renderGridSvg(gridSvg, location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
 }
 
 function renderPolygonsSvg() {
@@ -360,7 +370,7 @@ document.addEventListener('pointerup', () => {
     const { start, end, box } = gridAlignDrag;
     box.remove();
     gridAlignDrag = null;
-    if (end && mapImg.naturalWidth) {
+    if (end && mediaW(activeMapEl)) {
       applyGridAlignment(start, end);
     }
     mode = 'select';
@@ -401,8 +411,8 @@ document.addEventListener('pointercancel', () => {
 });
 
 function applyGridAlignment(start, end) {
-  const nw = mapImg.naturalWidth;
-  const nh = mapImg.naturalHeight;
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
   const leftPct = Math.min(start[0], end[0]);
   const topPct = Math.min(start[1], end[1]);
   const widthPct = Math.abs(end[0] - start[0]);
@@ -613,14 +623,99 @@ gridApplyPresetBtn.addEventListener('click', () => {
   socket.emit('gridPreset:apply', { locationId: state.activeLocationId });
 });
 
+// Un video troppo pesante o ad alta risoluzione può mandare in crash il tab
+// che prova a decodificarlo — successo davvero, non solo in teoria. Per non
+// dover MAI dipendere dal fatto che l'editor sopravviva a un file del genere,
+// lo scartiamo prima ancora di spedirlo al server: se il file non arriva mai
+// a diventare la mappa attiva, non c'è niente da cui doversi riprendere.
+const MAX_VIDEO_PIXELS = 1920 * 1080;
+const MAX_VIDEO_BYTES = 150 * 1024 * 1024;
+
+function checkVideoSafe(file) {
+  return new Promise((resolve) => {
+    if (file.size > MAX_VIDEO_BYTES) {
+      const mb = Math.round(file.size / 1024 / 1024);
+      resolve({
+        ok: false,
+        reason: `video troppo pesante (${mb}MB, limite ${MAX_VIDEO_BYTES / 1024 / 1024}MB) — rischia di bloccare il Raspberry Pi.`
+      });
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.onloadedmetadata = () => {
+      const pixels = probe.videoWidth * probe.videoHeight;
+      URL.revokeObjectURL(url);
+      if (pixels > MAX_VIDEO_PIXELS) {
+        resolve({
+          ok: false,
+          reason: `risoluzione troppo alta (${probe.videoWidth}×${probe.videoHeight}) — massimo consigliato 1920×1080 per il Raspberry Pi.`
+        });
+      } else {
+        resolve({ ok: true });
+      }
+    };
+    probe.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ ok: false, reason: 'video non leggibile: file non valido o formato non supportato dal browser.' });
+    };
+    probe.src = url;
+  });
+}
+
 mapUpload.addEventListener('change', async () => {
   const file = mapUpload.files[0];
   if (!file) return;
+  mapUploadWarning.hidden = true;
+
+  if (isVideoFile(file.name)) {
+    const check = await checkVideoSafe(file);
+    if (!check.ok) {
+      mapUploadWarning.textContent = `Upload bloccato: ${check.reason}`;
+      mapUploadWarning.hidden = false;
+      mapUpload.value = '';
+      return;
+    }
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('locationId', locationSelect.value);
   await fetch('/api/upload/map', { method: 'POST', body: formData });
   mapUpload.value = '';
+});
+
+// Stesso pattern arma-poi-conferma del cancella-poligono: un click arma, il
+// secondo entro 2.5s conferma. Chiama /api/map/clear invece del socket
+// perché deve funzionare anche come via di fuga totalmente indipendente dal
+// fatto che la mappa corrente riesca a essere renderizzata.
+let removeMapArmed = false;
+let removeMapArmTimeout = null;
+
+function resetRemoveMapArm() {
+  removeMapArmed = false;
+  clearTimeout(removeMapArmTimeout);
+  removeMapBtn.classList.remove('confirm');
+  removeMapBtn.title = 'Rimuovi mappa';
+}
+
+removeMapBtn.addEventListener('click', async () => {
+  if (!removeMapArmed) {
+    removeMapArmed = true;
+    removeMapBtn.classList.add('confirm');
+    removeMapBtn.title = 'Click di nuovo per confermare';
+    clearTimeout(removeMapArmTimeout);
+    removeMapArmTimeout = setTimeout(resetRemoveMapArm, 2500);
+    return;
+  }
+  resetRemoveMapArm();
+  mapUploadWarning.hidden = true;
+  await fetch('/api/map/clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locationId: state.activeLocationId })
+  });
 });
 
 // Same arm-then-confirm pattern as the polygon delete button, but per-row: rows

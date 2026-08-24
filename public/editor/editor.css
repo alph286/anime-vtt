@@ -198,6 +198,14 @@ h2 {
   margin: 0 0 10px;
 }
 
+.hint.warning {
+  color: #a32d2d;
+  background: #fdecea;
+  border: 1px solid #f3c6c2;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
 button {
   border-radius: 8px;
   border: 1px solid #ccc;

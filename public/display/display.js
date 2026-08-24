@@ -4,6 +4,8 @@ const imageLayer = document.getElementById('image-layer');
 const mapMediaWrap = document.getElementById('map-media-wrap');
 const mapFitBox = document.getElementById('map-fit-box');
 const mapImg = document.getElementById('map-img');
+const mapVideo = document.getElementById('map-video');
+let activeMapEl = mapImg;
 const mapPlaceholder = document.getElementById('map-placeholder');
 const mapFogLayer = document.getElementById('map-fog-layer');
 const mapGridSvg = document.getElementById('map-grid-svg');
@@ -105,11 +107,12 @@ function renderMap(state, location) {
 
   if (location.map.file) {
     mapPlaceholder.hidden = true;
-    mapImg.hidden = false;
-    loadImageThen(mapImg, `/storage/maps/${location.map.file}`, () => {
-      const rotation = computeTotalRotation(mapImg.naturalWidth, mapImg.naturalHeight, location.map.flip180);
+    activeMapEl = loadMapMedia(mapImg, mapVideo, location.map.file, `/storage/maps/${location.map.file}`, () => {
+      const nw = mediaW(activeMapEl);
+      const nh = mediaH(activeMapEl);
+      const rotation = computeTotalRotation(nw, nh, location.map.flip180);
       const effective = layoutMapWrap(mapLayer, mapMediaWrap, rotation);
-      const rect = fitRect(effective.width, effective.height, mapImg.naturalWidth, mapImg.naturalHeight);
+      const rect = fitRect(effective.width, effective.height, nw, nh);
       positionFitBox(mapFitBox, rect);
       renderFog(polygons);
       // The whole map layer is scaled by a CSS transform, which multiplies the
@@ -119,12 +122,13 @@ function renderMap(state, location) {
       renderGridSvg(
         mapGridSvg,
         { ...grid, lineWidth: (grid.lineWidth || 0.3) / Math.max(scale, 0.01) },
-        mapImg.naturalWidth,
-        mapImg.naturalHeight
+        nw,
+        nh
       );
     });
   } else {
     mapImg.hidden = true;
+    mapVideo.hidden = true;
     mapPlaceholder.hidden = false;
     const effective = layoutMapWrap(mapLayer, mapMediaWrap, 0);
     positionFitBox(mapFitBox, { left: 0, top: 0, width: effective.width, height: effective.height });

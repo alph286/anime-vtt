@@ -50,6 +50,71 @@ function loadImageThen(imgEl, src, onReady) {
   }
 }
 
+const VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogv', 'ogg', 'mov', 'm4v', 'mkv', 'avi', 'wmv', 'flv'];
+
+function isVideoFile(filename) {
+  if (!filename) return false;
+  const ext = filename.split('.').pop().toLowerCase();
+  return VIDEO_EXTENSIONS.includes(ext);
+}
+
+// Works on whichever kind of element is actually active — an <img> has no
+// videoWidth, a <video> has no naturalWidth, so exactly one side is ever set.
+function mediaW(el) {
+  return el.videoWidth || el.naturalWidth || 0;
+}
+function mediaH(el) {
+  return el.videoHeight || el.naturalHeight || 0;
+}
+
+/**
+ * Shows whichever of `imgEl`/`videoEl` matches `filename`'s type and hides the
+ * other, loading `src` into it and calling `onReady` once its dimensions are
+ * known (both for a fresh load and for an already-loaded/unchanged source).
+ * A map video is a silent looping backdrop, never a piece of media with its
+ * own transport: muted/loop/playsInline are (re)asserted on every call so
+ * that autoplay is never blocked by the browser and audio never plays.
+ * Returns the element that is now active — callers must read its size via
+ * mediaW/mediaH instead of assuming it's always the <img>.
+ */
+function loadMapMedia(imgEl, videoEl, filename, src, onReady) {
+  const wantVideo = isVideoFile(filename);
+  const el = wantVideo ? videoEl : imgEl;
+  const other = wantVideo ? imgEl : videoEl;
+
+  other.hidden = true;
+  if (other.dataset.mapSrc) {
+    other.removeAttribute('src');
+    delete other.dataset.mapSrc;
+  }
+
+  el.hidden = false;
+
+  if (wantVideo) {
+    el.muted = true;
+    el.defaultMuted = true;
+    el.loop = true;
+    el.playsInline = true;
+  }
+
+  const alreadyLoaded = el.dataset.mapSrc === src;
+  if (!alreadyLoaded) {
+    el.dataset.mapSrc = src;
+    if (wantVideo) {
+      el.onloadeddata = onReady;
+    } else {
+      el.onload = onReady;
+    }
+    el.src = src;
+  }
+
+  const ready = wantVideo ? el.readyState >= 1 && el.videoWidth : el.complete && el.naturalWidth;
+  if (alreadyLoaded && ready) onReady();
+  if (wantVideo) el.play().catch(() => {});
+
+  return el;
+}
+
 /**
  * A map taller than it is wide leaves large empty bars on a landscape TV; rotating
  * it 90° lets it fill far more of the screen. Computed live from the image's own

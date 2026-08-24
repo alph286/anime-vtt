@@ -46,20 +46,23 @@ app.get('/api/state', (req, res) => {
   res.json(state);
 });
 
-function makeUpload(destDir) {
+function makeUpload(destDir, { allowVideo = false, maxFileSize = 50 * 1024 * 1024 } = {}) {
   return multer({
     storage: multer.diskStorage({
       destination: (req, file, cb) => cb(null, destDir),
       filename: (req, file, cb) => cb(null, `${nanoid()}${path.extname(file.originalname)}`)
     }),
-    limits: { fileSize: 50 * 1024 * 1024 },
+    limits: { fileSize: maxFileSize },
     fileFilter: (req, file, cb) => {
-      cb(null, /^image\//.test(file.mimetype) || /^video\/(mp4|webm)$/.test(file.mimetype));
+      const ok = /^image\//.test(file.mimetype) || (allowVideo && /^video\//.test(file.mimetype));
+      cb(null, ok);
     }
   });
 }
 
-const uploadMap = makeUpload(MAPS_DIR);
+// Le mappe possono essere anche video (usati come sfondo animato in loop, muto);
+// un tetto più alto perché un video anche breve pesa molto più di un'immagine.
+const uploadMap = makeUpload(MAPS_DIR, { allowVideo: true, maxFileSize: 300 * 1024 * 1024 });
 const uploadImage = makeUpload(IMAGES_DIR);
 
 /**
@@ -88,6 +91,22 @@ app.post('/api/upload/map', uploadMap.single('file'), (req, res) => {
   saveState(state);
   broadcastState();
   res.json({ ok: true, file: req.file.filename });
+});
+
+// Via di fuga indipendente dal browser: se una mappa (tipicamente un video
+// troppo pesante) manda in crash editor/display/controllo, questo endpoint
+// resetta la mappa attiva senza che nessun client debba prima riuscire a
+// caricarla. Richiamabile anche da un semplice curl da terminale:
+//   curl -X POST http://localhost:3000/api/map/clear -H "Content-Type: application/json" -d '{"locationId":"taverna"}'
+app.post('/api/map/clear', (req, res) => {
+  const location = state.locations.find((l) => l.id === req.body.locationId);
+  if (!location) {
+    return res.status(400).json({ error: 'location mancante' });
+  }
+  location.map.file = null;
+  saveState(state);
+  broadcastState();
+  res.json({ ok: true });
 });
 
 app.post('/api/upload/image', uploadImage.single('file'), (req, res) => {

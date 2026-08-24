@@ -8,6 +8,8 @@ const mapPreview = document.getElementById('map-preview');
 const mapMediaWrap = document.getElementById('map-media-wrap');
 const mapFitBox = document.getElementById('map-fit-box');
 const mapImg = document.getElementById('map-img');
+const mapVideo = document.getElementById('map-video');
+let activeMapEl = mapImg;
 const mapPlaceholder = document.getElementById('map-placeholder');
 const mapFogLayer = document.getElementById('map-fog-layer');
 const fogOpacityInput = document.getElementById('fog-opacity');
@@ -85,16 +87,18 @@ function renderMapPreview(location) {
 
   if (location.map.file) {
     mapPlaceholder.hidden = true;
-    mapImg.hidden = false;
-    loadImageThen(mapImg, `/storage/maps/${location.map.file}`, () => {
-      const rotation = computeTotalRotation(mapImg.naturalWidth, mapImg.naturalHeight, location.map.flip180);
+    activeMapEl = loadMapMedia(mapImg, mapVideo, location.map.file, `/storage/maps/${location.map.file}`, () => {
+      const nw = mediaW(activeMapEl);
+      const nh = mediaH(activeMapEl);
+      const rotation = computeTotalRotation(nw, nh, location.map.flip180);
       const effective = layoutMapWrap(mapPreview, mapMediaWrap, rotation);
-      const rect = fitRect(effective.width, effective.height, mapImg.naturalWidth, mapImg.naturalHeight);
+      const rect = fitRect(effective.width, effective.height, nw, nh);
       positionFitBox(mapFitBox, rect);
       renderFogOverlays(polygons);
     });
   } else {
     mapImg.hidden = true;
+    mapVideo.hidden = true;
     mapPlaceholder.hidden = false;
     const effective = layoutMapWrap(mapPreview, mapMediaWrap, 0);
     positionFitBox(mapFitBox, { left: 0, top: 0, width: effective.width, height: effective.height });
