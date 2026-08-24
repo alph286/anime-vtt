@@ -5,8 +5,8 @@
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
-  background: #f2f1ec;
-  color: #222;
+  background: var(--bg-page);
+  color: var(--text-primary);
 }
 
 main {
@@ -30,7 +30,9 @@ select, button, input[type="range"] {
   flex: 1;
   height: 40px;
   border-radius: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
 }
 
 section {
@@ -41,7 +43,7 @@ h2 {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #777;
+  color: var(--text-secondary);
   margin: 0 0 8px;
 }
 
@@ -51,7 +53,7 @@ h2 {
   aspect-ratio: 4 / 3;
   border-radius: 8px;
   overflow: hidden;
-  background: #1a1a1a;
+  background: var(--bg-canvas);
   margin-bottom: 10px;
 }
 
@@ -83,12 +85,13 @@ h2 {
 }
 
 .map-preview .map-placeholder {
-  background-color: #1a1a1a;
+  background-color: var(--bg-canvas);
   background-image:
-    repeating-linear-gradient(0deg, transparent 0 15px, #333 15px 16px),
-    repeating-linear-gradient(90deg, transparent 0 15px, #333 15px 16px);
+    repeating-linear-gradient(0deg, transparent 0 15px, var(--grid-line) 15px 16px),
+    repeating-linear-gradient(90deg, transparent 0 15px, var(--grid-line) 15px 16px);
 }
 
+/* Il fog of war resta nero puro, stesso motivo di editor.css/display.css. */
 .map-preview .fog-overlay {
   position: absolute;
   inset: 0;
@@ -100,7 +103,7 @@ h2 {
 
 .map-preview .fog-overlay.revealed {
   background: transparent;
-  outline: 1.5px dashed rgba(55, 138, 221, 0.7);
+  outline: 1.5px dashed var(--accent);
   outline-offset: -1px;
 }
 
@@ -109,7 +112,7 @@ h2 {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #777;
+  color: var(--text-secondary);
   margin-bottom: 10px;
 }
 
@@ -122,7 +125,7 @@ h2 {
   border: none;
   padding: 0;
   font-size: 13px;
-  color: #378add;
+  color: var(--accent);
   margin-bottom: 8px;
 }
 
@@ -138,24 +141,24 @@ h2 {
   justify-content: space-between;
   padding: 12px 14px;
   border-radius: 8px;
-  border: 1px solid #ddd;
-  background: #fff;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
   font-size: 15px;
 }
 
 .fow-row.revealed {
-  background: #e6f1fb;
-  border-color: #85b7eb;
-  color: #0c447c;
+  background: var(--accent-bg-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .fow-state {
   font-size: 12px;
-  color: #999;
+  color: var(--text-secondary);
 }
 
 .fow-row.revealed .fow-state {
-  color: #0c447c;
+  color: var(--accent);
 }
 
 .thumb-row {
@@ -169,14 +172,14 @@ h2 {
   width: 64px;
   height: 64px;
   border-radius: 8px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-control);
   overflow: hidden;
   padding: 0;
-  background: #fff;
+  background: var(--bg-control);
 }
 
 .image-thumb.active {
-  border: 2px solid #378add;
+  border: 2px solid var(--accent);
 }
 
 .image-thumb img {
@@ -188,21 +191,25 @@ h2 {
 
 .hint {
   font-size: 13px;
-  color: #999;
+  color: var(--text-secondary);
 }
 
 button {
   border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #fff;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
   padding: 10px 14px;
 }
 
+/* Stesso trattamento mostrato e approvato nel mockup del companion di
+   brainstorming (.cf-btnfull): non pieno ambra, coerente col resto dei
+   pulsanti scuri — solo un pulsante a piena larghezza. */
 button.primary {
   width: 100%;
-  background: #222;
-  color: #fff;
-  border: none;
+  background: var(--bg-control);
+  color: var(--text-primary);
+  border: 1px solid var(--border-control);
   padding: 12px;
 }
 
