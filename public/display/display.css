@@ -3,7 +3,7 @@ html, body {
   padding: 0;
   width: 100%;
   height: 100%;
-  background: #000;
+  background: var(--bg-page);
   overflow: hidden;
 }
 
@@ -48,12 +48,15 @@ html, body {
 }
 
 .map-placeholder {
-  background-color: #1a1a1a;
+  background-color: var(--bg-canvas);
   background-image:
-    repeating-linear-gradient(0deg, transparent 0 39px, #333 39px 40px),
-    repeating-linear-gradient(90deg, transparent 0 39px, #333 39px 40px);
+    repeating-linear-gradient(0deg, transparent 0 39px, var(--grid-line) 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, var(--grid-line) 39px 40px);
 }
 
+/* Il fog of war resta nero puro: nasconde la mappa ai giocatori, un
+   significato semantico distinto dal chrome dell'app — non va tokenizzato
+   (vedi Global Constraints e la stessa nota in editor.css/control.css). */
 .fog-overlay {
   position: absolute;
   inset: 0;
@@ -69,6 +72,8 @@ html, body {
   z-index: 2;
 }
 
+/* #wifi-dot: NON TOCCARE. Colori/opacità già corretti in una sessione
+   precedente ed esplicitamente esclusi dalla palette nel design doc. */
 #wifi-dot {
   position: fixed;
   bottom: 20px;
