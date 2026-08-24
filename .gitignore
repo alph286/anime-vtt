@@ -5,3 +5,4 @@ storage/maps/*
 storage/images/*
 !storage/maps/.gitkeep
 !storage/images/.gitkeep
+.superpowers/
