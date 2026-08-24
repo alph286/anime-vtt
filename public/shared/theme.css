@@ -1,0 +1,21 @@
+/* Design token condivisi — palette "Sala controllo".
+   Vedi docs/superpowers/specs/2026-08-24-sala-controllo-theme-design.md
+   Linkato PRIMA del CSS di pagina in editor/control/display, così le
+   regole di pagina possono usare queste variabili con var(--nome). */
+:root {
+  --bg-page: #16181d;
+  --bg-panel: #1f232b;
+  --bg-control: #262b34;
+  --bg-canvas: #0e1014;
+  --border: #2c313b;
+  --border-control: #333947;
+  --grid-line: #20242c;
+  --text-primary: #cfd6e0;
+  --text-secondary: #8a93a3;
+  --accent: #c9822c;
+  --accent-text: #1a1a1a;
+  --accent-bg-subtle: rgba(201, 130, 44, 0.15);
+  --danger: #a32d2d;
+  --danger-bg: #3a1f1f;
+  --danger-border: #5a2c2c;
+}
