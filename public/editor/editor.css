@@ -11,16 +11,16 @@
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
-  background: #f2f1ec;
-  color: #222;
+  background: var(--bg-page);
+  color: var(--text-primary);
 }
 
 .topbar {
   display: flex;
   gap: 12px;
   padding: 14px 24px;
-  border-bottom: 1px solid #ddd;
-  background: #fff;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
 }
 
 .topbar select {
@@ -30,7 +30,9 @@ body {
 select, input[type="text"], input[type="number"] {
   height: 36px;
   border-radius: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
   font-size: 14px;
   padding: 0 8px;
 }
@@ -48,7 +50,7 @@ input[type="number"] {
 
 .num-row .unit {
   font-size: 12px;
-  color: #777;
+  color: var(--text-secondary);
 }
 
 .editor-layout {
@@ -76,7 +78,7 @@ h2 {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #777;
+  color: var(--text-secondary);
   margin: 0 0 10px;
 }
 
@@ -86,8 +88,8 @@ h2 {
   align-items: center;
   gap: 4px;
   margin-bottom: 10px;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px;
   overflow-x: auto;
@@ -104,7 +106,7 @@ h2 {
   width: 1px;
   flex-shrink: 0;
   align-self: stretch;
-  background: #e2e2e2;
+  background: var(--border-control);
   margin: 4px 6px;
 }
 
@@ -126,16 +128,16 @@ h2 {
   height: 36px;
   padding: 0;
   border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #fff;
-  color: #333;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
 .icon-btn.tool.active {
-  background: #0c447c;
-  color: #fff;
-  border-color: #0c447c;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
 }
 
 .icon-btn:disabled {
@@ -144,8 +146,8 @@ h2 {
 }
 
 .icon-btn.confirm {
-  background: #a32d2d;
-  border-color: #a32d2d;
+  background: var(--danger);
+  border-color: var(--danger);
   color: #fff;
 }
 
@@ -156,9 +158,9 @@ h2 {
   height: 36px;
   padding: 0 10px 0 8px;
   border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #fff;
-  color: #555;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-secondary);
 }
 
 .icon-num input[type="number"] {
@@ -166,11 +168,12 @@ h2 {
   padding: 0;
   height: auto;
   width: 46px;
+  color: var(--text-primary);
 }
 
 .icon-num .unit {
   font-size: 12px;
-  color: #777;
+  color: var(--text-secondary);
 }
 
 .color-swatch {
@@ -178,8 +181,8 @@ h2 {
   height: 36px;
   padding: 3px;
   border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #fff;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
   cursor: pointer;
 }
 
@@ -194,31 +197,32 @@ h2 {
 
 .hint {
   font-size: 12px;
-  color: #888;
+  color: var(--text-secondary);
   margin: 0 0 10px;
 }
 
 .hint.warning {
-  color: #a32d2d;
-  background: #fdecea;
-  border: 1px solid #f3c6c2;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
   border-radius: 6px;
   padding: 6px 10px;
 }
 
 button {
   border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #fff;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
   padding: 8px 12px;
   font-size: 13px;
   cursor: pointer;
 }
 
 button.tool.active {
-  background: #0c447c;
-  color: #fff;
-  border-color: #0c447c;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
 }
 
 button:disabled {
@@ -228,12 +232,12 @@ button:disabled {
 
 .zoom-readout {
   font-size: 13px;
-  color: #555;
+  color: var(--text-secondary);
 }
 
 .opacity-inline {
   font-size: 12px;
-  color: #777;
+  color: var(--text-secondary);
   margin-bottom: 12px;
 }
 
@@ -242,7 +246,7 @@ button:disabled {
   width: 100%;
   height: min(62vh, 640px);
   min-height: 360px;
-  background: #111;
+  background: var(--bg-canvas);
   border-radius: 8px;
   overflow: auto;
   margin-bottom: 10px;
@@ -276,10 +280,10 @@ button:disabled {
 .map-canvas-placeholder {
   position: absolute;
   inset: 0;
-  background-color: #1a1a1a;
+  background-color: var(--bg-canvas);
   background-image:
-    repeating-linear-gradient(0deg, transparent 0 19px, #333 19px 20px),
-    repeating-linear-gradient(90deg, transparent 0 19px, #333 19px 20px);
+    repeating-linear-gradient(0deg, transparent 0 19px, var(--grid-line) 19px 20px),
+    repeating-linear-gradient(90deg, transparent 0 19px, var(--grid-line) 19px 20px);
   z-index: 1;
 }
 
@@ -316,6 +320,9 @@ button:disabled {
   z-index: 5;
 }
 
+/* Il fog of war resta nero puro: è lo stato "sconosciuto ai giocatori",
+   un significato semantico distinto dai colori dell'interfaccia — non
+   va tokenizzato (vedi Global Constraints). */
 .fog-poly {
   fill: #000;
   stroke: none;
@@ -323,22 +330,24 @@ button:disabled {
 
 .fog-poly.revealed {
   fill: none;
-  stroke: rgba(55, 138, 221, 0.6);
+  stroke: var(--accent);
+  stroke-opacity: 0.6;
   stroke-width: 0.6;
   stroke-dasharray: 2 1.5;
   vector-effect: non-scaling-stroke;
 }
 
 .fog-poly.selected {
-  fill: rgba(55, 138, 221, 0.35);
-  stroke: #378add;
+  fill: var(--accent);
+  fill-opacity: 0.35;
+  stroke: var(--accent);
   stroke-width: 0.8;
   vector-effect: non-scaling-stroke;
 }
 
 .draw-line {
   fill: none;
-  stroke: #378add;
+  stroke: var(--accent);
   stroke-width: 0.6;
   stroke-dasharray: 1.5 1;
   vector-effect: non-scaling-stroke;
@@ -349,7 +358,7 @@ button:disabled {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #378add;
+  background: var(--accent);
   border: 2px solid #fff;
   transform: translate(-50%, -50%);
   cursor: grab;
@@ -360,14 +369,14 @@ button:disabled {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #378add;
+  background: var(--accent);
   transform: translate(-50%, -50%);
 }
 
 .grid-align-box {
   position: absolute;
-  border: 1.5px dashed #ffb300;
-  background: rgba(255, 179, 0, 0.15);
+  border: 1.5px dashed var(--accent);
+  background: var(--accent-bg-subtle);
   pointer-events: none;
 }
 
@@ -386,13 +395,13 @@ button:disabled {
   gap: 8px;
   padding: 8px 10px;
   border-radius: 8px;
-  border: 1px solid #ddd;
-  background: #fff;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
 }
 
 .polygon-row.selected {
-  border-color: #378add;
-  background: #e6f1fb;
+  border-color: var(--accent);
+  background: var(--accent-bg-subtle);
 }
 
 .polygon-row input[type="text"] {
@@ -405,7 +414,7 @@ button:disabled {
 
 .polygon-row .state-tag {
   font-size: 11px;
-  color: #999;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -413,15 +422,15 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 14px;
 }
 
 .grid-label {
   font-size: 12px;
-  color: #555;
+  color: var(--text-secondary);
   min-width: 40px;
 }
 
@@ -454,7 +463,7 @@ button:disabled {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #555;
+  color: var(--text-secondary);
 }
 
 .image-editor-list {
@@ -469,9 +478,9 @@ button:disabled {
   align-items: center;
   gap: 8px;
   padding: 8px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-control);
   border-radius: 8px;
-  background: #fff;
+  background: var(--bg-control);
 }
 
 .image-thumb-btn {
@@ -522,7 +531,7 @@ button:disabled {
   width: 32px;
   height: 32px;
   flex-shrink: 0;
-  color: #a32d2d;
+  color: var(--danger);
 }
 
 .image-delete .icon {
@@ -557,7 +566,7 @@ button:disabled {
 
 .lightbox-caption {
   margin: 0;
-  color: #eee;
+  color: var(--text-primary);
   font-size: 14px;
   text-align: center;
 }
@@ -585,8 +594,8 @@ button:disabled {
 
 .file-btn {
   display: inline-block;
-  background: #fff;
-  border: 1px solid #ccc;
+  background: var(--bg-control);
+  border: 1px solid var(--border-control);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 14px;
