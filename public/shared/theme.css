@@ -3,6 +3,7 @@
    Linkato PRIMA del CSS di pagina in editor/control/display, così le
    regole di pagina possono usare queste variabili con var(--nome). */
 :root {
+  color-scheme: dark;
   --bg-page: #16181d;
   --bg-panel: #1f232b;
   --bg-control: #262b34;
@@ -18,4 +19,5 @@
   --danger: #a32d2d;
   --danger-bg: #3a1f1f;
   --danger-border: #5a2c2c;
+  --danger-text: #e08a86;
 }

@@ -202,7 +202,7 @@ h2 {
 }
 
 .hint.warning {
-  color: var(--danger);
+  color: var(--danger-text);
   background: var(--danger-bg);
   border: 1px solid var(--danger-border);
   border-radius: 6px;
@@ -531,7 +531,7 @@ button:disabled {
   width: 32px;
   height: 32px;
   flex-shrink: 0;
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .image-delete .icon {
