@@ -151,6 +151,11 @@ h2 {
   color: #fff;
 }
 
+.icon-btn.starred .icon {
+  fill: var(--accent);
+  color: var(--accent);
+}
+
 .icon-num {
   display: flex;
   align-items: center;

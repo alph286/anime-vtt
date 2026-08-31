@@ -14,6 +14,10 @@ let currentImageRect = null;
 let currentRotation = 0;
 
 const locationSelect = document.getElementById('location-select');
+const locationCreateBtn = document.getElementById('location-create');
+const locationList = document.getElementById('location-list');
+const locationArchivedWrap = document.getElementById('location-archived-wrap');
+const locationArchivedList = document.getElementById('location-archived-list');
 
 const toolSelectBtn = document.getElementById('tool-select');
 const toolDrawBtn = document.getElementById('tool-draw');
@@ -59,6 +63,25 @@ const lightboxImg = document.getElementById('lightbox-img');
 const lightboxCaption = document.getElementById('lightbox-caption');
 const lightboxCloseBtn = document.getElementById('lightbox-close');
 
+// Elementi che manipolano mappa/griglia/fog/immagini della location attiva —
+// senza significato (e non sicuri da azionare) quando non c'è nessuna
+// location attiva, es. subito dopo aver archiviato l'ultima rimasta.
+// Disabilitarli impedisce anche ai loro handler click/change di scattare
+// affatto (un elemento disabled non li dispatcha mai), quindi non servono
+// guardie aggiuntive dentro ciascun handler.
+const LOCATION_DEPENDENT_CONTROLS = [
+  mapUpload, removeMapBtn, flip180Btn, mapScaleNum,
+  toolSelectBtn, toolDrawBtn, deletePolygonBtn, fogOpacityNum,
+  gridToggleBtn, gridAlignToolBtn, gridColorInput, gridWidthNum,
+  gridSizeNum, gridOffsetXNum, gridOffsetYNum, gridSavePresetBtn, gridApplyPresetBtn,
+  imageUpload
+];
+document.querySelectorAll('[data-grid-move]').forEach((btn) => LOCATION_DEPENDENT_CONTROLS.push(btn));
+
+function setLocationControlsDisabled(disabled) {
+  LOCATION_DEPENDENT_CONTROLS.forEach((el) => { el.disabled = disabled; });
+}
+
 mapImg.addEventListener('dragstart', (e) => e.preventDefault());
 mapVideo.addEventListener('dragstart', (e) => e.preventDefault());
 overlayBox.addEventListener('dragstart', (e) => e.preventDefault());
@@ -99,8 +122,25 @@ function render() {
   const location = getActiveLocation();
 
   locationSelect.innerHTML = state.locations
+    .filter((l) => !l.archived)
     .map((l) => `<option value="${l.id}" ${l.id === state.activeLocationId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`)
     .join('');
+
+  renderLocationPanel();
+
+  if (!location) {
+    setLocationControlsDisabled(true);
+    mapImg.hidden = true;
+    mapVideo.hidden = true;
+    mapPlaceholder.hidden = false;
+    gridSvg.innerHTML = '';
+    polygonSvg.innerHTML = '';
+    polygonList.innerHTML = '';
+    imageList.innerHTML = '<p class="hint">nessuna location attiva — creane una qui sopra.</p>';
+    updateZoomBox();
+    return;
+  }
+  setLocationControlsDisabled(false);
 
   mapScaleNum.value = String(Math.round((location.map.scale || 1) * 100));
   currentMapScale = location.map.scale || 1;
@@ -206,6 +246,7 @@ function renderPolygonsSvg() {
   const location = getActiveLocation();
   polygonSvg.innerHTML = '';
   overlayBox.querySelectorAll('.vertex-handle, .draw-point').forEach((el) => el.remove());
+  if (!location) return;
 
   (location.map.polygons || []).forEach((poly) => {
     const el = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
@@ -308,6 +349,7 @@ overlayBox.addEventListener('pointerdown', (e) => {
 
   if (mode !== 'select') return;
   const location = getActiveLocation();
+  if (!location) return;
   const point = basePointFromClientXY(e.clientX, e.clientY);
   const hit = (location.map.polygons || []).find((poly) => pointInPolygon(point, poly.points));
 
@@ -824,4 +866,106 @@ imageUpload.addEventListener('change', async () => {
   formData.append('name', file.name);
   await fetch('/api/upload/image', { method: 'POST', body: formData });
   imageUpload.value = '';
+});
+
+locationCreateBtn.addEventListener('click', () => {
+  socket.emit('location:create', {});
+});
+
+// Stesso pattern arma-poi-conferma dell'eliminazione immagini, per riga (le
+// righe vengono ricostruite a ogni render, quindi lo stato "armato" vive
+// fuori dal DOM).
+const armedLocationArchives = new Set();
+const locationArchiveTimers = new Map();
+
+function renderLocationPanel() {
+  const active = state.locations.filter((l) => !l.archived);
+  const archived = state.locations.filter((l) => l.archived);
+
+  locationList.innerHTML = active
+    .map((l) => {
+      const armed = armedLocationArchives.has(l.id);
+      return `
+        <div class="image-editor-row" data-id="${l.id}">
+          <button class="icon-btn ${l.isDefault ? 'starred' : ''}" data-default="${l.id}"
+                  title="${l.isDefault ? 'Location predefinita all’avvio' : 'Imposta come predefinita all’avvio'}">
+            <svg class="icon"><use href="#i-star"></use></svg>
+          </button>
+          <input type="text" class="image-name-input" value="${escapeHtml(l.name)}" data-name-for="${l.id}" placeholder="nome location">
+          <button class="icon-btn image-delete ${armed ? 'confirm' : ''}" data-archive="${l.id}"
+                  title="${armed ? 'Click di nuovo per confermare' : 'Archivia location'}">
+            <svg class="icon"><use href="#i-trash"></use></svg>
+          </button>
+        </div>
+      `;
+    })
+    .join('');
+
+  locationArchivedWrap.hidden = archived.length === 0;
+  locationArchivedList.innerHTML = archived
+    .map(
+      (l) => `
+        <div class="image-editor-row" data-id="${l.id}">
+          <input type="text" class="image-name-input" value="${escapeHtml(l.name)}" data-name-for="${l.id}" placeholder="nome location">
+          <button class="icon-btn" data-restore="${l.id}" title="Ripristina location">
+            <svg class="icon"><use href="#i-rotate"></use></svg>
+          </button>
+        </div>
+      `
+    )
+    .join('');
+}
+
+locationList.addEventListener('click', (e) => {
+  const defaultBtn = e.target.closest('[data-default]');
+  if (defaultBtn) {
+    socket.emit('location:setDefault', { locationId: defaultBtn.dataset.default });
+    return;
+  }
+
+  const archiveBtn = e.target.closest('[data-archive]');
+  if (archiveBtn) {
+    const locationId = archiveBtn.dataset.archive;
+    if (!armedLocationArchives.has(locationId)) {
+      armedLocationArchives.add(locationId);
+      renderLocationPanel();
+      clearTimeout(locationArchiveTimers.get(locationId));
+      locationArchiveTimers.set(
+        locationId,
+        setTimeout(() => {
+          armedLocationArchives.delete(locationId);
+          renderLocationPanel();
+        }, 2500)
+      );
+      return;
+    }
+    clearTimeout(locationArchiveTimers.get(locationId));
+    armedLocationArchives.delete(locationId);
+    socket.emit('location:archive', { locationId });
+  }
+});
+
+locationList.addEventListener('change', (e) => {
+  const input = e.target.closest('input[data-name-for]');
+  if (!input) return;
+  socket.emit('location:rename', { locationId: input.dataset.nameFor, name: input.value });
+});
+
+locationList.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('input[data-name-for]')) e.target.blur();
+});
+
+locationArchivedList.addEventListener('click', (e) => {
+  const restoreBtn = e.target.closest('[data-restore]');
+  if (restoreBtn) socket.emit('location:restore', { locationId: restoreBtn.dataset.restore });
+});
+
+locationArchivedList.addEventListener('change', (e) => {
+  const input = e.target.closest('input[data-name-for]');
+  if (!input) return;
+  socket.emit('location:rename', { locationId: input.dataset.nameFor, name: input.value });
+});
+
+locationArchivedList.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('input[data-name-for]')) e.target.blur();
 });

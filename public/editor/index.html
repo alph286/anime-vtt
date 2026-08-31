@@ -22,10 +22,15 @@
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></symbol>
   <symbol id="i-fog" viewBox="0 0 24 24"><path d="M3 15h18M6 19h12M4 11h16M7 7h10"/></symbol>
   <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9 6.4 20l1.4-6.3-4.8-4.3 6.4-.6z"/></symbol>
 </svg>
 
 <header class="topbar">
   <select id="location-select"></select>
+  <button id="location-create" class="icon-btn" title="Nuova location">
+    <svg class="icon"><use href="#i-plus"></use></svg>
+  </button>
 </header>
 
 <main class="editor-layout">
@@ -117,6 +122,15 @@
   </section>
 
   <aside class="col col-sidebar">
+    <section>
+      <h2>Location</h2>
+      <div id="location-list" class="image-editor-list"></div>
+      <div id="location-archived-wrap" hidden>
+        <p class="hint">Archiviate</p>
+        <div id="location-archived-list" class="image-editor-list"></div>
+      </div>
+    </section>
+
     <section>
       <h2>Immagini</h2>
       <div id="image-list" class="image-editor-list"></div>
