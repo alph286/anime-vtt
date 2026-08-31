@@ -224,6 +224,7 @@ document.querySelectorAll('[data-pan]').forEach((btn) => {
 
 zoomRange.addEventListener('pointerdown', () => { zoomSliderActive = true; });
 zoomRange.addEventListener('pointerup', () => { zoomSliderActive = false; });
+zoomRange.addEventListener('pointercancel', () => { zoomSliderActive = false; });
 zoomRange.addEventListener('input', () => {
   socket.emit('view:zoom', { scale: Number(zoomRange.value) / 5 });
 });
