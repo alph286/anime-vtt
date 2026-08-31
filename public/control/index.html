@@ -2,19 +2,23 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Anime VTT — Controllo</title>
 <link rel="stylesheet" href="/shared/theme.css">
 <link rel="stylesheet" href="control.css">
 </head>
 <body>
-<main>
-  <div class="row">
-    <select id="location-select"></select>
-  </div>
+<svg style="display:none">
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></symbol>
+</svg>
 
-  <section>
-    <h2>Mappa — tocca una zona per rivelarla/nasconderla</h2>
+<div id="wifi-dot" class="bad">
+  <svg viewBox="0 0 24 24"><path d="M12 20a1.6 1.6 0 1 0 0-3.2A1.6 1.6 0 0 0 12 20Zm-6.4-6.2a9 9 0 0 1 12.8 0l-2 2a6.2 6.2 0 0 0-8.8 0l-2-2Zm-3.8-4a14 14 0 0 1 20.4 0l-2 2a11.2 11.2 0 0 0-16.4 0l-2-2Z"/></svg>
+</div>
+
+<div id="app">
+  <div id="map-column">
+    <div id="showing-banner" class="showing-banner" hidden>Stai mostrando <strong id="showing-banner-name"></strong> ai giocatori</div>
     <div id="map-preview" class="map-preview">
       <div class="media-wrap" id="map-media-wrap">
         <div class="fit-box" id="map-fit-box">
@@ -24,46 +28,69 @@
           <div class="fog-layer" id="map-fog-layer"></div>
         </div>
       </div>
+      <div id="viewport-rect" hidden></div>
+      <button id="pan-mode-toggle" class="icon-btn" title="Sposta inquadratura trascinando" disabled>
+        <svg class="icon"><use href="#i-move"></use></svg>
+      </button>
     </div>
-  </section>
+  </div>
 
-  <section id="pan-zoom-section">
-    <h2>Vista live sulla mappa (pan / zoom)</h2>
-    <div class="pan-zoom">
-      <div class="pad">
-        <span></span>
-        <button data-pan="0,-1">▲</button>
-        <span></span>
-        <button data-pan="-1,0">◀</button>
-        <button id="view-reset">⟳</button>
-        <button data-pan="1,0">▶</button>
-        <span></span>
-        <button data-pan="0,1">▼</button>
-        <span></span>
+  <div id="control-column">
+    <div class="row">
+      <select id="location-select"></select>
+    </div>
+    <div id="location-confirm-row" class="confirm-row" hidden>
+      <span>Passare a "<strong id="location-confirm-name"></strong>"?</span>
+      <button id="location-confirm-yes">Conferma</button>
+      <button id="location-confirm-no">Annulla</button>
+    </div>
+
+    <section id="pan-zoom-section">
+      <h2>Vista live sulla mappa (pan / zoom)</h2>
+      <div class="pan-zoom">
+        <div class="pad">
+          <span></span>
+          <button data-pan="0,-1">▲</button>
+          <span></span>
+          <button data-pan="-1,0">◀</button>
+          <span></span>
+          <button data-pan="1,0">▶</button>
+          <span></span>
+          <button data-pan="0,1">▼</button>
+          <span></span>
+        </div>
+        <button id="view-reset" title="Reset vista">⟳</button>
+        <div class="zoom">
+          <span>-</span>
+          <input type="range" id="zoom-range" min="1" max="20" step="1" value="5">
+          <span>+</span>
+        </div>
       </div>
-      <div class="zoom">
-        <span>-</span>
-        <input type="range" id="zoom-range" min="1" max="20" step="1" value="5">
-        <span>+</span>
+    </section>
+
+    <section>
+      <h2>Fog of war — tocca una zona per rivelarla/nasconderla</h2>
+      <div class="fow-bulk">
+        <button id="fow-hide-all">Nascondi tutto</button>
+        <button id="fow-reveal-all">Rivela tutto</button>
       </div>
-    </div>
-  </section>
+      <div id="fow-list" class="list"></div>
+    </section>
 
-  <section>
-    <h2>Immagini</h2>
-    <div id="images-list" class="thumb-row"></div>
-    <button id="back-to-map" class="primary">Torna alla mappa</button>
-  </section>
+    <section>
+      <h2>Immagini</h2>
+      <div id="images-list" class="thumb-row"></div>
+      <button id="back-to-map" class="primary">Torna alla mappa</button>
+    </section>
 
-  <section>
-    <div class="opacity-row">
-      <label for="fog-opacity">opacità fog (solo qui, non sul display)</label>
-      <input type="range" id="fog-opacity" min="0" max="100" value="45">
-    </div>
-    <button id="toggle-fow-list" class="link-btn">mostra elenco testuale</button>
-    <div id="fow-list" class="list" hidden></div>
-  </section>
-</main>
+    <section>
+      <div class="opacity-row">
+        <label for="fog-opacity">opacità fog (solo qui, non sul display)</label>
+        <input type="range" id="fog-opacity" min="0" max="100" value="45">
+      </div>
+    </section>
+  </div>
+</div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/shared/media.js"></script>
 <script src="control.js"></script>

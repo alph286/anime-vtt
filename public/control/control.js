@@ -1,7 +1,7 @@
 const socket = io();
 let state = null;
 let fogOpacity = 0.45;
-let fowListVisible = false;
+let currentImageRect = null;
 
 const locationSelect = document.getElementById('location-select');
 const mapPreview = document.getElementById('map-preview');
@@ -13,7 +13,6 @@ let activeMapEl = mapImg;
 const mapPlaceholder = document.getElementById('map-placeholder');
 const mapFogLayer = document.getElementById('map-fog-layer');
 const fogOpacityInput = document.getElementById('fog-opacity');
-const toggleFowListBtn = document.getElementById('toggle-fow-list');
 const fowList = document.getElementById('fow-list');
 const imagesList = document.getElementById('images-list');
 const backToMapBtn = document.getElementById('back-to-map');
@@ -24,6 +23,10 @@ socket.on('connect', () => socket.emit('hello', { role: 'control' }));
 socket.on('state:update', (s) => {
   state = s;
   render();
+});
+
+window.addEventListener('resize', () => {
+  if (state) renderMapPreview(getActiveLocation());
 });
 
 function getActiveLocation() {
@@ -93,18 +96,23 @@ function renderMapPreview(location) {
     activeMapEl = loadMapMedia(mapImg, mapVideo, location.map.file, `/storage/maps/${location.map.file}`, () => {
       const nw = mediaW(activeMapEl);
       const nh = mediaH(activeMapEl);
+      if (nw && nh) mapPreview.style.setProperty('--map-aspect', `${nw} / ${nh}`);
       const rotation = computeTotalRotation(nw, nh, location.map.flip180);
       const effective = layoutMapWrap(mapPreview, mapMediaWrap, rotation);
       const rect = fitRect(effective.width, effective.height, nw, nh);
       positionFitBox(mapFitBox, rect);
+      currentImageRect = rect;
       renderFogOverlays(polygons);
     });
   } else {
     mapImg.hidden = true;
     mapVideo.hidden = true;
     mapPlaceholder.hidden = false;
+    mapPreview.style.removeProperty('--map-aspect');
     const effective = layoutMapWrap(mapPreview, mapMediaWrap, 0);
-    positionFitBox(mapFitBox, { left: 0, top: 0, width: effective.width, height: effective.height });
+    const rect = { left: 0, top: 0, width: effective.width, height: effective.height };
+    positionFitBox(mapFitBox, rect);
+    currentImageRect = rect;
     renderFogOverlays(polygons);
   }
 }
@@ -121,12 +129,6 @@ mapFogLayer.addEventListener('click', (e) => {
 fogOpacityInput.addEventListener('input', () => {
   fogOpacity = Number(fogOpacityInput.value) / 100;
   if (state) renderMapPreview(getActiveLocation());
-});
-
-toggleFowListBtn.addEventListener('click', () => {
-  fowListVisible = !fowListVisible;
-  fowList.hidden = !fowListVisible;
-  toggleFowListBtn.textContent = fowListVisible ? 'nascondi elenco testuale' : 'mostra elenco testuale';
 });
 
 fowList.addEventListener('click', (e) => {

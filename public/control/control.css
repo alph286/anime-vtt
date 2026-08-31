@@ -2,6 +2,12 @@
   box-sizing: border-box;
 }
 
+/* Un [hidden] senza questa regola può essere vinto da un display d'autore
+   con la stessa specificità — già successo una volta in editor.css. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
@@ -9,34 +15,9 @@ body {
   color: var(--text-primary);
 }
 
-main {
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 16px;
-}
-
 select, button, input[type="range"] {
   font-size: 15px;
   font-family: inherit;
-}
-
-.row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-
-.row select {
-  flex: 1;
-  height: 40px;
-  border-radius: 8px;
-  border: 1px solid var(--border-control);
-  background: var(--bg-control);
-  color: var(--text-primary);
-}
-
-section {
-  margin-bottom: 24px;
 }
 
 h2 {
@@ -47,14 +28,105 @@ h2 {
   margin: 0 0 8px;
 }
 
+#wifi-dot {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  transition: background-color 0.3s, opacity 0.3s;
+}
+
+#wifi-dot.ok {
+  background: #2e7d32;
+  opacity: 0;
+}
+
+#wifi-dot.bad {
+  background: #c62828;
+  opacity: 1;
+}
+
+#wifi-dot svg {
+  width: 18px;
+  height: 18px;
+  fill: #fff;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 16px;
+  gap: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+#map-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#control-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.row select {
+  flex: 1;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
+}
+
+.confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.confirm-row strong {
+  color: var(--text-primary);
+}
+
+.showing-banner {
+  font-size: 14px;
+  color: var(--accent);
+  background: var(--accent-bg-subtle);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
 .map-preview {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: var(--map-aspect, 4 / 3);
   border-radius: 8px;
   overflow: hidden;
   background: var(--bg-canvas);
-  margin-bottom: 10px;
 }
 
 .map-preview .media-wrap {
@@ -107,13 +179,27 @@ h2 {
   outline-offset: -1px;
 }
 
+#viewport-rect {
+  position: absolute;
+  border: 2px solid var(--accent);
+  background: var(--accent-bg-subtle);
+  pointer-events: none;
+  z-index: 5;
+}
+
+#pan-mode-toggle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 6;
+}
+
 .opacity-row {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 12px;
   color: var(--text-secondary);
-  margin-bottom: 10px;
 }
 
 .opacity-row input {
@@ -126,7 +212,6 @@ h2 {
   padding: 0;
   font-size: 13px;
   color: var(--accent);
-  margin-bottom: 8px;
 }
 
 .list {
@@ -135,11 +220,22 @@ h2 {
   gap: 8px;
 }
 
+.fow-bulk {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.fow-bulk button {
+  flex: 1;
+}
+
 .fow-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
+  min-height: 48px;
   border-radius: 8px;
   border: 1px solid var(--border-control);
   background: var(--bg-control);
@@ -169,8 +265,9 @@ h2 {
 }
 
 .image-thumb {
-  width: 64px;
-  height: 64px;
+  position: relative;
+  width: 84px;
+  height: 84px;
   border-radius: 8px;
   border: 1px solid var(--border-control);
   overflow: hidden;
@@ -200,11 +297,9 @@ button {
   background: var(--bg-control);
   color: var(--text-primary);
   padding: 10px 14px;
+  min-height: 44px;
 }
 
-/* Stesso trattamento mostrato e approvato nel mockup del companion di
-   brainstorming (.cf-btnfull): non pieno ambra, coerente col resto dei
-   pulsanti scuri — solo un pulsante a piena larghezza. */
 button.primary {
   width: 100%;
   background: var(--bg-control);
@@ -216,24 +311,33 @@ button.primary {
 .pan-zoom {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .pad {
   display: grid;
-  grid-template-columns: repeat(3, 40px);
-  grid-template-rows: repeat(3, 40px);
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(3, 44px);
   gap: 4px;
 }
 
 .pad button, .pad span {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  min-height: 0;
+}
+
+#view-reset {
+  width: 44px;
+  height: 44px;
   padding: 0;
 }
 
 .zoom {
   flex: 1;
+  min-width: 140px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -241,4 +345,32 @@ button.primary {
 
 .zoom input {
   flex: 1;
+}
+
+@media (min-width: 700px) {
+  #app {
+    flex-direction: row;
+    align-items: stretch;
+    height: 100vh;
+    padding: 20px;
+  }
+
+  #map-column {
+    flex: 1 1 62%;
+    min-width: 0;
+  }
+
+  .map-preview {
+    aspect-ratio: auto;
+    flex: 1;
+    min-height: 0;
+  }
+
+  #control-column {
+    flex: 1 1 38%;
+    min-width: 300px;
+    max-width: 460px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
 }
