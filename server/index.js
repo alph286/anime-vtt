@@ -82,6 +82,45 @@ function deleteUploadedFile(dir, filename) {
   }
 }
 
+// Un file è orfano solo se NESSUNA location — attiva o archiviata — lo
+// referenzia più. Pensata per essere raggiunta raramente e con calma:
+// separata dall'archiviazione, mai un "elimina tutto" a un click.
+function findOrphanFiles() {
+  const referencedMaps = new Set();
+  const referencedImages = new Set();
+  state.locations.forEach((location) => {
+    if (location.map.file) referencedMaps.add(location.map.file);
+    (location.images || []).forEach((img) => referencedImages.add(img.file));
+  });
+
+  const scanDir = (dir, referenced, kind) =>
+    fs.readdirSync(dir)
+      .filter((name) => !referenced.has(name))
+      .map((name) => ({ dir, name, kind, size: fs.statSync(path.join(dir, name)).size }));
+
+  return [...scanDir(MAPS_DIR, referencedMaps, 'maps'), ...scanDir(IMAGES_DIR, referencedImages, 'images')];
+}
+
+app.post('/api/storage/orphans/scan', (req, res) => {
+  const orphans = findOrphanFiles().map(({ name, kind, size }) => ({ file: name, kind, size }));
+  res.json({ orphans });
+});
+
+app.post('/api/storage/orphans/purge', (req, res) => {
+  const requested = Array.isArray(req.body.files) ? req.body.files : [];
+  // Ri-verifica al momento della cancellazione (non fidarsi della lista che
+  // arriva dal client): se nel frattempo un file è tornato referenziato, non
+  // va toccato.
+  const stillOrphan = findOrphanFiles().filter((f) =>
+    requested.some((r) => r.file === f.name && r.kind === f.kind)
+  );
+  const deleted = stillOrphan.map(({ dir, name, kind }) => {
+    deleteUploadedFile(dir, name);
+    return { file: name, kind };
+  });
+  res.json({ deleted });
+});
+
 app.post('/api/upload/map', uploadMap.single('file'), (req, res) => {
   const location = state.locations.find((l) => l.id === req.body.locationId);
   if (!location || !req.file) {
