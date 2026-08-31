@@ -2,6 +2,8 @@ const socket = io();
 let state = null;
 let fogOpacity = 0.45;
 let currentImageRect = null;
+let socketConnected = false;
+let displayConnected = false;
 
 const locationSelect = document.getElementById('location-select');
 const mapPreview = document.getElementById('map-preview');
@@ -18,12 +20,33 @@ const imagesList = document.getElementById('images-list');
 const backToMapBtn = document.getElementById('back-to-map');
 const panZoomSection = document.getElementById('pan-zoom-section');
 const zoomRange = document.getElementById('zoom-range');
+const wifiDot = document.getElementById('wifi-dot');
+const showingBanner = document.getElementById('showing-banner');
+const showingBannerName = document.getElementById('showing-banner-name');
 const fowHideAllBtn = document.getElementById('fow-hide-all');
 const fowRevealAllBtn = document.getElementById('fow-reveal-all');
 const viewportRect = document.getElementById('viewport-rect');
 const panModeToggle = document.getElementById('pan-mode-toggle');
 
-socket.on('connect', () => socket.emit('hello', { role: 'control' }));
+function updateWifi() {
+  const ok = socketConnected && displayConnected;
+  wifiDot.classList.toggle('ok', ok);
+  wifiDot.classList.toggle('bad', !ok);
+}
+
+socket.on('connect', () => {
+  socketConnected = true;
+  socket.emit('hello', { role: 'control' });
+  updateWifi();
+});
+socket.on('disconnect', () => {
+  socketConnected = false;
+  updateWifi();
+});
+socket.on('display:status', ({ connected }) => {
+  displayConnected = connected;
+  updateWifi();
+});
 socket.on('state:update', (s) => {
   state = s;
   render();
@@ -40,6 +63,14 @@ function getActiveLocation() {
 function render() {
   const location = getActiveLocation();
   const showingImage = Boolean(state.activeImageId);
+
+  if (showingImage && location) {
+    const shownImg = (location.images || []).find((i) => i.id === state.activeImageId);
+    showingBanner.hidden = !shownImg;
+    if (shownImg) showingBannerName.textContent = shownImg.name || '';
+  } else {
+    showingBanner.hidden = true;
+  }
 
   locationSelect.innerHTML =
     (state.activeLocationId ? '' : '<option value="" selected disabled hidden>— nessuna location —</option>') +
