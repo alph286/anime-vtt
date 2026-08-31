@@ -186,6 +186,7 @@ function updateZoomBox() {
 
 function updateOverlayBox() {
   const location = getActiveLocation();
+  if (!location) return;
 
   const nw = mediaW(activeMapEl);
   const nh = mediaH(activeMapEl);
