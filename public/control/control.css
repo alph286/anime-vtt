@@ -194,6 +194,16 @@ h2 {
   z-index: 6;
 }
 
+#pan-mode-toggle.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.map-preview.pan-mode-active {
+  cursor: move;
+}
+
 .opacity-row {
   display: flex;
   align-items: center;

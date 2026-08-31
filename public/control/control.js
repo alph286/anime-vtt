@@ -20,6 +20,8 @@ const panZoomSection = document.getElementById('pan-zoom-section');
 const zoomRange = document.getElementById('zoom-range');
 const fowHideAllBtn = document.getElementById('fow-hide-all');
 const fowRevealAllBtn = document.getElementById('fow-reveal-all');
+const viewportRect = document.getElementById('viewport-rect');
+const panModeToggle = document.getElementById('pan-mode-toggle');
 
 socket.on('connect', () => socket.emit('hello', { role: 'control' }));
 socket.on('state:update', (s) => {
@@ -72,6 +74,7 @@ function render() {
 
   zoomRange.value = String(Math.round((state.liveView.scale || 1) * 5));
   panZoomSection.style.display = showingImage ? 'none' : 'block';
+  updateViewportRect(location);
 }
 
 // The wrap element's CSS rotate() transform already turns this locally-flat
@@ -124,6 +127,7 @@ locationSelect.addEventListener('change', () => {
 });
 
 mapFogLayer.addEventListener('click', (e) => {
+  if (panModeActive) return;
   const overlay = e.target.closest('.fog-overlay');
   if (overlay) socket.emit('fow:toggle', { polygonId: overlay.dataset.id });
 });
@@ -188,3 +192,98 @@ fowRevealAllBtn.addEventListener('click', () => {
   resetRevealAllArm();
   socket.emit('fow:setAll', { locationId: state.activeLocationId, revealed: true });
 });
+
+// Il rettangolo mostra quale porzione della mappa la TV sta effettivamente
+// inquadrando in questo momento. Si ricalcola, per le dimensioni del
+// viewport della TV, lo stesso posizionamento che display.js applica alla
+// mappa — poi si inverte la trasformazione pan/zoom per trovare quale
+// rettangolo del map-layer riempie lo schermo della TV, e lo si riesprime
+// come frazione del riquadro mappa mostrato qui in locale (currentImageRect).
+function updateViewportRect(location) {
+  if (!location || !state.displayViewport || !mediaW(activeMapEl) || !currentImageRect) {
+    viewportRect.hidden = true;
+    panModeToggle.disabled = true;
+    return;
+  }
+
+  const { width: vw, height: vh } = state.displayViewport;
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  const rotation = computeTotalRotation(nw, nh, location.map.flip180);
+  const swapped = rotation === 90 || rotation === 270;
+  const tvEffectiveW = swapped ? vh : vw;
+  const tvEffectiveH = swapped ? vw : vh;
+  const tvFit = fitRect(tvEffectiveW, tvEffectiveH, nw, nh);
+
+  const mapScale = location.map.scale || 1;
+  const live = state.liveView || { scale: 1, offsetX: 0, offsetY: 0 };
+  const S = mapScale * (live.scale || 1);
+
+  const viewLeft = -(live.offsetX || 0) / S;
+  const viewTop = -(live.offsetY || 0) / S;
+  const viewW = tvEffectiveW / S;
+  const viewH = tvEffectiveH / S;
+
+  const fracLeft = (viewLeft - tvFit.left) / tvFit.width;
+  const fracTop = (viewTop - tvFit.top) / tvFit.height;
+  const fracW = viewW / tvFit.width;
+  const fracH = viewH / tvFit.height;
+
+  viewportRect.hidden = false;
+  viewportRect.style.left = `${currentImageRect.left + fracLeft * currentImageRect.width}px`;
+  viewportRect.style.top = `${currentImageRect.top + fracTop * currentImageRect.height}px`;
+  viewportRect.style.width = `${fracW * currentImageRect.width}px`;
+  viewportRect.style.height = `${fracH * currentImageRect.height}px`;
+
+  panModeToggle.disabled = false;
+}
+
+let panModeActive = false;
+let panDrag = null;
+
+panModeToggle.addEventListener('click', () => {
+  panModeActive = !panModeActive;
+  panModeToggle.classList.toggle('active', panModeActive);
+  mapPreview.classList.toggle('pan-mode-active', panModeActive);
+});
+
+// In modalità sposta, il tocco sul fog viene sospeso del tutto: nessuna
+// ambiguità tap-vs-trascinamento da risolvere, ogni gesto sull'anteprima è
+// per forza un trascinamento.
+mapPreview.addEventListener('pointerdown', (e) => {
+  if (!panModeActive) return;
+  panDrag = { lastX: e.clientX, lastY: e.clientY };
+  mapPreview.setPointerCapture(e.pointerId);
+});
+
+mapPreview.addEventListener('pointermove', (e) => {
+  if (!panDrag) return;
+  const dxLocal = e.clientX - panDrag.lastX;
+  const dyLocal = e.clientY - panDrag.lastY;
+  panDrag.lastX = e.clientX;
+  panDrag.lastY = e.clientY;
+
+  const location = getActiveLocation();
+  if (!location || !state.displayViewport || !currentImageRect) return;
+
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  const rotation = computeTotalRotation(nw, nh, location.map.flip180);
+  const swapped = rotation === 90 || rotation === 270;
+  const tvEffectiveW = swapped ? state.displayViewport.height : state.displayViewport.width;
+  const tvEffectiveH = swapped ? state.displayViewport.width : state.displayViewport.height;
+  const tvFit = fitRect(tvEffectiveW, tvEffectiveH, nw, nh);
+
+  const mapScale = location.map.scale || 1;
+  const S = mapScale * ((state.liveView && state.liveView.scale) || 1);
+
+  // Stessa conversione usata per disegnare il rettangolo, invertita: da
+  // pixel dell'anteprima locale a pixel del viewport della TV.
+  const dxTv = (dxLocal / currentImageRect.width) * tvFit.width * S;
+  const dyTv = (dyLocal / currentImageRect.height) * tvFit.height * S;
+
+  socket.emit('view:pan', { dx: -dxTv, dy: -dyTv });
+});
+
+mapPreview.addEventListener('pointerup', () => { panDrag = null; });
+mapPreview.addEventListener('pointercancel', () => { panDrag = null; });
