@@ -24,7 +24,9 @@ const DEFAULT_STATE = {
           { id: 'corridoio', name: 'Corridoio', points: [[55, 50], [92, 45], [94, 88], [58, 92]], revealed: false }
         ]
       },
-      images: []
+      images: [],
+      archived: false,
+      isDefault: true
     }
   ],
   activeLocationId: 'taverna',
@@ -49,6 +51,8 @@ function migrate(state) {
     if (!location.map.grid) location.map.grid = { ...DEFAULT_GRID };
     if (location.map.grid.color === undefined) location.map.grid.color = '#ffffff';
     if (location.map.grid.lineWidth === undefined) location.map.grid.lineWidth = 0.3;
+    if (location.archived === undefined) location.archived = false;
+    if (location.isDefault === undefined) location.isDefault = false;
     (location.images || []).forEach((image) => {
       delete image.rotation;
     });
