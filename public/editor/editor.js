@@ -970,3 +970,58 @@ locationArchivedList.addEventListener('change', (e) => {
 locationArchivedList.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.matches('input[data-name-for]')) e.target.blur();
 });
+
+const orphansScanBtn = document.getElementById('orphans-scan-btn');
+const orphansPanel = document.getElementById('orphans-panel');
+const orphansList = document.getElementById('orphans-list');
+const orphansPurgeBtn = document.getElementById('orphans-purge-btn');
+
+let orphansFound = [];
+let orphansPurgeArmed = false;
+let orphansPurgeTimeout = null;
+
+function formatBytes(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  return `${Math.round(bytes / 1024)}KB`;
+}
+
+orphansScanBtn.addEventListener('click', async () => {
+  const res = await fetch('/api/storage/orphans/scan', { method: 'POST' });
+  const data = await res.json();
+  orphansFound = data.orphans || [];
+  orphansPanel.hidden = false;
+  orphansPurgeBtn.hidden = orphansFound.length === 0;
+  orphansPurgeArmed = false;
+  orphansPurgeBtn.classList.remove('confirm');
+  orphansPurgeBtn.textContent = 'conferma cancellazione';
+  orphansList.innerHTML = orphansFound.length
+    ? orphansFound.map((o) => `<div>${escapeHtml(o.file)} (${o.kind}, ${formatBytes(o.size)})</div>`).join('')
+    : 'nessun file orfano trovato.';
+});
+
+orphansPurgeBtn.addEventListener('click', async () => {
+  if (!orphansPurgeArmed) {
+    orphansPurgeArmed = true;
+    orphansPurgeBtn.classList.add('confirm');
+    orphansPurgeBtn.textContent = 'click di nuovo per confermare';
+    clearTimeout(orphansPurgeTimeout);
+    orphansPurgeTimeout = setTimeout(() => {
+      orphansPurgeArmed = false;
+      orphansPurgeBtn.classList.remove('confirm');
+      orphansPurgeBtn.textContent = 'conferma cancellazione';
+    }, 2500);
+    return;
+  }
+  clearTimeout(orphansPurgeTimeout);
+  const res = await fetch('/api/storage/orphans/purge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: orphansFound.map(({ file, kind }) => ({ file, kind })) })
+  });
+  const data = await res.json();
+  orphansFound = [];
+  orphansPurgeArmed = false;
+  orphansPurgeBtn.hidden = true;
+  orphansPurgeBtn.classList.remove('confirm');
+  orphansList.innerHTML = `cancellati ${data.deleted.length} file.`;
+});
