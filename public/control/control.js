@@ -6,6 +6,12 @@ let socketConnected = false;
 let displayConnected = false;
 
 const locationSelect = document.getElementById('location-select');
+const locationConfirmRow = document.getElementById('location-confirm-row');
+const locationConfirmName = document.getElementById('location-confirm-name');
+const locationConfirmYes = document.getElementById('location-confirm-yes');
+const locationConfirmNo = document.getElementById('location-confirm-no');
+let pendingLocationId = null;
+let locationConfirmTimeout = null;
 const mapPreview = document.getElementById('map-preview');
 const mapMediaWrap = document.getElementById('map-media-wrap');
 const mapFitBox = document.getElementById('map-fit-box');
@@ -153,9 +159,33 @@ function renderMapPreview(location) {
   }
 }
 
+function resetLocationConfirm() {
+  pendingLocationId = null;
+  clearTimeout(locationConfirmTimeout);
+  locationConfirmRow.hidden = true;
+  locationSelect.value = state.activeLocationId || '';
+}
+
 locationSelect.addEventListener('change', () => {
-  socket.emit('location:set', { locationId: locationSelect.value });
+  const targetId = locationSelect.value;
+  if (!targetId || targetId === state.activeLocationId) return;
+  const target = state.locations.find((l) => l.id === targetId);
+  locationSelect.value = state.activeLocationId || '';
+  if (!target) return;
+  pendingLocationId = targetId;
+  locationConfirmName.textContent = target.name;
+  locationConfirmRow.hidden = false;
+  clearTimeout(locationConfirmTimeout);
+  locationConfirmTimeout = setTimeout(resetLocationConfirm, 4000);
 });
+
+locationConfirmYes.addEventListener('click', () => {
+  if (!pendingLocationId) return;
+  socket.emit('location:set', { locationId: pendingLocationId });
+  resetLocationConfirm();
+});
+
+locationConfirmNo.addEventListener('click', resetLocationConfirm);
 
 mapFogLayer.addEventListener('click', (e) => {
   if (panModeActive) return;
