@@ -7,7 +7,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState } = require('./state');
+const { loadState, saveState, applyStartupDefault } = require('./state');
 
 const PORT = process.env.PORT || 3000;
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'storage');
@@ -18,7 +18,7 @@ for (const dir of [MAPS_DIR, IMAGES_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-let state = loadState();
+let state = applyStartupDefault(loadState());
 
 function getActiveLocation() {
   return state.locations.find((l) => l.id === state.activeLocationId);

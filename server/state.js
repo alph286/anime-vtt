@@ -88,4 +88,20 @@ function saveState(state) {
   fs.renameSync(tmpFile, STATE_FILE);
 }
 
-module.exports = { loadState, saveState, DATA_DIR, STATE_FILE };
+// Chiamata una sola volta all'avvio del processo, dopo loadState(): forza
+// l'app a partire dalla location marcata come predefinita, ignorando quale
+// fosse rimasta attiva l'ultima volta che il server si è fermato. Ricade
+// sulla prima location non archiviata se quella predefinita è stata nel
+// frattempo archiviata o rimossa, o su nessuna location (null) se non ne
+// resta nessuna.
+function applyStartupDefault(state) {
+  const nonArchived = (state.locations || []).filter((l) => !l.archived);
+  const preferred = nonArchived.find((l) => l.isDefault);
+  const chosen = preferred || nonArchived[0] || null;
+  state.activeLocationId = chosen ? chosen.id : null;
+  state.activeImageId = null;
+  state.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
+  return state;
+}
+
+module.exports = { loadState, saveState, applyStartupDefault, DATA_DIR, STATE_FILE };
