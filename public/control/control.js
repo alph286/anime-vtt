@@ -18,6 +18,8 @@ const imagesList = document.getElementById('images-list');
 const backToMapBtn = document.getElementById('back-to-map');
 const panZoomSection = document.getElementById('pan-zoom-section');
 const zoomRange = document.getElementById('zoom-range');
+const fowHideAllBtn = document.getElementById('fow-hide-all');
+const fowRevealAllBtn = document.getElementById('fow-reveal-all');
 
 socket.on('connect', () => socket.emit('hello', { role: 'control' }));
 socket.on('state:update', (s) => {
@@ -155,3 +157,34 @@ zoomRange.addEventListener('input', () => {
 });
 
 document.getElementById('view-reset').addEventListener('click', () => socket.emit('view:reset'));
+
+fowHideAllBtn.addEventListener('click', () => {
+  if (!state.activeLocationId) return;
+  socket.emit('fow:setAll', { locationId: state.activeLocationId, revealed: false });
+});
+
+// Arma-poi-conferma, stesso pattern già in uso nel resto dell'app: primo
+// click arma per 2.5s, secondo click entro la finestra conferma.
+let revealAllArmed = false;
+let revealAllArmTimeout = null;
+
+function resetRevealAllArm() {
+  revealAllArmed = false;
+  clearTimeout(revealAllArmTimeout);
+  fowRevealAllBtn.classList.remove('confirm');
+  fowRevealAllBtn.textContent = 'Rivela tutto';
+}
+
+fowRevealAllBtn.addEventListener('click', () => {
+  if (!state.activeLocationId) return;
+  if (!revealAllArmed) {
+    revealAllArmed = true;
+    fowRevealAllBtn.classList.add('confirm');
+    fowRevealAllBtn.textContent = 'Click di nuovo per confermare';
+    clearTimeout(revealAllArmTimeout);
+    revealAllArmTimeout = setTimeout(resetRevealAllArm, 2500);
+    return;
+  }
+  resetRevealAllArm();
+  socket.emit('fow:setAll', { locationId: state.activeLocationId, revealed: true });
+});

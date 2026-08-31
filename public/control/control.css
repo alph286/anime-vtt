@@ -308,6 +308,12 @@ button.primary {
   padding: 12px;
 }
 
+button.confirm {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
 .pan-zoom {
   display: flex;
   align-items: center;
