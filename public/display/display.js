@@ -23,9 +23,14 @@ function updateWifi() {
   wifiDot.classList.toggle('bad', !ok);
 }
 
+function reportViewport() {
+  socket.emit('display:viewport', { width: window.innerWidth, height: window.innerHeight });
+}
+
 socket.on('connect', () => {
   socketConnected = true;
   socket.emit('hello', { role: 'display' });
+  reportViewport();
   updateWifi();
 });
 
@@ -45,6 +50,7 @@ socket.on('state:update', (state) => {
 });
 
 window.addEventListener('resize', () => {
+  reportViewport();
   if (lastState) render(lastState);
 });
 

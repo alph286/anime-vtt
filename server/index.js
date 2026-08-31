@@ -167,24 +167,43 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const controlSockets = new Set();
+const displaySockets = new Set();
+// Dimensioni del viewport della TV, riportate da display.js — servono a
+// control.js per calcolare il rettangolo di inquadratura live. Deliberatamente
+// NON dentro `state`: non va mai persistita (saveState() serializza solo
+// `state`), si ri-popola da sé alla riconnessione del display.
+let displayViewport = null;
 
 function broadcastState() {
-  io.emit('state:update', state);
+  io.emit('state:update', { ...state, displayViewport });
 }
 
 function broadcastControlStatus() {
   io.emit('control:status', { connected: controlSockets.size > 0 });
 }
 
+function broadcastDisplayStatus() {
+  io.emit('display:status', { connected: displaySockets.size > 0 });
+}
+
 io.on('connection', (socket) => {
-  socket.emit('state:update', state);
+  socket.emit('state:update', { ...state, displayViewport });
   socket.emit('control:status', { connected: controlSockets.size > 0 });
+  socket.emit('display:status', { connected: displaySockets.size > 0 });
 
   socket.on('hello', ({ role }) => {
     if (role === 'control') {
       controlSockets.add(socket.id);
       broadcastControlStatus();
+    } else if (role === 'display') {
+      displaySockets.add(socket.id);
+      broadcastDisplayStatus();
     }
+  });
+
+  socket.on('display:viewport', ({ width, height }) => {
+    displayViewport = { width, height };
+    broadcastState();
   });
 
   socket.on('location:set', ({ locationId }) => {
@@ -257,6 +276,14 @@ io.on('connection', (socket) => {
     const polygon = location?.map.polygons.find((p) => p.id === polygonId);
     if (!polygon) return;
     polygon.revealed = !polygon.revealed;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('fow:setAll', ({ locationId, revealed }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    (location.map.polygons || []).forEach((p) => { p.revealed = Boolean(revealed); });
     saveState(state);
     broadcastState();
   });
@@ -395,6 +422,8 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     controlSockets.delete(socket.id);
     broadcastControlStatus();
+    displaySockets.delete(socket.id);
+    broadcastDisplayStatus();
   });
 });
 
