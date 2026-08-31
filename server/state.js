@@ -104,4 +104,4 @@ function applyStartupDefault(state) {
   return state;
 }
 
-module.exports = { loadState, saveState, applyStartupDefault, DATA_DIR, STATE_FILE };
+module.exports = { loadState, saveState, applyStartupDefault, DEFAULT_GRID, DATA_DIR, STATE_FILE };

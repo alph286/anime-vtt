@@ -7,7 +7,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState, applyStartupDefault } = require('./state');
+const { loadState, saveState, applyStartupDefault, DEFAULT_GRID } = require('./state');
 
 const PORT = process.env.PORT || 3000;
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'storage');
@@ -153,6 +153,62 @@ io.on('connection', (socket) => {
     state.activeLocationId = locationId;
     state.activeImageId = null;
     state.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('location:create', () => {
+    const location = {
+      id: nanoid(),
+      name: 'Nuova location',
+      map: {
+        file: null,
+        type: 'image',
+        scale: 1,
+        flip180: false,
+        grid: { ...DEFAULT_GRID },
+        polygons: []
+      },
+      images: [],
+      archived: false,
+      isDefault: false
+    };
+    state.locations.push(location);
+    state.activeLocationId = location.id;
+    state.activeImageId = null;
+    state.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('location:rename', ({ locationId, name }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    location.name = String(name || '').slice(0, 120);
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('location:archive', ({ locationId }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    location.archived = true;
+    if (state.activeLocationId === locationId) state.activeLocationId = null;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('location:restore', ({ locationId }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    location.archived = false;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('location:setDefault', ({ locationId }) => {
+    if (!state.locations.some((l) => l.id === locationId)) return;
+    state.locations.forEach((l) => { l.isDefault = l.id === locationId; });
     saveState(state);
     broadcastState();
   });
