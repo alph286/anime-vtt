@@ -193,12 +193,50 @@ fowRevealAllBtn.addEventListener('click', () => {
   socket.emit('fow:setAll', { locationId: state.activeLocationId, revealed: true });
 });
 
+// Ruota il vettore (x,y) di angleDeg, con la stessa convenzione di segno
+// della funzione CSS rotate() (verificato empiricamente: rotate(90deg) porta
+// (1,0) a (0,1), cioè orario in un sistema con Y verso il basso — lo stesso
+// usato da display.css). Usare DOMMatrix invece di una matrice scritta a
+// mano elimina il rischio di sbagliare il segno per le rotazioni 90/270.
+function rotateVector(x, y, angleDeg) {
+  const p = new DOMMatrix().rotate(angleDeg).transformPoint(new DOMPoint(x, y));
+  return [p.x, p.y];
+}
+
+// Dallo spazio locale (pre-rotazione) di un wrap di dimensioni effW×effH,
+// centrato e ruotato di `rotation` gradi dentro un container contW×contH (poi
+// eventualmente pannato/scalato di offX,offY/S — S=1,offX=0,offY=0 per la
+// nostra anteprima locale, che non panna/zooma mai se stessa), allo spazio
+// schermo del container. Stessa composizione di #map-layer/#map-media-wrap
+// usata da display.js (validata empiricamente contro getBoundingClientRect).
+function localToScreen(lx, ly, effW, effH, contW, contH, rotation, S, offX, offY) {
+  const [rx, ry] = rotateVector(lx - effW / 2, ly - effH / 2, rotation);
+  return [contW / 2 + S * rx + offX, contH / 2 + S * ry + offY];
+}
+
+// Inversa di localToScreen.
+function screenToLocal(sx, sy, effW, effH, contW, contH, rotation, S, offX, offY) {
+  const dx = (sx - offX - contW / 2) / S;
+  const dy = (sy - offY - contH / 2) / S;
+  const [rx, ry] = rotateVector(dx, dy, -rotation);
+  return [effW / 2 + rx, effH / 2 + ry];
+}
+
 // Il rettangolo mostra quale porzione della mappa la TV sta effettivamente
-// inquadrando in questo momento. Si ricalcola, per le dimensioni del
-// viewport della TV, lo stesso posizionamento che display.js applica alla
-// mappa — poi si inverte la trasformazione pan/zoom per trovare quale
-// rettangolo del map-layer riempie lo schermo della TV, e lo si riesprime
-// come frazione del riquadro mappa mostrato qui in locale (currentImageRect).
+// inquadrando in questo momento. Procede in tre passi:
+// 1) dai quattro angoli dello schermo della TV si risale, con screenToLocal,
+//    al rettangolo corrispondente nello spazio locale (pre-rotazione) del
+//    wrap della TV — lo stesso spazio in cui vive tvFit — e lo si riesprime
+//    come frazione di tvFit;
+// 2) la stessa frazione si applica al riquadro mappa della NOSTRA anteprima
+//    (currentImageRect, anch'esso pre-rotazione, calcolato da
+//    renderMapPreview con la stessa `rotation`), ottenendo il rettangolo
+//    nello spazio locale della nostra anteprima;
+// 3) #viewport-rect non è dentro il wrap ruotato (è un fratello di
+//    #map-media-wrap — deve restare cliccabile/staccato dal fog e dal suo
+//    tap-handler), quindi va portato dallo spazio locale allo spazio
+//    schermo della nostra anteprima con localToScreen (S=1, offset=0: la
+//    nostra anteprima non è mai pannata/zoomata rispetto a se stessa).
 function updateViewportRect(location) {
   if (!location || !state.displayViewport || !mediaW(activeMapEl) || !currentImageRect) {
     viewportRect.hidden = true;
@@ -218,22 +256,43 @@ function updateViewportRect(location) {
   const mapScale = location.map.scale || 1;
   const live = state.liveView || { scale: 1, offsetX: 0, offsetY: 0 };
   const S = mapScale * (live.scale || 1);
+  const offsetX = live.offsetX || 0;
+  const offsetY = live.offsetY || 0;
 
-  const viewLeft = -(live.offsetX || 0) / S;
-  const viewTop = -(live.offsetY || 0) / S;
-  const viewW = tvEffectiveW / S;
-  const viewH = tvEffectiveH / S;
+  // 1) Rotazioni di 0/90/180/270 mantengono il rettangolo dello schermo
+  // allineato agli assi anche nello spazio locale: bastano i due angoli
+  // opposti (0,0) e (vw,vh) per ricavarne min/max.
+  const [x0, y0] = screenToLocal(0, 0, tvEffectiveW, tvEffectiveH, vw, vh, rotation, S, offsetX, offsetY);
+  const [x1, y1] = screenToLocal(vw, vh, tvEffectiveW, tvEffectiveH, vw, vh, rotation, S, offsetX, offsetY);
+
+  const viewLeft = Math.min(x0, x1);
+  const viewTop = Math.min(y0, y1);
+  const viewW = Math.abs(x1 - x0);
+  const viewH = Math.abs(y1 - y0);
 
   const fracLeft = (viewLeft - tvFit.left) / tvFit.width;
   const fracTop = (viewTop - tvFit.top) / tvFit.height;
   const fracW = viewW / tvFit.width;
   const fracH = viewH / tvFit.height;
 
+  // 2) Frazione applicata al riquadro locale della nostra anteprima.
+  const localLeft = currentImageRect.left + fracLeft * currentImageRect.width;
+  const localTop = currentImageRect.top + fracTop * currentImageRect.height;
+  const localRight = localLeft + fracW * currentImageRect.width;
+  const localBottom = localTop + fracH * currentImageRect.height;
+
+  // 3) Dal locale allo schermo della nostra anteprima (S=1, offset=0).
+  const contW = mapPreview.clientWidth, contH = mapPreview.clientHeight;
+  const ctrlEffW = swapped ? contH : contW;
+  const ctrlEffH = swapped ? contW : contH;
+  const [sx0, sy0] = localToScreen(localLeft, localTop, ctrlEffW, ctrlEffH, contW, contH, rotation, 1, 0, 0);
+  const [sx1, sy1] = localToScreen(localRight, localBottom, ctrlEffW, ctrlEffH, contW, contH, rotation, 1, 0, 0);
+
   viewportRect.hidden = false;
-  viewportRect.style.left = `${currentImageRect.left + fracLeft * currentImageRect.width}px`;
-  viewportRect.style.top = `${currentImageRect.top + fracTop * currentImageRect.height}px`;
-  viewportRect.style.width = `${fracW * currentImageRect.width}px`;
-  viewportRect.style.height = `${fracH * currentImageRect.height}px`;
+  viewportRect.style.left = `${Math.min(sx0, sx1)}px`;
+  viewportRect.style.top = `${Math.min(sy0, sy1)}px`;
+  viewportRect.style.width = `${Math.abs(sx1 - sx0)}px`;
+  viewportRect.style.height = `${Math.abs(sy1 - sy0)}px`;
 
   panModeToggle.disabled = false;
 }
@@ -251,7 +310,11 @@ panModeToggle.addEventListener('click', () => {
 // ambiguità tap-vs-trascinamento da risolvere, ogni gesto sull'anteprima è
 // per forza un trascinamento.
 mapPreview.addEventListener('pointerdown', (e) => {
-  if (!panModeActive) return;
+  // Un tocco che parte dal pulsante stesso non deve mai innescare la
+  // capture: altrimenti il click risultante verrebbe rediretto a
+  // mapPreview invece che al pulsante, e spegnere la modalità con un tocco
+  // reale diventerebbe impossibile (setPointerCapture ridirige il click).
+  if (!panModeActive || e.target.closest('#pan-mode-toggle')) return;
   panDrag = { lastX: e.clientX, lastY: e.clientY };
   mapPreview.setPointerCapture(e.pointerId);
 });
@@ -277,12 +340,21 @@ mapPreview.addEventListener('pointermove', (e) => {
   const mapScale = location.map.scale || 1;
   const S = mapScale * ((state.liveView && state.liveView.scale) || 1);
 
-  // Stessa conversione usata per disegnare il rettangolo, invertita: da
-  // pixel dell'anteprima locale a pixel del viewport della TV.
-  const dxTv = (dxLocal / currentImageRect.width) * tvFit.width * S;
-  const dyTv = (dyLocal / currentImageRect.height) * tvFit.height * S;
+  // Stessa conversione usata per disegnare il rettangolo, invertita, in tre
+  // passi speculari: il delta del mouse è nello spazio SCHERMO della nostra
+  // anteprima (ruotata visivamente come la TV) — va prima riportato nello
+  // spazio locale (pre-rotazione) ruotandolo di -rotation (S=1, l'anteprima
+  // locale non panna/zooma se stessa); poi riscalato nello spazio locale di
+  // tvFit; poi ruotato IN AVANTI (+rotation) verso lo spazio schermo di
+  // map-layer sulla TV e moltiplicato per S — con segno invertito, perché
+  // aumentare offsetX sposta il contenuto (non l'inquadratura) in quella
+  // direzione.
+  const [dLocalX, dLocalY] = rotateVector(dxLocal, dyLocal, -rotation);
+  const dViewLeft = (dLocalX / currentImageRect.width) * tvFit.width;
+  const dViewTop = (dLocalY / currentImageRect.height) * tvFit.height;
+  const [rx, ry] = rotateVector(dViewLeft, dViewTop, rotation);
 
-  socket.emit('view:pan', { dx: -dxTv, dy: -dyTv });
+  socket.emit('view:pan', { dx: -S * rx, dy: -S * ry });
 });
 
 mapPreview.addEventListener('pointerup', () => { panDrag = null; });
