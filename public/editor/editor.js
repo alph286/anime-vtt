@@ -71,7 +71,7 @@ const lightboxCloseBtn = document.getElementById('lightbox-close');
 // guardie aggiuntive dentro ciascun handler.
 const LOCATION_DEPENDENT_CONTROLS = [
   mapUpload, removeMapBtn, flip180Btn, mapScaleNum,
-  toolSelectBtn, toolDrawBtn, deletePolygonBtn, fogOpacityNum,
+  toolSelectBtn, toolDrawBtn, drawFinishBtn, drawCancelBtn, deletePolygonBtn, fogOpacityNum,
   gridToggleBtn, gridAlignToolBtn, gridColorInput, gridWidthNum,
   gridSizeNum, gridOffsetXNum, gridOffsetYNum, gridSavePresetBtn, gridApplyPresetBtn,
   imageUpload
@@ -121,20 +121,29 @@ function bindNumberCommit(numEl, min, max, onChange) {
 function render() {
   const location = getActiveLocation();
 
-  locationSelect.innerHTML = state.locations
-    .filter((l) => !l.archived)
-    .map((l) => `<option value="${l.id}" ${l.id === state.activeLocationId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`)
-    .join('');
+  locationSelect.innerHTML =
+    (state.activeLocationId ? '' : '<option value="" selected disabled hidden>— nessuna location —</option>') +
+    state.locations
+      .filter((l) => !l.archived)
+      .map((l) => `<option value="${l.id}" ${l.id === state.activeLocationId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`)
+      .join('');
 
   renderLocationPanel();
 
   if (!location) {
     setLocationControlsDisabled(true);
+    mode = 'select';
+    drawingPoints = [];
+    selectedPolygonId = null;
+    draggingIndex = null;
+    draggingPolygon = null;
+    drawFinishBtn.hidden = true;
+    drawCancelBtn.hidden = true;
     mapImg.hidden = true;
     mapVideo.hidden = true;
     mapPlaceholder.hidden = false;
     gridSvg.innerHTML = '';
-    polygonSvg.innerHTML = '';
+    renderPolygonsSvg();
     polygonList.innerHTML = '';
     imageList.innerHTML = '<p class="hint">nessuna location attiva — creane una qui sopra.</p>';
     updateZoomBox();
@@ -385,6 +394,7 @@ document.addEventListener('pointermove', (e) => {
 
   if (draggingIndex !== null && selectedPolygonId) {
     const location = getActiveLocation();
+    if (!location) return;
     const poly = location.map.polygons.find((p) => p.id === selectedPolygonId);
     if (poly) {
       poly.points[draggingIndex] = basePointFromClientXY(e.clientX, e.clientY);
@@ -395,6 +405,7 @@ document.addEventListener('pointermove', (e) => {
 
   if (draggingPolygon) {
     const location = getActiveLocation();
+    if (!location) return;
     const poly = location.map.polygons.find((p) => p.id === draggingPolygon.polygonId);
     if (!poly) return;
     const current = basePointFromClientXY(e.clientX, e.clientY);
@@ -425,6 +436,7 @@ document.addEventListener('pointerup', () => {
   if (draggingIndex !== null && selectedPolygonId) {
     draggingIndex = null;
     const location = getActiveLocation();
+    if (!location) return;
     const poly = location.map.polygons.find((p) => p.id === selectedPolygonId);
     if (poly) {
       socket.emit('polygon:update', { locationId: location.id, polygonId: poly.id, points: poly.points });
@@ -433,6 +445,7 @@ document.addEventListener('pointerup', () => {
 
   if (draggingPolygon) {
     const location = getActiveLocation();
+    if (!location) return;
     const poly = location.map.polygons.find((p) => p.id === draggingPolygon.polygonId);
     if (poly) {
       socket.emit('polygon:update', { locationId: location.id, polygonId: poly.id, points: poly.points });
@@ -813,7 +826,8 @@ imageList.addEventListener('click', (e) => {
         imageId,
         setTimeout(() => {
           armedImageDeletes.delete(imageId);
-          renderImageList(getActiveLocation());
+          const loc = getActiveLocation();
+          if (loc) renderImageList(loc);
         }, 2500)
       );
       return;

@@ -34,10 +34,12 @@ function render() {
   const location = getActiveLocation();
   const showingImage = Boolean(state.activeImageId);
 
-  locationSelect.innerHTML = state.locations
-    .filter((l) => !l.archived)
-    .map((l) => `<option value="${l.id}" ${l.id === state.activeLocationId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`)
-    .join('');
+  locationSelect.innerHTML =
+    (state.activeLocationId ? '' : '<option value="" selected disabled hidden>— nessuna location —</option>') +
+    state.locations
+      .filter((l) => !l.archived)
+      .map((l) => `<option value="${l.id}" ${l.id === state.activeLocationId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`)
+      .join('');
 
   renderMapPreview(location);
 
