@@ -101,11 +101,9 @@ function renderMap(state, location) {
   const offsetY = live.offsetY || 0;
   mapLayer.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
 
-  if (!location) return;
+  const polygons = (location && location.map.polygons) || [];
 
-  const polygons = location.map.polygons || [];
-
-  if (location.map.file) {
+  if (location && location.map.file) {
     mapPlaceholder.hidden = true;
     activeMapEl = loadMapMedia(mapImg, mapVideo, location.map.file, `/storage/maps/${location.map.file}`, () => {
       const nw = mediaW(activeMapEl);

@@ -35,12 +35,13 @@ function render() {
   const showingImage = Boolean(state.activeImageId);
 
   locationSelect.innerHTML = state.locations
+    .filter((l) => !l.archived)
     .map((l) => `<option value="${l.id}" ${l.id === state.activeLocationId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`)
     .join('');
 
   renderMapPreview(location);
 
-  fowList.innerHTML = (location.map.polygons || [])
+  fowList.innerHTML = ((location && location.map.polygons) || [])
     .map(
       (poly) => `
         <button class="fow-row ${poly.revealed ? 'revealed' : ''}" data-id="${poly.id}">
@@ -52,7 +53,7 @@ function render() {
     .join('');
 
   imagesList.innerHTML =
-    (location.images || [])
+    ((location && location.images) || [])
       .map(
         (img) => `
           <button class="image-thumb ${state.activeImageId === img.id ? 'active' : ''}" data-id="${img.id}">
@@ -83,9 +84,9 @@ function renderFogOverlays(polygons) {
 }
 
 function renderMapPreview(location) {
-  const polygons = location.map.polygons || [];
+  const polygons = (location && location.map.polygons) || [];
 
-  if (location.map.file) {
+  if (location && location.map.file) {
     mapPlaceholder.hidden = true;
     activeMapEl = loadMapMedia(mapImg, mapVideo, location.map.file, `/storage/maps/${location.map.file}`, () => {
       const nw = mediaW(activeMapEl);
