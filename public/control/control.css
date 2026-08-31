@@ -174,9 +174,9 @@ h2 {
 }
 
 .map-preview .fog-overlay.revealed {
-  background: transparent;
-  outline: 1.5px dashed var(--accent);
-  outline-offset: -1px;
+  background: var(--accent-bg-subtle);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 #viewport-rect {
@@ -289,6 +289,20 @@ h2 {
   border: 2px solid var(--accent);
 }
 
+.image-thumb-label {
+  position: absolute;
+  inset: auto 0 0 0;
+  font-size: 11px;
+  line-height: 1.3;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .image-thumb img {
   width: 100%;
   height: 100%;
@@ -389,4 +403,20 @@ button.confirm {
     overflow-y: auto;
     padding-right: 4px;
   }
+}
+
+button, .fog-overlay, .image-thumb, .fow-row, select, #pan-mode-toggle {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+button:active, .fow-row:active, .image-thumb:active {
+  background: var(--accent-bg-subtle);
+}
+
+.map-preview .fog-overlay:active {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }

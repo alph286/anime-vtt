@@ -104,12 +104,15 @@ function render() {
         (img) => `
           <button class="image-thumb ${state.activeImageId === img.id ? 'active' : ''}" data-id="${img.id}">
             <img src="/storage/images/${img.file}" alt="${escapeHtml(img.name)}">
+            <span class="image-thumb-label">${escapeHtml(img.name)}</span>
           </button>
         `
       )
       .join('') || '<p class="hint">nessuna immagine per questa location</p>';
 
-  zoomRange.value = String(Math.round((state.liveView.scale || 1) * 5));
+  if (!zoomSliderActive) {
+    zoomRange.value = String(Math.round((state.liveView.scale || 1) * 5));
+  }
   panZoomSection.style.display = showingImage ? 'none' : 'block';
   updateViewportRect(location);
 }
@@ -213,10 +216,14 @@ backToMapBtn.addEventListener('click', () => socket.emit('image:hide'));
 document.querySelectorAll('[data-pan]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const [dx, dy] = btn.dataset.pan.split(',').map(Number);
-    socket.emit('view:pan', { dx: dx * 20, dy: dy * 20 });
+    const scale = (state && state.liveView && state.liveView.scale) || 1;
+    const step = 20 / Math.max(scale, 0.01);
+    socket.emit('view:pan', { dx: dx * step, dy: dy * step });
   });
 });
 
+zoomRange.addEventListener('pointerdown', () => { zoomSliderActive = true; });
+zoomRange.addEventListener('pointerup', () => { zoomSliderActive = false; });
 zoomRange.addEventListener('input', () => {
   socket.emit('view:zoom', { scale: Number(zoomRange.value) / 5 });
 });
@@ -360,6 +367,7 @@ function updateViewportRect(location) {
 
 let panModeActive = false;
 let panDrag = null;
+let zoomSliderActive = false;
 
 panModeToggle.addEventListener('click', () => {
   panModeActive = !panModeActive;
