@@ -162,6 +162,7 @@ function renderMapPreview(location) {
     }
     if (mapVideo.dataset.mapSrc) {
       mapVideo.removeAttribute('src');
+      mapVideo.load();
       delete mapVideo.dataset.mapSrc;
     }
     mapPlaceholder.hidden = false;
