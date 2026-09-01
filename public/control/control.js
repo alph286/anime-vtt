@@ -59,7 +59,10 @@ socket.on('state:update', (s) => {
 });
 
 window.addEventListener('resize', () => {
-  if (state) renderMapPreview(getActiveLocation());
+  if (!state) return;
+  const location = getActiveLocation();
+  renderMapPreview(location);
+  updateViewportRect(location);
 });
 
 function getActiveLocation() {
@@ -148,10 +151,19 @@ function renderMapPreview(location) {
       positionFitBox(mapFitBox, rect);
       currentImageRect = rect;
       renderFogOverlays(polygons);
+      updateViewportRect(location);
     });
   } else {
     mapImg.hidden = true;
     mapVideo.hidden = true;
+    if (mapImg.dataset.mapSrc) {
+      mapImg.removeAttribute('src');
+      delete mapImg.dataset.mapSrc;
+    }
+    if (mapVideo.dataset.mapSrc) {
+      mapVideo.removeAttribute('src');
+      delete mapVideo.dataset.mapSrc;
+    }
     mapPlaceholder.hidden = false;
     mapPreview.style.removeProperty('--map-aspect');
     const effective = layoutMapWrap(mapPreview, mapMediaWrap, 0);
@@ -159,6 +171,7 @@ function renderMapPreview(location) {
     positionFitBox(mapFitBox, rect);
     currentImageRect = rect;
     renderFogOverlays(polygons);
+    updateViewportRect(location);
   }
 }
 
@@ -310,6 +323,7 @@ function updateViewportRect(location) {
   if (!location || !state.displayViewport || !mediaW(activeMapEl) || !currentImageRect) {
     viewportRect.hidden = true;
     panModeToggle.disabled = true;
+    if (panModeActive) setPanModeActive(false);
     return;
   }
 
@@ -370,10 +384,14 @@ let panModeActive = false;
 let panDrag = null;
 let zoomSliderActive = false;
 
-panModeToggle.addEventListener('click', () => {
-  panModeActive = !panModeActive;
+function setPanModeActive(active) {
+  panModeActive = active;
   panModeToggle.classList.toggle('active', panModeActive);
   mapPreview.classList.toggle('pan-mode-active', panModeActive);
+}
+
+panModeToggle.addEventListener('click', () => {
+  setPanModeActive(!panModeActive);
 });
 
 // In modalità sposta, il tocco sul fog viene sospeso del tutto: nessuna
