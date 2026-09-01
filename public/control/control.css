@@ -233,6 +233,17 @@ h2 {
   cursor: move;
 }
 
+/* Senza questo, su touch il browser interpreta il trascinamento come uno
+   scroll/pan nativo dopo pochi pixel: interrompe la pointer capture con un
+   pointercancel e il rettangolo smette di seguire il dito. touch-action:
+   manipulation sui figli (.fog-overlay, ecc. - regola più sotto) permette
+   comunque il pan nativo per l'antenato; va annullato esplicitamente su
+   tutta la sottoalbero mentre la modalità sposta è attiva. */
+.map-preview.pan-mode-active,
+.map-preview.pan-mode-active * {
+  touch-action: none;
+}
+
 .opacity-row {
   display: flex;
   align-items: center;
