@@ -25,7 +25,12 @@ const fowList = document.getElementById('fow-list');
 const imagesList = document.getElementById('images-list');
 const backToMapBtn = document.getElementById('back-to-map');
 const panZoomSection = document.getElementById('pan-zoom-section');
-const zoomRange = document.getElementById('zoom-range');
+const zoomOutBtn = document.getElementById('zoom-out');
+const zoomInBtn = document.getElementById('zoom-in');
+const zoomLevel = document.getElementById('zoom-level');
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 4;
+const ZOOM_STEP = 0.2;
 const wifiDot = document.getElementById('wifi-dot');
 const showingBanner = document.getElementById('showing-banner');
 const showingBannerName = document.getElementById('showing-banner-name');
@@ -113,9 +118,7 @@ function render() {
       )
       .join('') || '<p class="hint">nessuna immagine per questa location</p>';
 
-  if (!zoomSliderActive) {
-    zoomRange.value = String(Math.round((state.liveView.scale || 1) * 5));
-  }
+  zoomLevel.textContent = `${Math.round((state.liveView.scale || 1) * 100)}%`;
   panZoomSection.style.display = showingImage ? 'none' : 'block';
   updateViewportRect(location);
 }
@@ -236,12 +239,13 @@ document.querySelectorAll('[data-pan]').forEach((btn) => {
   });
 });
 
-zoomRange.addEventListener('pointerdown', () => { zoomSliderActive = true; });
-zoomRange.addEventListener('pointerup', () => { zoomSliderActive = false; });
-zoomRange.addEventListener('pointercancel', () => { zoomSliderActive = false; });
-zoomRange.addEventListener('input', () => {
-  socket.emit('view:zoom', { scale: Number(zoomRange.value) / 5 });
-});
+function stepZoom(delta) {
+  const current = (state && state.liveView && state.liveView.scale) || 1;
+  const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((current + delta) * 10) / 10));
+  socket.emit('view:zoom', { scale: next });
+}
+zoomOutBtn.addEventListener('click', () => stepZoom(-ZOOM_STEP));
+zoomInBtn.addEventListener('click', () => stepZoom(ZOOM_STEP));
 
 document.getElementById('view-reset').addEventListener('click', () => socket.emit('view:reset'));
 
@@ -383,7 +387,6 @@ function updateViewportRect(location) {
 
 let panModeActive = false;
 let panDrag = null;
-let zoomSliderActive = false;
 
 function setPanModeActive(active) {
   panModeActive = active;

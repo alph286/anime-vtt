@@ -50,20 +50,20 @@
       <div class="pan-zoom">
         <div class="pad">
           <span></span>
-          <button data-pan="0,-1">▲</button>
+          <button data-pan="0,1">▲</button>
           <span></span>
-          <button data-pan="-1,0">◀</button>
+          <button data-pan="1,0">◀</button>
           <span></span>
-          <button data-pan="1,0">▶</button>
+          <button data-pan="-1,0">▶</button>
           <span></span>
-          <button data-pan="0,1">▼</button>
+          <button data-pan="0,-1">▼</button>
           <span></span>
         </div>
         <button id="view-reset" title="Reset vista">⟳</button>
         <div class="zoom">
-          <span>-</span>
-          <input type="range" id="zoom-range" min="1" max="20" step="1" value="5">
-          <span>+</span>
+          <button id="zoom-out" title="Riduci zoom">−</button>
+          <span id="zoom-level">100%</span>
+          <button id="zoom-in" title="Aumenta zoom">+</button>
         </div>
       </div>
     </section>
