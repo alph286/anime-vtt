@@ -36,16 +36,6 @@ if command -v xset >/dev/null 2>&1; then
   xset s off -dpms s noblank 2>/dev/null || true
 fi
 
-# Nasconde il cursore del mouse: su un display che nessuno tocca col mouse
-# non deve mai essere visibile, quindi idle a 0 (nascosto quasi subito
-# invece che dopo un attimo di grazia).
-if command -v unclutter >/dev/null 2>&1; then
-  unclutter -idle 0 -root &
-else
-  echo "unclutter non installato, il cursore resterà visibile. Installalo con:" >&2
-  echo "  sudo ./deploy/install-kiosk-dependencies.sh" >&2
-fi
-
 CHROMIUM_BIN=""
 for candidate in chromium-browser chromium; do
   if command -v "$candidate" >/dev/null 2>&1; then

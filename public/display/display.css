@@ -5,6 +5,11 @@ html, body {
   height: 100%;
   background: var(--bg-page);
   overflow: hidden;
+  /* Pagina di solo display, zero elementi cliccabili: il cursore non serve
+     mai qui. Nascosto via CSS invece che con unclutter/xdotool -- funziona
+     identico sotto X11 o Wayland, kiosk o finestra normale, senza dipendenze
+     esterne. */
+  cursor: none;
 }
 
 #viewport {
