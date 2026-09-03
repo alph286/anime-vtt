@@ -1,0 +1,17 @@
+[Unit]
+Description=Anime VTT - display locale mappe/fog of war
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{SERVICE_USER}}
+WorkingDirectory={{WORKDIR}}
+ExecStart={{NODE_BIN}} server/index.js
+Restart=on-failure
+RestartSec=2
+# Se vuoi una porta diversa da quella in .env, decommenta e modifica:
+# Environment=PORT=3000
+
+[Install]
+WantedBy=multi-user.target

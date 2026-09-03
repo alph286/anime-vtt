@@ -29,6 +29,21 @@ Poi apri:
 - Gesture di pan/zoom touch sul controllo, invece dei soli pulsanti
 - Multi-campagna
 
+## Autorun sul Raspberry
+
+Sul Raspberry (dopo `npm install` e la copia di `storage/`/`data/state.json`),
+installa il servizio systemd che fa partire il server da solo a ogni avvio
+e lo riavvia da solo se crasha:
+
+```bash
+sudo ./deploy/install-service.sh
+```
+
+Comandi utili dopo l'installazione: `sudo systemctl status anime-vtt`,
+`sudo journalctl -u anime-vtt -f` (log), `sudo systemctl restart anime-vtt`,
+`sudo systemctl stop anime-vtt` (per lanciare `npm run dev` a mano al suo
+posto, es. durante debug).
+
 ## Ambienti separati
 
 `node_modules/`, `.env` e i contenuti di `data/` e `storage/` sono esclusi da git. Ogni macchina (il tuo computer e poi il Raspberry) fa il proprio `npm install` e ha il proprio `.env`, così locale e Raspberry restano installazioni indipendenti pur condividendo lo stesso codice sorgente.
