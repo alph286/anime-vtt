@@ -36,9 +36,14 @@ if command -v xset >/dev/null 2>&1; then
   xset s off -dpms s noblank 2>/dev/null || true
 fi
 
-# Nasconde il cursore del mouse quando fermo, se disponibile (facoltativo).
+# Nasconde il cursore del mouse: su un display che nessuno tocca col mouse
+# non deve mai essere visibile, quindi idle a 0 (nascosto quasi subito
+# invece che dopo un attimo di grazia).
 if command -v unclutter >/dev/null 2>&1; then
-  unclutter -idle 0.5 -root &
+  unclutter -idle 0 -root &
+else
+  echo "unclutter non installato, il cursore resterà visibile. Installalo con:" >&2
+  echo "  sudo ./deploy/install-kiosk-dependencies.sh" >&2
 fi
 
 CHROMIUM_BIN=""
@@ -58,6 +63,30 @@ fi
 # chiuso male, e non sporca il profilo utente normale.
 PROFILE_DIR="$HOME/.config/anime-vtt-kiosk-chromium"
 mkdir -p "$PROFILE_DIR"
+
+# --disable-features=TranslateUI (sotto) disattiva la vecchia infobar di
+# traduzione, ma le versioni recenti di Chromium mostrano un popup diverso
+# (la bolla nella omnibox) che quel flag non tocca. La disattivazione vera
+# è la preferenza di profilo "translate.enabled" -- la scriviamo prima di
+# ogni avvio così resta valida anche se il profilo viene ricreato.
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "$PROFILE_DIR/Default/Preferences" <<'PYEOF'
+import json, os, sys
+
+path = sys.argv[1]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+try:
+    with open(path) as f:
+        data = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    data = {}
+data.setdefault("translate", {})["enabled"] = False
+with open(path, "w") as f:
+    json.dump(data, f)
+PYEOF
+else
+  echo "python3 non trovato: non riesco a disattivare la traduzione a livello di profilo, resta solo il flag --disable-features=TranslateUI." >&2
+fi
 
 # Se Chromium crasha o viene chiuso, lo si vuole vedere ripartire da solo
 # sulla TV senza dover intervenire a mano.

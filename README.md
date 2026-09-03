@@ -59,6 +59,14 @@ differenza di `install-service.sh`). Per provare lo script senza
 riavviare: `./deploy/kiosk-display.sh`. Per disattivarlo:
 `rm ~/.config/autostart/anime-vtt-kiosk.desktop`.
 
+Il popup di traduzione di Chromium è sempre disattivato (preferenza di
+profilo, non solo il flag da riga di comando) e il cursore del mouse
+viene nascosto in automatico se hai installato `unclutter`:
+
+```bash
+sudo ./deploy/install-kiosk-dependencies.sh
+```
+
 Se al boot compare "Choose password for new keyring" (gnome-keyring che
 chiede di creare un portachiavi, tipicamente per il password manager di
 Chromium): `kiosk-display.sh` passa già `--password-store=basic` per
