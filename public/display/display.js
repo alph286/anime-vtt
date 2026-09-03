@@ -50,10 +50,21 @@ function stepViewAnimation(now) {
   displayedView.offsetX += (targetView.offsetX - displayedView.offsetX) * factor;
   displayedView.offsetY += (targetView.offsetY - displayedView.offsetY) * factor;
 
+  // A non-finite target (malformed view:pan/view:zoom payload) would never
+  // satisfy the epsilon checks below, spinning this loop forever at 60fps.
+  // Treat it as settled instead -- same fate an invalid transform string had
+  // before this animation existed (the browser silently drops it), rather
+  // than a new infinite-loop failure mode.
+  const targetIsFinite =
+    Number.isFinite(targetView.scale) &&
+    Number.isFinite(targetView.offsetX) &&
+    Number.isFinite(targetView.offsetY);
+
   const settled =
-    Math.abs(targetView.scale - displayedView.scale) < VIEW_SMOOTH_SCALE_EPSILON &&
-    Math.abs(targetView.offsetX - displayedView.offsetX) < VIEW_SMOOTH_OFFSET_EPSILON &&
-    Math.abs(targetView.offsetY - displayedView.offsetY) < VIEW_SMOOTH_OFFSET_EPSILON;
+    !targetIsFinite ||
+    (Math.abs(targetView.scale - displayedView.scale) < VIEW_SMOOTH_SCALE_EPSILON &&
+      Math.abs(targetView.offsetX - displayedView.offsetX) < VIEW_SMOOTH_OFFSET_EPSILON &&
+      Math.abs(targetView.offsetY - displayedView.offsetY) < VIEW_SMOOTH_OFFSET_EPSILON);
 
   if (settled) {
     displayedView = { ...targetView };
