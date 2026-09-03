@@ -17,6 +17,62 @@ let socketConnected = false;
 let controlConnected = false;
 let lastState = null;
 
+let previousShowingImage = false;
+
+// Smoothing for the map's live pan/zoom transform: `displayedView` is what's
+// actually painted right now, `targetView` is the latest value from
+// state.liveView. Each animation frame nudges displayedView a fraction of
+// the way toward targetView (frame-time-based, not a fixed per-frame step,
+// so it behaves the same regardless of actual frame rate) instead of
+// snapping straight to it -- an instant jump on every zoom/pan change is
+// disorienting to watch. See
+// docs/superpowers/specs/2026-09-04-display-view-smoothing-design.md.
+const VIEW_SMOOTH_TIME_CONSTANT_MS = 90;
+const VIEW_SMOOTH_SCALE_EPSILON = 0.002;
+const VIEW_SMOOTH_OFFSET_EPSILON = 0.3;
+let displayedView = null;
+let targetView = null;
+let viewAnimating = false;
+let lastViewAnimFrameTime = 0;
+let lastLocationId = null;
+let hasRenderedMapOnce = false;
+
+function applyMapTransform(view) {
+  mapLayer.style.transform = `translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.scale})`;
+}
+
+function stepViewAnimation(now) {
+  const dt = now - lastViewAnimFrameTime;
+  lastViewAnimFrameTime = now;
+  const factor = 1 - Math.exp(-dt / VIEW_SMOOTH_TIME_CONSTANT_MS);
+
+  displayedView.scale += (targetView.scale - displayedView.scale) * factor;
+  displayedView.offsetX += (targetView.offsetX - displayedView.offsetX) * factor;
+  displayedView.offsetY += (targetView.offsetY - displayedView.offsetY) * factor;
+
+  const settled =
+    Math.abs(targetView.scale - displayedView.scale) < VIEW_SMOOTH_SCALE_EPSILON &&
+    Math.abs(targetView.offsetX - displayedView.offsetX) < VIEW_SMOOTH_OFFSET_EPSILON &&
+    Math.abs(targetView.offsetY - displayedView.offsetY) < VIEW_SMOOTH_OFFSET_EPSILON;
+
+  if (settled) {
+    displayedView = { ...targetView };
+    applyMapTransform(displayedView);
+    viewAnimating = false;
+    return;
+  }
+
+  applyMapTransform(displayedView);
+  requestAnimationFrame(stepViewAnimation);
+}
+
+function startViewAnimationIfNeeded() {
+  if (viewAnimating) return;
+  viewAnimating = true;
+  lastViewAnimFrameTime = performance.now();
+  requestAnimationFrame(stepViewAnimation);
+}
+
 function updateWifi() {
   const ok = socketConnected && controlConnected;
   wifiDot.classList.toggle('ok', ok);
@@ -68,8 +124,9 @@ function render(state) {
   if (showingImage) {
     renderImage(location, state.activeImageId);
   } else {
-    renderMap(state, location);
+    renderMap(state, location, previousShowingImage);
   }
+  previousShowingImage = showingImage;
 }
 
 function renderImage(location, activeImageId) {
@@ -98,14 +155,26 @@ function renderFog(polygons) {
   });
 }
 
-function renderMap(state, location) {
+function renderMap(state, location, returningFromImage) {
   const live = state.liveView || { scale: 1, offsetX: 0, offsetY: 0 };
   const mapScale = (location && location.map.scale) || 1;
 
   const scale = mapScale * (live.scale || 1);
   const offsetX = live.offsetX || 0;
   const offsetY = live.offsetY || 0;
-  mapLayer.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+  targetView = { scale, offsetX, offsetY };
+
+  const locationId = location ? location.id : null;
+  const shouldSnap = !hasRenderedMapOnce || locationId !== lastLocationId || returningFromImage;
+  lastLocationId = locationId;
+  hasRenderedMapOnce = true;
+
+  if (shouldSnap) {
+    displayedView = { ...targetView };
+    applyMapTransform(displayedView);
+  } else {
+    startViewAnimationIfNeeded();
+  }
 
   const polygons = (location && location.map.polygons) || [];
 
