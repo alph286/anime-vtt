@@ -44,6 +44,21 @@ Comandi utili dopo l'installazione: `sudo systemctl status anime-vtt`,
 `sudo systemctl stop anime-vtt` (per lanciare `npm run dev` a mano al suo
 posto, es. durante debug).
 
+### Chromium in kiosk sulla TV
+
+Se il Raspberry ha Raspberry Pi OS con desktop e login automatico, questo
+apre Chromium a schermo intero su `/display` a ogni avvio della sessione
+grafica (e lo riapre da solo se si chiude):
+
+```bash
+./deploy/install-kiosk-autostart.sh
+```
+
+Va lanciato come l'utente della sessione grafica, **senza** `sudo` (a
+differenza di `install-service.sh`). Per provare lo script senza
+riavviare: `./deploy/kiosk-display.sh`. Per disattivarlo:
+`rm ~/.config/autostart/anime-vtt-kiosk.desktop`.
+
 ## Ambienti separati
 
 `node_modules/`, `.env` e i contenuti di `data/` e `storage/` sono esclusi da git. Ogni macchina (il tuo computer e poi il Raspberry) fa il proprio `npm install` e ha il proprio `.env`, così locale e Raspberry restano installazioni indipendenti pur condividendo lo stesso codice sorgente.
