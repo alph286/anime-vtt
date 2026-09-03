@@ -36,6 +36,22 @@ if command -v xset >/dev/null 2>&1; then
   xset s off -dpms s noblank 2>/dev/null || true
 fi
 
+# Sposta il puntatore fuori dalla vista (in basso a destra) via iniezione
+# di eventi a livello kernel: cursor:none via CSS (in display.css) non
+# basta da solo su questo setup -- ydotool funziona sia sotto X11 che
+# Wayland perché scrive su /dev/uinput invece di parlare col display
+# server. Un movimento relativo enorme sbatte il cursore contro il bordo
+# schermo, qualunque sia la risoluzione reale (niente bisogno di saperla).
+if command -v ydotool >/dev/null 2>&1; then
+  export YDOTOOL_SOCKET="${YDOTOOL_SOCKET:-/tmp/.ydotool_socket}"
+  if ! ydotool mousemove -- 99999 99999 2>/tmp/ydotool-error.log; then
+    echo "ydotool mousemove è fallito, vedi /tmp/ydotool-error.log -- il demone ydotoold gira? (systemctl status ydotoold)" >&2
+  fi
+else
+  echo "ydotool non installato, il cursore non verrà spostato. Installalo con:" >&2
+  echo "  sudo ./deploy/install-ydotool.sh" >&2
+fi
+
 CHROMIUM_BIN=""
 for candidate in chromium-browser chromium; do
   if command -v "$candidate" >/dev/null 2>&1; then
