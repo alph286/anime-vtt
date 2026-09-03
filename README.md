@@ -60,14 +60,7 @@ riavviare: `./deploy/kiosk-display.sh`. Per disattivarlo:
 `rm ~/.config/autostart/anime-vtt-kiosk.desktop`.
 
 Il popup di traduzione di Chromium è sempre disattivato (preferenza di
-profilo, non solo il flag da riga di comando). Il cursore del mouse è
-nascosto via CSS su `/display` (`cursor: none`); se sul tuo setup non
-basta (dipende dal browser/compositor), installa anche `ydotool` così
-`kiosk-display.sh` sposta il puntatore fuori dalla vista a ogni avvio:
-
-```bash
-sudo ./deploy/install-ydotool.sh
-```
+profilo, non solo il flag da riga di comando).
 
 Se al boot compare "Choose password for new keyring" (gnome-keyring che
 chiede di creare un portachiavi, tipicamente per il password manager di
