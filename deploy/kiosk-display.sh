@@ -73,7 +73,12 @@ while true; do
     --autoplay-policy=no-user-gesture-required \
     --check-for-update-interval=31536000 \
     --overscroll-history-navigation=0 \
-    --disable-pinch
+    --disable-pinch \
+    --password-store=basic
+    # --password-store=basic: senza questo Chromium prova a usare il
+    # portachiavi di sistema (libsecret) e, se non esiste ancora, il
+    # desktop chiede "Choose password for new keyring" al primo avvio --
+    # inutile per un kiosk, meglio lo storage locale semplice.
   echo "Chromium si è chiuso, lo riavvio tra 3s..."
   sleep 3
 done
