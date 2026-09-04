@@ -111,6 +111,12 @@ h2 {
   color: var(--text-primary);
 }
 
+#location-confirm-yes {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
 .showing-banner {
   font-size: 14px;
   color: var(--accent);
