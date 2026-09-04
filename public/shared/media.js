@@ -180,8 +180,9 @@ function layoutMapWrap(container, wrapEl, rotation) {
 
 /**
  * Draws the grid overlay into `svgEl` (a 0-100 viewBox SVG) from `grid`
- * ({enabled, cellSize, offsetX, offsetY, color, lineWidth} — cellSize/offsetX/Y
- * are in the map image's own natural pixel units). Shared by editor and display
+ * ({enabled, cellSize, offsetX, offsetY, color, lineWidth, opacity} —
+ * cellSize/offsetX/Y are in the map image's own natural pixel units). Shared
+ * by editor and display
  * so the two always render identically. Points are in base (unrotated) space —
  * same rule as polygons — the ancestor's CSS rotation handles the rest.
  */
