@@ -189,6 +189,8 @@ function renderGridSvg(svgEl, grid, naturalW, naturalH) {
   svgEl.innerHTML = '';
   if (!grid || !grid.enabled || !naturalW || !naturalH) return;
 
+  svgEl.style.opacity = grid.opacity === undefined ? 1 : grid.opacity;
+
   const cellSize = Math.max(4, grid.cellSize || 100);
   const stepXPct = (cellSize / naturalW) * 100;
   const stepYPct = (cellSize / naturalH) * 100;

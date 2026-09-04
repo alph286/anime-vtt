@@ -40,6 +40,7 @@ const gridOffsetXNum = document.getElementById('grid-offset-x-num');
 const gridOffsetYNum = document.getElementById('grid-offset-y-num');
 const gridColorInput = document.getElementById('grid-color');
 const gridWidthNum = document.getElementById('grid-width-num');
+const gridOpacityNum = document.getElementById('grid-opacity-num');
 const gridSavePresetBtn = document.getElementById('grid-save-preset');
 const gridApplyPresetBtn = document.getElementById('grid-apply-preset');
 
@@ -74,7 +75,7 @@ const lightboxCloseBtn = document.getElementById('lightbox-close');
 const LOCATION_DEPENDENT_CONTROLS = [
   mapUpload, removeMapBtn, flip180Btn, rotate90Btn, mapScaleNum,
   toolSelectBtn, toolDrawBtn, drawFinishBtn, drawCancelBtn, deletePolygonBtn, polygonSortAzBtn, fogOpacityNum,
-  gridToggleBtn, gridAlignToolBtn, gridColorInput, gridWidthNum,
+  gridToggleBtn, gridAlignToolBtn, gridColorInput, gridWidthNum, gridOpacityNum,
   gridSizeNum, gridOffsetXNum, gridOffsetYNum, gridSavePresetBtn, gridApplyPresetBtn,
   imageUpload
 ];
@@ -166,6 +167,7 @@ function render() {
   gridOffsetYNum.value = String(grid.offsetY);
   gridColorInput.value = grid.color || '#ffffff';
   gridWidthNum.value = String(grid.lineWidth || 0.3);
+  gridOpacityNum.value = String(Math.round((grid.opacity === undefined ? 1 : grid.opacity) * 100));
 
   if (location.map.file) {
     activeMapEl = loadMapMedia(
@@ -709,6 +711,10 @@ gridColorInput.addEventListener('change', () => {
 
 bindNumberCommit(gridWidthNum, 0.2, 5, (v) => {
   socket.emit('grid:update', { locationId: state.activeLocationId, lineWidth: v });
+});
+
+bindNumberCommit(gridOpacityNum, 0, 100, (v) => {
+  socket.emit('grid:update', { locationId: state.activeLocationId, opacity: v / 100 });
 });
 
 bindNumberCommit(gridOffsetXNum, -100000, 100000, (v) => {

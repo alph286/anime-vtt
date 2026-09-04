@@ -4,11 +4,11 @@ const path = require('path');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 
-const DEFAULT_GRID = { enabled: false, cellSize: 100, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3 };
+const DEFAULT_GRID = { enabled: false, cellSize: 100, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 };
 
 const DEFAULT_STATE = {
   campaign: { name: 'Anime Salve' },
-  gridPreset: { cellSize: 100, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3 },
+  gridPreset: { cellSize: 100, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 },
   locations: [
     {
       id: 'taverna',
@@ -40,10 +40,11 @@ function migrate(state) {
   delete state.activeTvProfileId;
 
   if (!state.gridPreset) {
-    state.gridPreset = { cellSize: 100, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3 };
+    state.gridPreset = { cellSize: 100, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 };
   }
   if (state.gridPreset.color === undefined) state.gridPreset.color = '#ffffff';
   if (state.gridPreset.lineWidth === undefined) state.gridPreset.lineWidth = 0.3;
+  if (state.gridPreset.opacity === undefined) state.gridPreset.opacity = 1;
 
   (state.locations || []).forEach((location) => {
     delete location.map.rotation;
@@ -53,6 +54,7 @@ function migrate(state) {
     if (!location.map.grid) location.map.grid = { ...DEFAULT_GRID };
     if (location.map.grid.color === undefined) location.map.grid.color = '#ffffff';
     if (location.map.grid.lineWidth === undefined) location.map.grid.lineWidth = 0.3;
+    if (location.map.grid.opacity === undefined) location.map.grid.opacity = 1;
     if (location.archived === undefined) location.archived = false;
     if (location.isDefault === undefined) location.isDefault = false;
     (location.images || []).forEach((image) => {

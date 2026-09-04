@@ -446,7 +446,7 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  socket.on('grid:update', ({ locationId, enabled, cellSize, offsetX, offsetY, color, lineWidth }) => {
+  socket.on('grid:update', ({ locationId, enabled, cellSize, offsetX, offsetY, color, lineWidth, opacity }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     if (enabled !== undefined) location.map.grid.enabled = enabled;
@@ -455,6 +455,7 @@ io.on('connection', (socket) => {
     if (offsetY !== undefined) location.map.grid.offsetY = offsetY;
     if (color !== undefined) location.map.grid.color = color;
     if (lineWidth !== undefined) location.map.grid.lineWidth = lineWidth;
+    if (opacity !== undefined) location.map.grid.opacity = opacity;
     saveState(state);
     broadcastState();
   });
@@ -467,7 +468,8 @@ io.on('connection', (socket) => {
       offsetX: location.map.grid.offsetX,
       offsetY: location.map.grid.offsetY,
       color: location.map.grid.color,
-      lineWidth: location.map.grid.lineWidth
+      lineWidth: location.map.grid.lineWidth,
+      opacity: location.map.grid.opacity
     };
     saveState(state);
     broadcastState();
@@ -481,6 +483,7 @@ io.on('connection', (socket) => {
     location.map.grid.offsetY = state.gridPreset.offsetY;
     location.map.grid.color = state.gridPreset.color;
     location.map.grid.lineWidth = state.gridPreset.lineWidth;
+    location.map.grid.opacity = state.gridPreset.opacity;
     saveState(state);
     broadcastState();
   });

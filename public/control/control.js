@@ -25,6 +25,11 @@ const fowList = document.getElementById('fow-list');
 const imagesList = document.getElementById('images-list');
 const backToMapBtn = document.getElementById('back-to-map');
 const panZoomSection = document.getElementById('pan-zoom-section');
+const gridOpacitySection = document.getElementById('grid-opacity-section');
+const gridOpacityOutBtn = document.getElementById('grid-opacity-out');
+const gridOpacityInBtn = document.getElementById('grid-opacity-in');
+const gridOpacityLevel = document.getElementById('grid-opacity-level');
+const GRID_OPACITY_STEP = 0.1;
 const zoomOutBtn = document.getElementById('zoom-out');
 const zoomInBtn = document.getElementById('zoom-in');
 const zoomLevel = document.getElementById('zoom-level');
@@ -120,6 +125,12 @@ function render() {
 
   zoomLevel.textContent = `${Math.round((state.liveView.scale || 1) * 100)}%`;
   panZoomSection.style.display = showingImage ? 'none' : 'block';
+
+  const gridEnabled = Boolean(location && location.map.grid && location.map.grid.enabled);
+  gridOpacitySection.style.display = gridEnabled ? 'block' : 'none';
+  if (gridEnabled) {
+    gridOpacityLevel.textContent = `${Math.round((location.map.grid.opacity === undefined ? 1 : location.map.grid.opacity) * 100)}%`;
+  }
   updateViewportRect(location);
 }
 
@@ -246,6 +257,16 @@ function stepZoom(delta) {
 }
 zoomOutBtn.addEventListener('click', () => stepZoom(-ZOOM_STEP));
 zoomInBtn.addEventListener('click', () => stepZoom(ZOOM_STEP));
+
+function stepGridOpacity(delta) {
+  const location = getActiveLocation();
+  if (!location || !location.map.grid) return;
+  const current = location.map.grid.opacity === undefined ? 1 : location.map.grid.opacity;
+  const next = Math.min(1, Math.max(0, Math.round((current + delta) * 10) / 10));
+  socket.emit('grid:update', { locationId: state.activeLocationId, opacity: next });
+}
+gridOpacityOutBtn.addEventListener('click', () => stepGridOpacity(-GRID_OPACITY_STEP));
+gridOpacityInBtn.addEventListener('click', () => stepGridOpacity(GRID_OPACITY_STEP));
 
 document.getElementById('view-reset').addEventListener('click', () => socket.emit('view:reset'));
 
