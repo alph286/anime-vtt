@@ -70,17 +70,25 @@ socket.on('state:update', (s) => {
 
 window.addEventListener('resize', () => {
   if (!state) return;
-  const location = getActiveLocation();
-  renderMapPreview(location);
-  updateViewportRect(location);
+  const previewLocation = getPreviewLocation();
+  renderMapPreview(previewLocation);
+  updateViewportRect(previewLocation);
 });
+
+let previewLocationId = null;
 
 function getActiveLocation() {
   return state.locations.find((l) => l.id === state.activeLocationId);
 }
 
+function getPreviewLocation() {
+  return state.locations.find((l) => l.id === previewLocationId);
+}
+
 function render() {
+  previewLocationId = state.activeLocationId;
   const location = getActiveLocation();
+  const previewLocation = getPreviewLocation();
   const showingImage = Boolean(state.activeImageId);
 
   if (showingImage && location) {
@@ -98,9 +106,9 @@ function render() {
       .map((l) => `<option value="${l.id}" ${l.id === state.activeLocationId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`)
       .join('');
 
-  renderMapPreview(location);
+  renderMapPreview(previewLocation);
 
-  fowList.innerHTML = ((location && location.map.polygons) || [])
+  fowList.innerHTML = ((previewLocation && previewLocation.map.polygons) || [])
     .map(
       (poly) => `
         <button class="fow-row ${poly.revealed ? 'revealed' : ''}" data-id="${poly.id}">
@@ -123,15 +131,15 @@ function render() {
       )
       .join('') || '<p class="hint">nessuna immagine per questa location</p>';
 
-  zoomLevel.textContent = `${Math.round((state.liveView.scale || 1) * 100)}%`;
+  zoomLevel.textContent = `${Math.round(((previewLocation && previewLocation.map.liveView.scale) || 1) * 100)}%`;
   panZoomSection.style.display = showingImage ? 'none' : 'block';
 
-  const gridEnabled = Boolean(location && location.map.grid && location.map.grid.enabled) && !showingImage;
+  const gridEnabled = Boolean(previewLocation && previewLocation.map.grid && previewLocation.map.grid.enabled) && !showingImage;
   gridOpacitySection.style.display = gridEnabled ? 'block' : 'none';
   if (gridEnabled) {
-    gridOpacityLevel.textContent = `${Math.round((location.map.grid.opacity === undefined ? 1 : location.map.grid.opacity) * 100)}%`;
+    gridOpacityLevel.textContent = `${Math.round((previewLocation.map.grid.opacity === undefined ? 1 : previewLocation.map.grid.opacity) * 100)}%`;
   }
-  updateViewportRect(location);
+  updateViewportRect(previewLocation);
 }
 
 // The wrap element's CSS rotate() transform already turns this locally-flat
@@ -221,7 +229,7 @@ locationConfirmNo.addEventListener('click', resetLocationConfirm);
 mapFogLayer.addEventListener('click', (e) => {
   if (panModeActive) return;
   const overlay = e.target.closest('.fog-overlay');
-  if (overlay) socket.emit('fow:toggle', { polygonId: overlay.dataset.id });
+  if (overlay) socket.emit('fow:toggle', { locationId: previewLocationId, polygonId: overlay.dataset.id });
 });
 
 fogOpacityInput.addEventListener('input', () => {
@@ -231,7 +239,7 @@ fogOpacityInput.addEventListener('input', () => {
 
 fowList.addEventListener('click', (e) => {
   const btn = e.target.closest('.fow-row');
-  if (btn) socket.emit('fow:toggle', { polygonId: btn.dataset.id });
+  if (btn) socket.emit('fow:toggle', { locationId: previewLocationId, polygonId: btn.dataset.id });
 });
 
 imagesList.addEventListener('click', (e) => {
@@ -244,35 +252,37 @@ backToMapBtn.addEventListener('click', () => socket.emit('image:hide'));
 document.querySelectorAll('[data-pan]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const [dx, dy] = btn.dataset.pan.split(',').map(Number);
-    const scale = (state && state.liveView && state.liveView.scale) || 1;
+    const previewLocation = getPreviewLocation();
+    const scale = (previewLocation && previewLocation.map.liveView.scale) || 1;
     const step = 20 / Math.max(scale, 0.01);
-    socket.emit('view:pan', { dx: dx * step, dy: dy * step });
+    socket.emit('view:pan', { locationId: previewLocationId, dx: dx * step, dy: dy * step });
   });
 });
 
 function stepZoom(delta) {
-  const current = (state && state.liveView && state.liveView.scale) || 1;
+  const previewLocation = getPreviewLocation();
+  const current = (previewLocation && previewLocation.map.liveView.scale) || 1;
   const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((current + delta) * 10) / 10));
-  socket.emit('view:zoom', { scale: next });
+  socket.emit('view:zoom', { locationId: previewLocationId, scale: next });
 }
 zoomOutBtn.addEventListener('click', () => stepZoom(-ZOOM_STEP));
 zoomInBtn.addEventListener('click', () => stepZoom(ZOOM_STEP));
 
 function stepGridOpacity(delta) {
-  const location = getActiveLocation();
+  const location = getPreviewLocation();
   if (!location || !location.map.grid) return;
   const current = location.map.grid.opacity === undefined ? 1 : location.map.grid.opacity;
   const next = Math.min(1, Math.max(0, Math.round((current + delta) * 10) / 10));
-  socket.emit('grid:update', { locationId: state.activeLocationId, opacity: next });
+  socket.emit('grid:update', { locationId: previewLocationId, opacity: next });
 }
 gridOpacityOutBtn.addEventListener('click', () => stepGridOpacity(-GRID_OPACITY_STEP));
 gridOpacityInBtn.addEventListener('click', () => stepGridOpacity(GRID_OPACITY_STEP));
 
-document.getElementById('view-reset').addEventListener('click', () => socket.emit('view:reset'));
+document.getElementById('view-reset').addEventListener('click', () => socket.emit('view:reset', { locationId: previewLocationId }));
 
 fowHideAllBtn.addEventListener('click', () => {
-  if (!state.activeLocationId) return;
-  socket.emit('fow:setAll', { locationId: state.activeLocationId, revealed: false });
+  if (!previewLocationId) return;
+  socket.emit('fow:setAll', { locationId: previewLocationId, revealed: false });
 });
 
 // Arma-poi-conferma, stesso pattern già in uso nel resto dell'app: primo
@@ -288,7 +298,7 @@ function resetRevealAllArm() {
 }
 
 fowRevealAllBtn.addEventListener('click', () => {
-  if (!state.activeLocationId) return;
+  if (!previewLocationId) return;
   if (!revealAllArmed) {
     revealAllArmed = true;
     fowRevealAllBtn.classList.add('confirm');
@@ -298,7 +308,7 @@ fowRevealAllBtn.addEventListener('click', () => {
     return;
   }
   resetRevealAllArm();
-  socket.emit('fow:setAll', { locationId: state.activeLocationId, revealed: true });
+  socket.emit('fow:setAll', { locationId: previewLocationId, revealed: true });
 });
 
 // Ruota il vettore (x,y) di angleDeg, con la stessa convenzione di segno
@@ -363,7 +373,7 @@ function updateViewportRect(location) {
   const tvFit = fitRect(tvEffectiveW, tvEffectiveH, nw, nh);
 
   const mapScale = location.map.scale || 1;
-  const live = state.liveView || { scale: 1, offsetX: 0, offsetY: 0 };
+  const live = location.map.liveView || { scale: 1, offsetX: 0, offsetY: 0 };
   const S = mapScale * (live.scale || 1);
   const offsetX = live.offsetX || 0;
   const offsetY = live.offsetY || 0;
@@ -439,7 +449,7 @@ mapPreview.addEventListener('pointermove', (e) => {
   panDrag.lastX = e.clientX;
   panDrag.lastY = e.clientY;
 
-  const location = getActiveLocation();
+  const location = getPreviewLocation();
   if (!location || !state.displayViewport || !currentImageRect) return;
 
   const nw = mediaW(activeMapEl);
@@ -451,7 +461,7 @@ mapPreview.addEventListener('pointermove', (e) => {
   const tvFit = fitRect(tvEffectiveW, tvEffectiveH, nw, nh);
 
   const mapScale = location.map.scale || 1;
-  const S = mapScale * ((state.liveView && state.liveView.scale) || 1);
+  const S = mapScale * ((location.map.liveView && location.map.liveView.scale) || 1);
 
   // Stessa conversione usata per disegnare il rettangolo, invertita, in tre
   // passi speculari: il delta del mouse è nello spazio SCHERMO della nostra
@@ -467,7 +477,7 @@ mapPreview.addEventListener('pointermove', (e) => {
   const dViewTop = (dLocalY / currentImageRect.height) * tvFit.height;
   const [rx, ry] = rotateVector(dViewLeft, dViewTop, rotation);
 
-  socket.emit('view:pan', { dx: -S * rx, dy: -S * ry });
+  socket.emit('view:pan', { locationId: previewLocationId, dx: -S * rx, dy: -S * ry });
 });
 
 mapPreview.addEventListener('pointerup', () => { panDrag = null; });
