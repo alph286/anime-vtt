@@ -18,6 +18,7 @@ const DEFAULT_STATE = {
         type: 'image',
         scale: 1,
         flip180: false,
+        rotate90: false,
         grid: { ...DEFAULT_GRID },
         polygons: [
           { id: 'stanza-1', name: 'Stanza 1', points: [[5, 10], [40, 8], [42, 45], [8, 48]], revealed: false },
@@ -48,6 +49,7 @@ function migrate(state) {
     delete location.map.rotation;
     if (location.map.scale === undefined) location.map.scale = 1;
     if (location.map.flip180 === undefined) location.map.flip180 = false;
+    if (location.map.rotate90 === undefined) location.map.rotate90 = false;
     if (!location.map.grid) location.map.grid = { ...DEFAULT_GRID };
     if (location.map.grid.color === undefined) location.map.grid.color = '#ffffff';
     if (location.map.grid.lineWidth === undefined) location.map.grid.lineWidth = 0.3;

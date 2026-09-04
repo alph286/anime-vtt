@@ -148,7 +148,7 @@ function renderMapPreview(location) {
       const nw = mediaW(activeMapEl);
       const nh = mediaH(activeMapEl);
       if (nw && nh) mapPreview.style.setProperty('--map-aspect', `${nw} / ${nh}`);
-      const rotation = computeTotalRotation(nw, nh, location.map.flip180);
+      const rotation = computeTotalRotation(nw, nh, location.map.flip180, location.map.rotate90);
       const effective = layoutMapWrap(mapPreview, mapMediaWrap, rotation);
       const rect = fitRect(effective.width, effective.height, nw, nh);
       positionFitBox(mapFitBox, rect);
@@ -335,7 +335,7 @@ function updateViewportRect(location) {
   const { width: vw, height: vh } = state.displayViewport;
   const nw = mediaW(activeMapEl);
   const nh = mediaH(activeMapEl);
-  const rotation = computeTotalRotation(nw, nh, location.map.flip180);
+  const rotation = computeTotalRotation(nw, nh, location.map.flip180, location.map.rotate90);
   const swapped = rotation === 90 || rotation === 270;
   const tvEffectiveW = swapped ? vh : vw;
   const tvEffectiveH = swapped ? vw : vh;
@@ -423,7 +423,7 @@ mapPreview.addEventListener('pointermove', (e) => {
 
   const nw = mediaW(activeMapEl);
   const nh = mediaH(activeMapEl);
-  const rotation = computeTotalRotation(nw, nh, location.map.flip180);
+  const rotation = computeTotalRotation(nw, nh, location.map.flip180, location.map.rotate90);
   const swapped = rotation === 90 || rotation === 270;
   const tvEffectiveW = swapped ? state.displayViewport.height : state.displayViewport.width;
   const tvEffectiveH = swapped ? state.displayViewport.width : state.displayViewport.height;

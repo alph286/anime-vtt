@@ -119,16 +119,19 @@ function loadMapMedia(imgEl, videoEl, filename, src, onReady) {
  * A map taller than it is wide leaves large empty bars on a landscape TV; rotating
  * it 90° lets it fill far more of the screen. Computed live from the image's own
  * pixel dimensions — never stored, never user-controlled, applied consistently
- * across display/control/editor so what you edit matches what's shown. A separate
- * user-controlled 180° flip (location.map.flip180) composes on top of this for
- * maps where the automatic 90° choice ends up upside down.
+ * across display/control/editor so what you edit matches what's shown. Two
+ * independent user-controlled flags compose on top of this: a 180° flip
+ * (location.map.flip180) for maps where the automatic 90° choice ends up upside
+ * down, and a 90° rotation (location.map.rotate90) for maps that need an
+ * orientation the auto-detection alone can't reach. Together the two flags cover
+ * all 4 orientations from either auto-detected starting point.
  */
 function computeAutoRotation(naturalW, naturalH) {
   return naturalH > naturalW ? 90 : 0;
 }
 
-function computeTotalRotation(naturalW, naturalH, flip180) {
-  return (computeAutoRotation(naturalW, naturalH) + (flip180 ? 180 : 0)) % 360;
+function computeTotalRotation(naturalW, naturalH, flip180, rotate90) {
+  return (computeAutoRotation(naturalW, naturalH) + (flip180 ? 180 : 0) + (rotate90 ? 90 : 0)) % 360;
 }
 
 // Polygon/grid points are always stored relative to the map image's own

@@ -11,6 +11,7 @@
 <svg style="display:none">
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 4v11M8 8l4-4 4 4M4 20h16"/></symbol>
   <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v5h-5"/></symbol>
+  <symbol id="i-rotate-90" viewBox="0 0 24 24"><path d="M4 4h8v8H4z"/><path d="M16 12l4 4-4 4M20 16H12a4 4 0 0 1-4-4v-1"/></symbol>
   <symbol id="i-scale" viewBox="0 0 24 24"><path d="M9 3H3v6M15 3h6v6M9 21H3v-6M15 21h6v-6"/></symbol>
   <symbol id="i-select" viewBox="0 0 24 24"><path d="M5 3l6 16 2-6.5L20 10z"/></symbol>
   <symbol id="i-polygon" viewBox="0 0 24 24"><path d="M12 3l7 5-2.5 8h-9L5 8z"/></symbol>
@@ -44,8 +45,11 @@
         <button id="remove-map" class="icon-btn" title="Rimuovi mappa">
           <svg class="icon"><use href="#i-trash"></use></svg>
         </button>
-        <button id="flip-180" class="icon-btn" title="Ruota mappa 180°">
+        <button id="flip-180" class="icon-btn tool" title="Ruota mappa 180°">
           <svg class="icon"><use href="#i-rotate"></use></svg>
+        </button>
+        <button id="rotate-90" class="icon-btn tool" title="Ruota mappa 90°">
+          <svg class="icon"><use href="#i-rotate-90"></use></svg>
         </button>
         <label class="icon-num" title="Scala mappa">
           <svg class="icon"><use href="#i-scale"></use></svg>

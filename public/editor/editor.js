@@ -26,6 +26,7 @@ const drawCancelBtn = document.getElementById('draw-cancel');
 const deletePolygonBtn = document.getElementById('delete-polygon');
 const removeMapBtn = document.getElementById('remove-map');
 const flip180Btn = document.getElementById('flip-180');
+const rotate90Btn = document.getElementById('rotate-90');
 const fogOpacityNum = document.getElementById('fog-opacity-num');
 const mapScaleNum = document.getElementById('map-scale-num');
 const editorZoomReadout = document.getElementById('editor-zoom-readout');
@@ -70,7 +71,7 @@ const lightboxCloseBtn = document.getElementById('lightbox-close');
 // affatto (un elemento disabled non li dispatcha mai), quindi non servono
 // guardie aggiuntive dentro ciascun handler.
 const LOCATION_DEPENDENT_CONTROLS = [
-  mapUpload, removeMapBtn, flip180Btn, mapScaleNum,
+  mapUpload, removeMapBtn, flip180Btn, rotate90Btn, mapScaleNum,
   toolSelectBtn, toolDrawBtn, drawFinishBtn, drawCancelBtn, deletePolygonBtn, fogOpacityNum,
   gridToggleBtn, gridAlignToolBtn, gridColorInput, gridWidthNum,
   gridSizeNum, gridOffsetXNum, gridOffsetYNum, gridSavePresetBtn, gridApplyPresetBtn,
@@ -154,6 +155,7 @@ function render() {
   mapScaleNum.value = String(Math.round((location.map.scale || 1) * 100));
   currentMapScale = location.map.scale || 1;
   flip180Btn.classList.toggle('active', Boolean(location.map.flip180));
+  rotate90Btn.classList.toggle('active', Boolean(location.map.rotate90));
 
   const grid = location.map.grid;
   gridToggleBtn.classList.toggle('active', grid.enabled);
@@ -201,7 +203,7 @@ function updateOverlayBox() {
   const nh = mediaH(activeMapEl);
 
   currentRotation = location.map.file && nw
-    ? computeTotalRotation(nw, nh, location.map.flip180)
+    ? computeTotalRotation(nw, nh, location.map.flip180, location.map.rotate90)
     : 0;
 
   const effective = layoutMapWrap(mapCanvasZoom, mapMediaWrap, currentRotation);
@@ -566,6 +568,10 @@ deletePolygonBtn.addEventListener('click', () => {
 
 flip180Btn.addEventListener('click', () => {
   socket.emit('mapFlip:toggle', { locationId: state.activeLocationId });
+});
+
+rotate90Btn.addEventListener('click', () => {
+  socket.emit('mapRotate90:toggle', { locationId: state.activeLocationId });
 });
 
 bindNumberCommit(fogOpacityNum, 0, 100, (v) => {

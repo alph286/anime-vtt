@@ -194,7 +194,7 @@ function renderMap(state, location, returningFromImage) {
     activeMapEl = loadMapMedia(mapImg, mapVideo, location.map.file, `/storage/maps/${location.map.file}`, () => {
       const nw = mediaW(activeMapEl);
       const nh = mediaH(activeMapEl);
-      const rotation = computeTotalRotation(nw, nh, location.map.flip180);
+      const rotation = computeTotalRotation(nw, nh, location.map.flip180, location.map.rotate90);
       const effective = layoutMapWrap(mapLayer, mapMediaWrap, rotation);
       const rect = fitRect(effective.width, effective.height, nw, nh);
       positionFitBox(mapFitBox, rect);

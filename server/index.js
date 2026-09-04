@@ -224,6 +224,7 @@ io.on('connection', (socket) => {
         type: 'image',
         scale: 1,
         flip180: false,
+        rotate90: false,
         grid: { ...DEFAULT_GRID },
         polygons: []
       },
@@ -376,6 +377,14 @@ io.on('connection', (socket) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     location.map.flip180 = !location.map.flip180;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('mapRotate90:toggle', ({ locationId }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    location.map.rotate90 = !location.map.rotate90;
     saveState(state);
     broadcastState();
   });
