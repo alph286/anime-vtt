@@ -18,6 +18,7 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
   <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16"/></symbol>
   <symbol id="i-align" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></symbol>
+  <symbol id="i-square-lock" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/></symbol>
   <symbol id="i-zoom-reset" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-5.2-5.2M7 10h6"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></symbol>
@@ -94,6 +95,12 @@
         <button id="grid-align-tool" class="icon-btn tool" title="Allinea alla griglia della mappa">
           <svg class="icon"><use href="#i-align"></use></svg>
         </button>
+        <button id="grid-align-square" class="icon-btn" title="Vincola il trascinamento a un quadrato perfetto">
+          <svg class="icon"><use href="#i-square-lock"></use></svg>
+        </button>
+        <label class="icon-num" title="Dividi la cella tracciata in N parti">
+          <input type="number" id="grid-divisions-num" min="1" max="20" step="1" value="1">
+        </label>
         <input type="color" id="grid-color" class="color-swatch" value="#ffffff" title="Colore griglia">
         <label class="icon-num" title="Spessore tratto griglia">
           <input type="number" id="grid-width-num" min="0.2" max="5" step="0.1" value="0.3">

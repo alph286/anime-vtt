@@ -35,6 +35,9 @@ const editorZoomResetBtn = document.getElementById('editor-zoom-reset');
 
 const gridToggleBtn = document.getElementById('grid-toggle');
 const gridAlignToolBtn = document.getElementById('grid-align-tool');
+const gridAlignSquareBtn = document.getElementById('grid-align-square');
+const gridDivisionsNum = document.getElementById('grid-divisions-num');
+let gridSquareConstrain = false;
 const gridSizeNum = document.getElementById('grid-size-num');
 const gridOffsetXNum = document.getElementById('grid-offset-x-num');
 const gridOffsetYNum = document.getElementById('grid-offset-y-num');
@@ -75,7 +78,7 @@ const lightboxCloseBtn = document.getElementById('lightbox-close');
 const LOCATION_DEPENDENT_CONTROLS = [
   mapUpload, removeMapBtn, flip180Btn, rotate90Btn, mapScaleNum,
   toolSelectBtn, toolDrawBtn, drawFinishBtn, drawCancelBtn, deletePolygonBtn, polygonSortAzBtn, fogOpacityNum,
-  gridToggleBtn, gridAlignToolBtn, gridColorInput, gridWidthNum, gridOpacityNum,
+  gridToggleBtn, gridAlignToolBtn, gridAlignSquareBtn, gridDivisionsNum, gridColorInput, gridWidthNum, gridOpacityNum,
   gridSizeNum, gridOffsetXNum, gridOffsetYNum, gridSavePresetBtn, gridApplyPresetBtn,
   imageUpload
 ];
@@ -380,8 +383,13 @@ overlayBox.addEventListener('pointerdown', (e) => {
 function updateGridAlignBox(start, end) {
   const left = Math.min(start[0], end[0]);
   const top = Math.min(start[1], end[1]);
-  const width = Math.abs(end[0] - start[0]);
-  const height = Math.abs(end[1] - start[1]);
+  let width = Math.abs(end[0] - start[0]);
+  let height = Math.abs(end[1] - start[1]);
+  if (gridSquareConstrain) {
+    const side = Math.max(width, height);
+    width = side;
+    height = side;
+  }
   const box = gridAlignDrag.box;
   box.style.left = `${(left / 100) * currentImageRect.width}px`;
   box.style.top = `${(top / 100) * currentImageRect.height}px`;
@@ -476,13 +484,19 @@ function applyGridAlignment(start, end) {
   const nh = mediaH(activeMapEl);
   const leftPct = Math.min(start[0], end[0]);
   const topPct = Math.min(start[1], end[1]);
-  const widthPct = Math.abs(end[0] - start[0]);
-  const heightPct = Math.abs(end[1] - start[1]);
+  let widthPct = Math.abs(end[0] - start[0]);
+  let heightPct = Math.abs(end[1] - start[1]);
+  if (gridSquareConstrain) {
+    const sidePct = Math.max(widthPct, heightPct);
+    widthPct = sidePct;
+    heightPct = sidePct;
+  }
   if (widthPct < 0.5 || heightPct < 0.5) return;
 
   const cellW = (widthPct / 100) * nw;
   const cellH = (heightPct / 100) * nh;
-  const cellSize = Math.max(4, Math.round((cellW + cellH) / 2));
+  const divisions = Math.max(1, Math.round(Number(gridDivisionsNum.value) || 1));
+  const cellSize = Math.max(4, Math.round((cellW + cellH) / 2 / divisions));
   const originX = Math.round((leftPct / 100) * nw);
   const originY = Math.round((topPct / 100) * nh);
   const offsetX = ((originX % cellSize) + cellSize) % cellSize;
@@ -514,6 +528,11 @@ toolDrawBtn.addEventListener('click', () => {
   gridAlignToolBtn.classList.remove('active');
   renderPolygonsSvg();
   renderPolygonList(getActiveLocation());
+});
+
+gridAlignSquareBtn.addEventListener('click', () => {
+  gridSquareConstrain = !gridSquareConstrain;
+  gridAlignSquareBtn.classList.toggle('active', gridSquareConstrain);
 });
 
 gridAlignToolBtn.addEventListener('click', () => {
