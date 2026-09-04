@@ -85,7 +85,7 @@ function getPreviewLocation() {
 }
 
 function render() {
-  if (!previewLocationId || !state.locations.some((l) => l.id === previewLocationId)) {
+  if (!previewLocationId || !state.locations.some((l) => l.id === previewLocationId && !l.archived)) {
     previewLocationId = state.activeLocationId;
   }
   const location = getActiveLocation();
