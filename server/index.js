@@ -210,7 +210,6 @@ io.on('connection', (socket) => {
     if (!state.locations.some((l) => l.id === locationId)) return;
     state.activeLocationId = locationId;
     state.activeImageId = null;
-    state.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
     saveState(state);
     broadcastState();
   });
@@ -225,6 +224,7 @@ io.on('connection', (socket) => {
         scale: 1,
         flip180: false,
         rotate90: false,
+        liveView: { scale: 1, offsetX: 0, offsetY: 0 },
         grid: { ...DEFAULT_GRID },
         polygons: []
       },
@@ -235,7 +235,6 @@ io.on('connection', (socket) => {
     state.locations.push(location);
     state.activeLocationId = location.id;
     state.activeImageId = null;
-    state.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
     saveState(state);
     broadcastState();
   });
@@ -305,8 +304,8 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  socket.on('fow:toggle', ({ polygonId }) => {
-    const location = getActiveLocation();
+  socket.on('fow:toggle', ({ locationId, polygonId }) => {
+    const location = state.locations.find((l) => l.id === locationId);
     const polygon = location?.map.polygons.find((p) => p.id === polygonId);
     if (!polygon) return;
     polygon.revealed = !polygon.revealed;
@@ -356,19 +355,28 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  socket.on('view:pan', ({ dx, dy }) => {
-    state.liveView.offsetX += dx;
-    state.liveView.offsetY += dy;
+  socket.on('view:pan', ({ locationId, dx, dy }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    location.map.liveView.offsetX += dx;
+    location.map.liveView.offsetY += dy;
+    saveState(state);
     broadcastState();
   });
 
-  socket.on('view:zoom', ({ scale }) => {
-    state.liveView.scale = scale;
+  socket.on('view:zoom', ({ locationId, scale }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    location.map.liveView.scale = scale;
+    saveState(state);
     broadcastState();
   });
 
-  socket.on('view:reset', () => {
-    state.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
+  socket.on('view:reset', ({ locationId }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    location.map.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
+    saveState(state);
     broadcastState();
   });
 

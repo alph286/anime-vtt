@@ -21,7 +21,7 @@ let previousShowingImage = false;
 
 // Smoothing for the map's live pan/zoom transform: `displayedView` is what's
 // actually painted right now, `targetView` is the latest value from
-// state.liveView. Each animation frame nudges displayedView a fraction of
+// location.map.liveView. Each animation frame nudges displayedView a fraction of
 // the way toward targetView (frame-time-based, not a fixed per-frame step,
 // so it behaves the same regardless of actual frame rate) instead of
 // snapping straight to it -- an instant jump on every zoom/pan change is
@@ -167,7 +167,7 @@ function renderFog(polygons) {
 }
 
 function renderMap(state, location, returningFromImage) {
-  const live = state.liveView || { scale: 1, offsetX: 0, offsetY: 0 };
+  const live = (location && location.map.liveView) || { scale: 1, offsetX: 0, offsetY: 0 };
   const mapScale = (location && location.map.scale) || 1;
 
   const scale = mapScale * (live.scale || 1);

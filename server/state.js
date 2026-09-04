@@ -19,6 +19,7 @@ const DEFAULT_STATE = {
         scale: 1,
         flip180: false,
         rotate90: false,
+        liveView: { scale: 1, offsetX: 0, offsetY: 0 },
         grid: { ...DEFAULT_GRID },
         polygons: [
           { id: 'stanza-1', name: 'Stanza 1', points: [[5, 10], [40, 8], [42, 45], [8, 48]], revealed: false },
@@ -31,13 +32,13 @@ const DEFAULT_STATE = {
     }
   ],
   activeLocationId: 'taverna',
-  activeImageId: null,
-  liveView: { scale: 1, offsetX: 0, offsetY: 0 }
+  activeImageId: null
 };
 
 function migrate(state) {
   delete state.tvProfiles;
   delete state.activeTvProfileId;
+  delete state.liveView;
 
   if (!state.gridPreset) {
     state.gridPreset = { cellSize: 100, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 };
@@ -51,6 +52,7 @@ function migrate(state) {
     if (location.map.scale === undefined) location.map.scale = 1;
     if (location.map.flip180 === undefined) location.map.flip180 = false;
     if (location.map.rotate90 === undefined) location.map.rotate90 = false;
+    if (!location.map.liveView) location.map.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
     if (!location.map.grid) location.map.grid = { ...DEFAULT_GRID };
     if (location.map.grid.color === undefined) location.map.grid.color = '#ffffff';
     if (location.map.grid.lineWidth === undefined) location.map.grid.lineWidth = 0.3;
@@ -104,7 +106,6 @@ function applyStartupDefault(state) {
   const chosen = preferred || nonArchived[0] || null;
   state.activeLocationId = chosen ? chosen.id : null;
   state.activeImageId = null;
-  state.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
   return state;
 }
 
