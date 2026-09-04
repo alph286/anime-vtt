@@ -420,6 +420,11 @@ button:disabled {
   background: var(--accent-bg-subtle);
 }
 
+.polygon-row.dragging {
+  opacity: 0.6;
+  border-color: var(--accent);
+}
+
 .polygon-row input[type="text"] {
   flex: 1;
   border: none;

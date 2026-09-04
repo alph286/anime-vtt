@@ -589,11 +589,17 @@ polygonSortAzBtn.addEventListener('click', () => {
   socket.emit('polygon:reorder', { locationId: state.activeLocationId, orderedIds });
 });
 
+let polygonDragState = null;
+
 function renderPolygonList(location) {
+  if (polygonDragState) return;
   polygonList.innerHTML = (location.map.polygons || [])
     .map(
       (poly) => `
         <div class="polygon-row ${poly.id === selectedPolygonId ? 'selected' : ''}" data-id="${poly.id}">
+          <span class="drag-handle" data-drag-polygon="${poly.id}" title="Trascina per riordinare">
+            <svg class="icon"><use href="#i-grip"></use></svg>
+          </span>
           <input type="text" value="${escapeHtml(poly.name)}" data-name-for="${poly.id}">
           <span class="state-tag">${poly.revealed ? 'rivelata' : 'nascosta'}</span>
         </div>
@@ -604,7 +610,7 @@ function renderPolygonList(location) {
 
 polygonList.addEventListener('click', (e) => {
   const row = e.target.closest('.polygon-row');
-  if (!row || e.target.matches('input')) return;
+  if (!row || e.target.matches('input') || e.target.closest('[data-drag-polygon]')) return;
   mode = 'select';
   toolSelectBtn.classList.add('active');
   toolDrawBtn.classList.remove('active');
@@ -623,6 +629,46 @@ polygonList.addEventListener('change', (e) => {
     name: input.value
   });
 });
+
+function getPolygonRows() {
+  return Array.from(polygonList.querySelectorAll('.polygon-row'));
+}
+
+polygonList.addEventListener('pointerdown', (e) => {
+  if (polygonDragState) return;
+  const handle = e.target.closest('[data-drag-polygon]');
+  if (!handle) return;
+  const row = handle.closest('.polygon-row');
+  if (!row) return;
+  polygonDragState = { pointerId: e.pointerId, rowEl: row };
+  row.classList.add('dragging');
+  row.setPointerCapture(e.pointerId);
+});
+
+polygonList.addEventListener('pointermove', (e) => {
+  if (!polygonDragState || e.pointerId !== polygonDragState.pointerId) return;
+  const draggedRow = polygonDragState.rowEl;
+  const overRow = getPolygonRows().find((row) => {
+    if (row === draggedRow) return false;
+    const rect = row.getBoundingClientRect();
+    return e.clientY >= rect.top && e.clientY <= rect.bottom;
+  });
+  if (!overRow) return;
+  const overRect = overRow.getBoundingClientRect();
+  const insertBefore = e.clientY < overRect.top + overRect.height / 2;
+  polygonList.insertBefore(draggedRow, insertBefore ? overRow : overRow.nextSibling);
+});
+
+function endPolygonDrag(e) {
+  if (!polygonDragState || e.pointerId !== polygonDragState.pointerId) return;
+  polygonDragState.rowEl.classList.remove('dragging');
+  const orderedIds = getPolygonRows().map((row) => row.dataset.id);
+  polygonDragState = null;
+  socket.emit('polygon:reorder', { locationId: state.activeLocationId, orderedIds });
+}
+
+polygonList.addEventListener('pointerup', endPolygonDrag);
+polygonList.addEventListener('pointercancel', endPolygonDrag);
 
 locationSelect.addEventListener('change', () => {
   selectedPolygonId = null;
