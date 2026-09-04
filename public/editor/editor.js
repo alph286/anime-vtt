@@ -667,8 +667,8 @@ function endPolygonDrag(e) {
   socket.emit('polygon:reorder', { locationId: state.activeLocationId, orderedIds });
 }
 
-polygonList.addEventListener('pointerup', endPolygonDrag);
-polygonList.addEventListener('pointercancel', endPolygonDrag);
+window.addEventListener('pointerup', endPolygonDrag);
+window.addEventListener('pointercancel', endPolygonDrag);
 
 locationSelect.addEventListener('change', () => {
   selectedPolygonId = null;
@@ -1094,8 +1094,8 @@ function endLocationDrag(e) {
   socket.emit('location:reorder', { orderedIds });
 }
 
-locationList.addEventListener('pointerup', endLocationDrag);
-locationList.addEventListener('pointercancel', endLocationDrag);
+window.addEventListener('pointerup', endLocationDrag);
+window.addEventListener('pointercancel', endLocationDrag);
 
 locationArchivedList.addEventListener('click', (e) => {
   const restoreBtn = e.target.closest('[data-restore]');

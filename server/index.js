@@ -416,7 +416,7 @@ io.on('connection', (socket) => {
       socket.emit('state:update', { ...state, displayViewport });
       return;
     }
-    const byId = new Map(location.map.polygons.map((p) => [p.id, p]));
+    const byId = new Map((location.map.polygons || []).map((p) => [p.id, p]));
     location.map.polygons = validOrder.map((id) => byId.get(id));
     saveState(state);
     broadcastState();
