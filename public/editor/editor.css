@@ -82,6 +82,17 @@ h2 {
   margin: 0 0 10px;
 }
 
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.section-header h2 {
+  margin-bottom: 0;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: nowrap;

@@ -24,6 +24,7 @@ const toolDrawBtn = document.getElementById('tool-draw');
 const drawFinishBtn = document.getElementById('draw-finish');
 const drawCancelBtn = document.getElementById('draw-cancel');
 const deletePolygonBtn = document.getElementById('delete-polygon');
+const polygonSortAzBtn = document.getElementById('polygon-sort-az');
 const removeMapBtn = document.getElementById('remove-map');
 const flip180Btn = document.getElementById('flip-180');
 const rotate90Btn = document.getElementById('rotate-90');
@@ -72,7 +73,7 @@ const lightboxCloseBtn = document.getElementById('lightbox-close');
 // guardie aggiuntive dentro ciascun handler.
 const LOCATION_DEPENDENT_CONTROLS = [
   mapUpload, removeMapBtn, flip180Btn, rotate90Btn, mapScaleNum,
-  toolSelectBtn, toolDrawBtn, drawFinishBtn, drawCancelBtn, deletePolygonBtn, fogOpacityNum,
+  toolSelectBtn, toolDrawBtn, drawFinishBtn, drawCancelBtn, deletePolygonBtn, polygonSortAzBtn, fogOpacityNum,
   gridToggleBtn, gridAlignToolBtn, gridColorInput, gridWidthNum,
   gridSizeNum, gridOffsetXNum, gridOffsetYNum, gridSavePresetBtn, gridApplyPresetBtn,
   imageUpload
@@ -577,6 +578,15 @@ rotate90Btn.addEventListener('click', () => {
 bindNumberCommit(fogOpacityNum, 0, 100, (v) => {
   fogOpacity = v / 100;
   renderPolygonsSvg();
+});
+
+polygonSortAzBtn.addEventListener('click', () => {
+  const location = getActiveLocation();
+  if (!location) return;
+  const orderedIds = [...(location.map.polygons || [])]
+    .sort((a, b) => a.name.localeCompare(b.name, 'it', { numeric: true, sensitivity: 'base' }))
+    .map((p) => p.id);
+  socket.emit('polygon:reorder', { locationId: state.activeLocationId, orderedIds });
 });
 
 function renderPolygonList(location) {

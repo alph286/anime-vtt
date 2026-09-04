@@ -398,6 +398,30 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  socket.on('polygon:reorder', ({ locationId, orderedIds }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location || !Array.isArray(orderedIds)) {
+      if (location) socket.emit('state:update', { ...state, displayViewport });
+      return;
+    }
+    const currentIds = (location.map.polygons || []).map((p) => p.id);
+    const currentSet = new Set(currentIds);
+    const seen = new Set();
+    const validOrder = orderedIds.filter((id) => {
+      if (!currentSet.has(id) || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    if (validOrder.length !== currentIds.length) {
+      socket.emit('state:update', { ...state, displayViewport });
+      return;
+    }
+    const byId = new Map(location.map.polygons.map((p) => [p.id, p]));
+    location.map.polygons = validOrder.map((id) => byId.get(id));
+    saveState(state);
+    broadcastState();
+  });
+
   socket.on('mapScale:set', ({ locationId, scale }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
