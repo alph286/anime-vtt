@@ -976,7 +976,29 @@ Replace with:
 
 (The `location`-keyed `showingBanner` block right above this, and the `location`-keyed `imagesList.innerHTML` build below it, are untouched — `imagesSection`'s new `style.display` toggle wraps that existing content instead of replacing it.)
 
-- [ ] **Step 5: Syntax-check**
+- [ ] **Step 5: Fix a Task 2 gap — the local fog-opacity slider must re-render the previewed location, not the active one**
+
+Found during Task 2's review: `fogOpacityInput`'s `input` handler still calls `renderMapPreview(getActiveLocation())`. This was invisible in Task 2 (where `previewLocationId` never diverges from `state.activeLocationId`), but from this task onward it's a real bug — dragging the "opacità fog (solo qui)" slider while previewing a different location would silently swap the preview pane back to the active location's map.
+
+In `public/control/control.js`, find:
+
+```js
+fogOpacityInput.addEventListener('input', () => {
+  fogOpacity = Number(fogOpacityInput.value) / 100;
+  if (state) renderMapPreview(getActiveLocation());
+});
+```
+
+Replace with:
+
+```js
+fogOpacityInput.addEventListener('input', () => {
+  fogOpacity = Number(fogOpacityInput.value) / 100;
+  if (state) renderMapPreview(getPreviewLocation());
+});
+```
+
+- [ ] **Step 6: Syntax-check**
 
 ```bash
 node --check public/control/control.js
@@ -984,7 +1006,7 @@ node --check public/control/control.js
 
 Expected: no output, exit code 0.
 
-- [ ] **Step 6: Live verification**
+- [ ] **Step 7: Live verification**
 
 Isolated test server, at least 3 locations with maps, one with a grid enabled, at least one image on one location.
 
@@ -995,9 +1017,10 @@ Isolated test server, at least 3 locations with maps, one with a grid enabled, a
 5. Repeat, but click "Annulla anteprima" instead — confirm `/control` reverts to showing the still-active (original) location, the banner disappears, and — reselecting the location you'd been previewing — confirm its prepared framing/fog are still there, unchanged, ready to resume.
 6. Select a location, then select a *different* one again before confirming — confirm the preview simply retargets to the newest selection, no error, no confirmation dialog.
 7. With nothing being previewed (fresh load), confirm the banner stays hidden and behavior is identical to before this task.
-8. No console errors on `/control` or `/display` throughout.
+8. **While previewing a non-active location, drag the "opacità fog (solo qui)" slider** — confirm the map preview keeps showing the *previewed* location (not silently swapping back to the active one) — this is the Step 5 fix.
+9. No console errors on `/control` or `/display` throughout.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add public/control/index.html public/control/control.js public/control/control.css
