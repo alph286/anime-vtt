@@ -140,9 +140,10 @@ function render() {
       .join('') || '<p class="hint">nessuna immagine per questa location</p>';
 
   zoomLevel.textContent = `${Math.round(((previewLocation && previewLocation.map.liveView.scale) || 1) * 100)}%`;
-  panZoomSection.style.display = showingImage ? 'none' : 'block';
+  const hidePanZoomForImage = showingImage && !isPreviewing;
+  panZoomSection.style.display = hidePanZoomForImage ? 'none' : 'block';
 
-  const gridEnabled = Boolean(previewLocation && previewLocation.map.grid && previewLocation.map.grid.enabled) && !showingImage;
+  const gridEnabled = Boolean(previewLocation && previewLocation.map.grid && previewLocation.map.grid.enabled) && !hidePanZoomForImage;
   gridOpacitySection.style.display = gridEnabled ? 'block' : 'none';
   if (gridEnabled) {
     gridOpacityLevel.textContent = `${Math.round((previewLocation.map.grid.opacity === undefined ? 1 : previewLocation.map.grid.opacity) * 100)}%`;
