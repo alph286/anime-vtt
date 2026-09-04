@@ -1044,7 +1044,13 @@ locationList.addEventListener('pointercancel', endLocationDrag);
 locationArchivedList.addEventListener('click', (e) => {
   const restoreBtn = e.target.closest('[data-restore]');
   if (restoreBtn) {
-    socket.emit('location:restore', { locationId: restoreBtn.dataset.restore });
+    const locationId = restoreBtn.dataset.restore;
+    // Se il permanente-elimina era armato quando la location viene ripristinata,
+    // non deve restare armato se la si riarchivia dopo -- eliminazione
+    // irreversibile, a differenza dell'archiviazione stessa.
+    clearTimeout(locationDeleteTimers.get(locationId));
+    armedLocationDeletes.delete(locationId);
+    socket.emit('location:restore', { locationId });
     return;
   }
 
