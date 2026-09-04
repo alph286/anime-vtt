@@ -273,7 +273,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('location:reorder', ({ orderedIds }) => {
-    if (!Array.isArray(orderedIds)) return;
+    if (!Array.isArray(orderedIds)) {
+      socket.emit('state:update', { ...state, displayViewport });
+      return;
+    }
     const activeIds = state.locations.filter((l) => !l.archived).map((l) => l.id);
     const activeSet = new Set(activeIds);
     const seen = new Set();
@@ -282,7 +285,10 @@ io.on('connection', (socket) => {
       seen.add(id);
       return true;
     });
-    if (validOrder.length !== activeIds.length) return;
+    if (validOrder.length !== activeIds.length) {
+      socket.emit('state:update', { ...state, displayViewport });
+      return;
+    }
     const byId = new Map(state.locations.map((l) => [l.id, l]));
     const reorderedActive = validOrder.map((id) => byId.get(id));
     const archivedInPlace = state.locations.filter((l) => l.archived);

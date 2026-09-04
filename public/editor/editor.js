@@ -996,6 +996,7 @@ function getActiveLocationRows() {
 }
 
 locationList.addEventListener('pointerdown', (e) => {
+  if (locationDragState) return;
   const handle = e.target.closest('[data-drag]');
   if (!handle) return;
   const row = handle.closest('.image-editor-row');
