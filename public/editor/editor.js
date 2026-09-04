@@ -386,9 +386,15 @@ function updateGridAlignBox(start, end) {
   let width = Math.abs(end[0] - start[0]);
   let height = Math.abs(end[1] - start[1]);
   if (gridSquareConstrain) {
-    const side = Math.max(width, height);
-    width = side;
-    height = side;
+    const nw = mediaW(activeMapEl);
+    const nh = mediaH(activeMapEl);
+    if (nw && nh) {
+      const widthPx = (width / 100) * nw;
+      const heightPx = (height / 100) * nh;
+      const sidePx = Math.max(widthPx, heightPx);
+      width = (sidePx / nw) * 100;
+      height = (sidePx / nh) * 100;
+    }
   }
   const box = gridAlignDrag.box;
   box.style.left = `${(left / 100) * currentImageRect.width}px`;
@@ -484,17 +490,17 @@ function applyGridAlignment(start, end) {
   const nh = mediaH(activeMapEl);
   const leftPct = Math.min(start[0], end[0]);
   const topPct = Math.min(start[1], end[1]);
-  let widthPct = Math.abs(end[0] - start[0]);
-  let heightPct = Math.abs(end[1] - start[1]);
-  if (gridSquareConstrain) {
-    const sidePct = Math.max(widthPct, heightPct);
-    widthPct = sidePct;
-    heightPct = sidePct;
-  }
+  const widthPct = Math.abs(end[0] - start[0]);
+  const heightPct = Math.abs(end[1] - start[1]);
   if (widthPct < 0.5 || heightPct < 0.5) return;
 
-  const cellW = (widthPct / 100) * nw;
-  const cellH = (heightPct / 100) * nh;
+  let cellW = (widthPct / 100) * nw;
+  let cellH = (heightPct / 100) * nh;
+  if (gridSquareConstrain) {
+    const side = Math.max(cellW, cellH);
+    cellW = side;
+    cellH = side;
+  }
   const divisions = Math.max(1, Math.round(Number(gridDivisionsNum.value) || 1));
   const cellSize = Math.max(4, Math.round((cellW + cellH) / 2 / divisions));
   const originX = Math.round((leftPct / 100) * nw);
