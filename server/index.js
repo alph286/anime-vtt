@@ -272,6 +272,25 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  socket.on('location:reorder', ({ orderedIds }) => {
+    if (!Array.isArray(orderedIds)) return;
+    const activeIds = state.locations.filter((l) => !l.archived).map((l) => l.id);
+    const activeSet = new Set(activeIds);
+    const seen = new Set();
+    const validOrder = orderedIds.filter((id) => {
+      if (!activeSet.has(id) || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    if (validOrder.length !== activeIds.length) return;
+    const byId = new Map(state.locations.map((l) => [l.id, l]));
+    const reorderedActive = validOrder.map((id) => byId.get(id));
+    const archivedInPlace = state.locations.filter((l) => l.archived);
+    state.locations = [...reorderedActive, ...archivedInPlace];
+    saveState(state);
+    broadcastState();
+  });
+
   socket.on('fow:toggle', ({ polygonId }) => {
     const location = getActiveLocation();
     const polygon = location?.map.polygons.find((p) => p.id === polygonId);

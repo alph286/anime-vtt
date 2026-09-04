@@ -488,6 +488,40 @@ button:disabled {
   background: var(--bg-control);
 }
 
+.image-editor-row.dragging {
+  opacity: 0.6;
+  border-color: var(--accent);
+}
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 36px;
+  flex-shrink: 0;
+  cursor: grab;
+  color: var(--text-secondary);
+  /* Impostato in modo permanente, non attivato a metà gesto: su touch, senza
+     questo, il browser interpreta il trascinamento come uno scroll nativo
+     dopo pochi pixel e la maniglia smette di seguire il dito -- stesso bug
+     già trovato e risolto sul trascinamento del riquadro in /control. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle .icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: none;
+}
+
 .image-thumb-btn {
   position: relative;
   width: 44px;

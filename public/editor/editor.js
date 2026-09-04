@@ -899,28 +899,43 @@ locationCreateBtn.addEventListener('click', () => {
 const armedLocationArchives = new Set();
 const locationArchiveTimers = new Map();
 
+// Riordino via Pointer Events (non drag-and-drop nativo, che non ha un
+// equivalente touch utilizzabile) -- stesso approccio già usato per il
+// trascinamento del riquadro su /control: touch-action:none sulla maniglia
+// fin dall'inizio (mai attivato a metà gesto) e pointer capture per seguire
+// il dito/mouse ovunque vada. Mentre un trascinamento è attivo,
+// renderLocationPanel() salta la ricostruzione della lista attiva (vedi il
+// guard `if (!locationDragState)` sopra) così un aggiornamento in arrivo da
+// un altro client non scavalca l'ordine che l'utente sta trascinando.
+let locationDragState = null;
+
 function renderLocationPanel() {
   const active = state.locations.filter((l) => !l.archived);
   const archived = state.locations.filter((l) => l.archived);
 
-  locationList.innerHTML = active
-    .map((l) => {
-      const armed = armedLocationArchives.has(l.id);
-      return `
-        <div class="image-editor-row" data-id="${l.id}">
-          <button class="icon-btn ${l.isDefault ? 'starred' : ''}" data-default="${l.id}"
-                  title="${l.isDefault ? 'Location predefinita all’avvio' : 'Imposta come predefinita all’avvio'}">
-            <svg class="icon"><use href="#i-star"></use></svg>
-          </button>
-          <input type="text" class="image-name-input" value="${escapeHtml(l.name)}" data-name-for="${l.id}" placeholder="nome location">
-          <button class="icon-btn image-delete ${armed ? 'confirm' : ''}" data-archive="${l.id}"
-                  title="${armed ? 'Click di nuovo per confermare' : 'Archivia location'}">
-            <svg class="icon"><use href="#i-trash"></use></svg>
-          </button>
-        </div>
-      `;
-    })
-    .join('');
+  if (!locationDragState) {
+    locationList.innerHTML = active
+      .map((l) => {
+        const armed = armedLocationArchives.has(l.id);
+        return `
+          <div class="image-editor-row" data-id="${l.id}">
+            <span class="drag-handle" data-drag="${l.id}" title="Trascina per riordinare">
+              <svg class="icon"><use href="#i-grip"></use></svg>
+            </span>
+            <button class="icon-btn ${l.isDefault ? 'starred' : ''}" data-default="${l.id}"
+                    title="${l.isDefault ? 'Location predefinita all’avvio' : 'Imposta come predefinita all’avvio'}">
+              <svg class="icon"><use href="#i-star"></use></svg>
+            </button>
+            <input type="text" class="image-name-input" value="${escapeHtml(l.name)}" data-name-for="${l.id}" placeholder="nome location">
+            <button class="icon-btn image-delete ${armed ? 'confirm' : ''}" data-archive="${l.id}"
+                    title="${armed ? 'Click di nuovo per confermare' : 'Archivia location'}">
+              <svg class="icon"><use href="#i-trash"></use></svg>
+            </button>
+          </div>
+        `;
+      })
+      .join('');
+  }
 
   locationArchivedWrap.hidden = archived.length === 0;
   locationArchivedList.innerHTML = archived
@@ -975,6 +990,45 @@ locationList.addEventListener('change', (e) => {
 locationList.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.matches('input[data-name-for]')) e.target.blur();
 });
+
+function getActiveLocationRows() {
+  return Array.from(locationList.querySelectorAll('.image-editor-row'));
+}
+
+locationList.addEventListener('pointerdown', (e) => {
+  const handle = e.target.closest('[data-drag]');
+  if (!handle) return;
+  const row = handle.closest('.image-editor-row');
+  if (!row) return;
+  locationDragState = { pointerId: e.pointerId, rowEl: row };
+  row.classList.add('dragging');
+  row.setPointerCapture(e.pointerId);
+});
+
+locationList.addEventListener('pointermove', (e) => {
+  if (!locationDragState || e.pointerId !== locationDragState.pointerId) return;
+  const draggedRow = locationDragState.rowEl;
+  const overRow = getActiveLocationRows().find((row) => {
+    if (row === draggedRow) return false;
+    const rect = row.getBoundingClientRect();
+    return e.clientY >= rect.top && e.clientY <= rect.bottom;
+  });
+  if (!overRow) return;
+  const overRect = overRow.getBoundingClientRect();
+  const insertBefore = e.clientY < overRect.top + overRect.height / 2;
+  locationList.insertBefore(draggedRow, insertBefore ? overRow : overRow.nextSibling);
+});
+
+function endLocationDrag(e) {
+  if (!locationDragState || e.pointerId !== locationDragState.pointerId) return;
+  locationDragState.rowEl.classList.remove('dragging');
+  const orderedIds = getActiveLocationRows().map((row) => row.dataset.id);
+  locationDragState = null;
+  socket.emit('location:reorder', { orderedIds });
+}
+
+locationList.addEventListener('pointerup', endLocationDrag);
+locationList.addEventListener('pointercancel', endLocationDrag);
 
 locationArchivedList.addEventListener('click', (e) => {
   const restoreBtn = e.target.closest('[data-restore]');
