@@ -39,10 +39,10 @@
     <div class="row">
       <select id="location-select"></select>
     </div>
-    <div id="location-confirm-row" class="confirm-row" hidden>
-      <span>Passare a "<strong id="location-confirm-name"></strong>"?</span>
-      <button id="location-confirm-yes">Conferma</button>
-      <button id="location-confirm-no">Annulla</button>
+    <div id="preview-banner" class="confirm-row" hidden>
+      <span>Anteprima: <strong id="preview-banner-name"></strong> — non visibile ai giocatori</span>
+      <button id="preview-send">Invia al display</button>
+      <button id="preview-cancel">Annulla anteprima</button>
     </div>
 
     <section id="grid-opacity-section">
@@ -86,7 +86,7 @@
       <div id="fow-list" class="list"></div>
     </section>
 
-    <section>
+    <section id="images-section">
       <h2>Immagini</h2>
       <div id="images-list" class="thumb-row"></div>
       <button id="back-to-map" class="primary">Torna alla mappa</button>

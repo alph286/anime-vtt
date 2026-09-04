@@ -6,12 +6,11 @@ let socketConnected = false;
 let displayConnected = false;
 
 const locationSelect = document.getElementById('location-select');
-const locationConfirmRow = document.getElementById('location-confirm-row');
-const locationConfirmName = document.getElementById('location-confirm-name');
-const locationConfirmYes = document.getElementById('location-confirm-yes');
-const locationConfirmNo = document.getElementById('location-confirm-no');
-let pendingLocationId = null;
-let locationConfirmTimeout = null;
+const previewBanner = document.getElementById('preview-banner');
+const previewBannerName = document.getElementById('preview-banner-name');
+const previewSendBtn = document.getElementById('preview-send');
+const previewCancelBtn = document.getElementById('preview-cancel');
+const imagesSection = document.getElementById('images-section');
 const mapPreview = document.getElementById('map-preview');
 const mapMediaWrap = document.getElementById('map-media-wrap');
 const mapFitBox = document.getElementById('map-fit-box');
@@ -86,10 +85,19 @@ function getPreviewLocation() {
 }
 
 function render() {
-  previewLocationId = state.activeLocationId;
+  if (!previewLocationId || !state.locations.some((l) => l.id === previewLocationId)) {
+    previewLocationId = state.activeLocationId;
+  }
   const location = getActiveLocation();
   const previewLocation = getPreviewLocation();
   const showingImage = Boolean(state.activeImageId);
+  const isPreviewing = previewLocationId !== state.activeLocationId;
+
+  previewBanner.hidden = !isPreviewing;
+  if (isPreviewing && previewLocation) {
+    previewBannerName.textContent = previewLocation.name;
+  }
+  imagesSection.style.display = isPreviewing ? 'none' : 'block';
 
   if (showingImage && location) {
     const shownImg = (location.images || []).find((i) => i.id === state.activeImageId);
@@ -100,10 +108,10 @@ function render() {
   }
 
   locationSelect.innerHTML =
-    (state.activeLocationId ? '' : '<option value="" selected disabled hidden>— nessuna location —</option>') +
+    (previewLocationId ? '' : '<option value="" selected disabled hidden>— nessuna location —</option>') +
     state.locations
       .filter((l) => !l.archived)
-      .map((l) => `<option value="${l.id}" ${l.id === state.activeLocationId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`)
+      .map((l) => `<option value="${l.id}" ${l.id === previewLocationId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`)
       .join('');
 
   renderMapPreview(previewLocation);
@@ -198,33 +206,25 @@ function renderMapPreview(location) {
   }
 }
 
-function resetLocationConfirm() {
-  pendingLocationId = null;
-  clearTimeout(locationConfirmTimeout);
-  locationConfirmRow.hidden = true;
-  locationSelect.value = state.activeLocationId || '';
-}
-
 locationSelect.addEventListener('change', () => {
   const targetId = locationSelect.value;
-  if (!targetId || targetId === state.activeLocationId) return;
-  const target = state.locations.find((l) => l.id === targetId);
-  locationSelect.value = state.activeLocationId || '';
-  if (!target) return;
-  pendingLocationId = targetId;
-  locationConfirmName.textContent = target.name;
-  locationConfirmRow.hidden = false;
-  clearTimeout(locationConfirmTimeout);
-  locationConfirmTimeout = setTimeout(resetLocationConfirm, 4000);
+  if (!targetId || !state.locations.some((l) => l.id === targetId)) {
+    locationSelect.value = previewLocationId || '';
+    return;
+  }
+  previewLocationId = targetId;
+  render();
 });
 
-locationConfirmYes.addEventListener('click', () => {
-  if (!pendingLocationId) return;
-  socket.emit('location:set', { locationId: pendingLocationId });
-  resetLocationConfirm();
+previewSendBtn.addEventListener('click', () => {
+  if (!previewLocationId) return;
+  socket.emit('location:set', { locationId: previewLocationId });
 });
 
-locationConfirmNo.addEventListener('click', resetLocationConfirm);
+previewCancelBtn.addEventListener('click', () => {
+  previewLocationId = state.activeLocationId;
+  render();
+});
 
 mapFogLayer.addEventListener('click', (e) => {
   if (panModeActive) return;
@@ -234,7 +234,7 @@ mapFogLayer.addEventListener('click', (e) => {
 
 fogOpacityInput.addEventListener('input', () => {
   fogOpacity = Number(fogOpacityInput.value) / 100;
-  if (state) renderMapPreview(getActiveLocation());
+  if (state) renderMapPreview(getPreviewLocation());
 });
 
 fowList.addEventListener('click', (e) => {
