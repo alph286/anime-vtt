@@ -909,6 +909,11 @@ const locationArchiveTimers = new Map();
 // un altro client non scavalca l'ordine che l'utente sta trascinando.
 let locationDragState = null;
 
+// Stesso pattern arma-poi-conferma di armedLocationArchives, per le
+// eliminazioni definitive nella lista archiviate.
+const armedLocationDeletes = new Set();
+const locationDeleteTimers = new Map();
+
 function renderLocationPanel() {
   const active = state.locations.filter((l) => !l.archived);
   const archived = state.locations.filter((l) => l.archived);
@@ -939,16 +944,21 @@ function renderLocationPanel() {
 
   locationArchivedWrap.hidden = archived.length === 0;
   locationArchivedList.innerHTML = archived
-    .map(
-      (l) => `
+    .map((l) => {
+      const armed = armedLocationDeletes.has(l.id);
+      return `
         <div class="image-editor-row" data-id="${l.id}">
           <input type="text" class="image-name-input" value="${escapeHtml(l.name)}" data-name-for="${l.id}" placeholder="nome location">
           <button class="icon-btn" data-restore="${l.id}" title="Ripristina location">
             <svg class="icon"><use href="#i-rotate"></use></svg>
           </button>
+          <button class="icon-btn image-delete ${armed ? 'confirm' : ''}" data-delete-location="${l.id}"
+                  title="${armed ? 'Click di nuovo per confermare' : 'Elimina definitivamente'}">
+            <svg class="icon"><use href="#i-trash"></use></svg>
+          </button>
         </div>
-      `
-    )
+      `;
+    })
     .join('');
 }
 
@@ -1033,7 +1043,31 @@ locationList.addEventListener('pointercancel', endLocationDrag);
 
 locationArchivedList.addEventListener('click', (e) => {
   const restoreBtn = e.target.closest('[data-restore]');
-  if (restoreBtn) socket.emit('location:restore', { locationId: restoreBtn.dataset.restore });
+  if (restoreBtn) {
+    socket.emit('location:restore', { locationId: restoreBtn.dataset.restore });
+    return;
+  }
+
+  const deleteBtn = e.target.closest('[data-delete-location]');
+  if (deleteBtn) {
+    const locationId = deleteBtn.dataset.deleteLocation;
+    if (!armedLocationDeletes.has(locationId)) {
+      armedLocationDeletes.add(locationId);
+      renderLocationPanel();
+      clearTimeout(locationDeleteTimers.get(locationId));
+      locationDeleteTimers.set(
+        locationId,
+        setTimeout(() => {
+          armedLocationDeletes.delete(locationId);
+          renderLocationPanel();
+        }, 2500)
+      );
+      return;
+    }
+    clearTimeout(locationDeleteTimers.get(locationId));
+    armedLocationDeletes.delete(locationId);
+    socket.emit('location:delete', { locationId });
+  }
 });
 
 locationArchivedList.addEventListener('change', (e) => {

@@ -265,6 +265,14 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  socket.on('location:delete', ({ locationId }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location || !location.archived) return;
+    state.locations = state.locations.filter((l) => l.id !== locationId);
+    saveState(state);
+    broadcastState();
+  });
+
   socket.on('location:setDefault', ({ locationId }) => {
     if (!state.locations.some((l) => l.id === locationId)) return;
     state.locations.forEach((l) => { l.isDefault = l.id === locationId; });
