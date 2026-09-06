@@ -10,7 +10,6 @@
 const fs = require('fs');
 const path = require('path');
 const tar = require('tar-stream');
-const { nanoid } = require('nanoid');
 
 function extOf(filename) {
   return path.extname(filename || '');

@@ -176,6 +176,7 @@ app.get('/api/export/location/:id', (req, res) => {
   const location = state.locations.find((l) => l.id === req.params.id);
   if (!location) return res.status(404).json({ error: 'location non trovata' });
   const pack = tar.pack();
+  pack.on('error', (err) => { console.error('Export location fallito (pack):', err.message); });
   const safeName = (location.name || 'location').replace(/[^\w\-. ]/g, '').trim() || 'location';
   res.setHeader('Content-Type', 'application/x-tar');
   res.setHeader('Content-Disposition', `attachment; filename="${safeName}.vttlocation"`);
@@ -188,6 +189,7 @@ app.get('/api/export/location/:id', (req, res) => {
 
 app.get('/api/export/backup', (req, res) => {
   const pack = tar.pack();
+  pack.on('error', (err) => { console.error('Export backup fallito (pack):', err.message); });
   const date = new Date().toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'application/x-tar');
   res.setHeader('Content-Disposition', `attachment; filename="backup-${date}.vttbackup"`);
