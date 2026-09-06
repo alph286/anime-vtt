@@ -534,6 +534,65 @@ h2 {
   display: block;
 }
 
+.image-thumb.selected {
+  box-shadow: 0 0 0 2px var(--text-primary);
+}
+
+#image-detail-preview {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--bg-canvas);
+  margin-bottom: 10px;
+}
+
+.image-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.image-detail-field label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.image-detail-field input,
+.image-detail-field select {
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.image-detail-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.image-detail-actions button {
+  flex: 1;
+  min-width: 100px;
+}
+
+.image-send-feedback {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.image-send-feedback.error {
+  color: var(--danger-text);
+}
+
 /* ---------- pulsanti generici ---------- */
 
 button {
@@ -557,6 +616,22 @@ button.confirm {
   background: var(--danger);
   border-color: var(--danger);
   color: #fff;
+}
+
+.btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.btn-accent:disabled {
+  opacity: 0.4;
+}
+
+.btn-accent.is-live {
+  background: var(--accent-bg-subtle);
+  color: var(--accent);
 }
 
 button, .fog-overlay, .image-thumb, .fow-row, select, #pan-mode-toggle {

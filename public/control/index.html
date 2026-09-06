@@ -104,7 +104,27 @@
     <div class="tab-panel" data-tab="immagini">
       <section id="images-section">
         <div id="images-list" class="thumb-row"></div>
-        <button id="back-to-map" class="primary">Torna alla mappa</button>
+
+        <section id="image-detail" class="control-section" hidden>
+          <img id="image-detail-preview" alt="">
+
+          <div class="image-detail-field">
+            <label for="image-caption-input">Didascalia</label>
+            <input type="text" id="image-caption-input" placeholder="didascalia per Telegram">
+          </div>
+
+          <div class="image-detail-field">
+            <label for="image-destination-select">Destinazione Telegram</label>
+            <select id="image-destination-select"></select>
+          </div>
+
+          <div class="image-detail-actions">
+            <button id="image-show-btn" class="btn-accent">Mostra</button>
+            <button id="image-send-btn" class="btn-accent">Invia</button>
+            <button id="image-hide-btn" class="primary">Ritorna alla mappa</button>
+          </div>
+          <p id="image-send-feedback" class="image-send-feedback" hidden></p>
+        </section>
       </section>
     </div>
 

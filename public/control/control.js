@@ -22,7 +22,14 @@ const mapFogLayer = document.getElementById('map-fog-layer');
 const fogOpacityInput = document.getElementById('fog-opacity');
 const fowList = document.getElementById('fow-list');
 const imagesList = document.getElementById('images-list');
-const backToMapBtn = document.getElementById('back-to-map');
+const imageDetail = document.getElementById('image-detail');
+const imageDetailPreview = document.getElementById('image-detail-preview');
+const imageCaptionInput = document.getElementById('image-caption-input');
+const imageDestinationSelect = document.getElementById('image-destination-select');
+const imageShowBtn = document.getElementById('image-show-btn');
+const imageSendBtn = document.getElementById('image-send-btn');
+const imageHideBtn = document.getElementById('image-hide-btn');
+const imageSendFeedback = document.getElementById('image-send-feedback');
 const panZoomSection = document.getElementById('pan-zoom-section');
 const gridOpacitySection = document.getElementById('grid-opacity-section');
 const gridOpacityOutBtn = document.getElementById('grid-opacity-out');
@@ -70,6 +77,16 @@ socket.on('state:update', (s) => {
   state = s;
   render();
 });
+socket.on('telegram:sendResult', ({ imageId, ok, error }) => {
+  telegramSendPending = false;
+  telegramSendFeedback = { imageId, ok, error };
+  render();
+  clearTimeout(telegramSendFeedbackTimeout);
+  telegramSendFeedbackTimeout = setTimeout(() => {
+    telegramSendFeedback = null;
+    render();
+  }, 4000);
+});
 
 window.addEventListener('resize', () => {
   if (!state) return;
@@ -103,6 +120,21 @@ tabBar.addEventListener('click', (e) => {
 });
 
 let previewLocationId = null;
+let previewImageId = null;
+let telegramDestinations = null; // null = non ancora caricate; [] = vuote/non disponibili
+let telegramSendPending = false;
+let telegramSendFeedback = null; // { imageId, ok, error } dell'ultimo invio, o null
+let telegramSendFeedbackTimeout = null;
+
+fetch('/api/telegram/destinations')
+  .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+  .then((list) => { telegramDestinations = list; })
+  .catch(() => { telegramDestinations = []; })
+  .then(() => { if (state) render(); });
+
+function getPreviewImage(location) {
+  return ((location && location.images) || []).find((i) => i.id === previewImageId) || null;
+}
 
 function getActiveLocation() {
   return state.locations.find((l) => l.id === state.activeLocationId);
@@ -117,6 +149,9 @@ function render() {
     previewLocationId = state.activeLocationId;
   }
   const location = getActiveLocation();
+  if (previewImageId && !((location && location.images) || []).some((i) => i.id === previewImageId)) {
+    previewImageId = null;
+  }
   const previewLocation = getPreviewLocation();
   const showingImage = Boolean(state.activeImageId);
   const isPreviewing = previewLocationId !== state.activeLocationId;
@@ -163,13 +198,15 @@ function render() {
     ((location && location.images) || [])
       .map(
         (img) => `
-          <button class="image-thumb ${state.activeImageId === img.id ? 'active' : ''}" data-id="${img.id}">
+          <button class="image-thumb ${state.activeImageId === img.id ? 'active' : ''} ${previewImageId === img.id ? 'selected' : ''}" data-id="${img.id}">
             <img src="/storage/images/${img.file}" alt="${escapeHtml(img.name)}">
             <span class="image-thumb-label">${escapeHtml(img.name)}</span>
           </button>
         `
       )
       .join('') || '<p class="hint">nessuna immagine per questa location</p>';
+
+  renderImageDetail(getPreviewImage(location));
 
   zoomLevel.textContent = `${Math.round(((previewLocation && previewLocation.map.liveView.scale) || 1) * 100)}%`;
   const hidePanZoomForImage = showingImage && !isPreviewing;
@@ -181,6 +218,51 @@ function render() {
     gridOpacityLevel.textContent = `${Math.round((previewLocation.map.grid.opacity === undefined ? 1 : previewLocation.map.grid.opacity) * 100)}%`;
   }
   updateViewportRect(previewLocation);
+}
+
+function renderDestinationOptions(selectedName) {
+  if (telegramDestinations === null) {
+    return '<option value="">Caricamento…</option>';
+  }
+  if (!telegramDestinations.length) {
+    return '<option value="">Destinazioni non disponibili</option>';
+  }
+  return ['<option value="">— scegli destinazione —</option>']
+    .concat(
+      telegramDestinations.map(
+        (d) => `<option value="${escapeHtml(d.name)}" ${d.name === selectedName ? 'selected' : ''}>${escapeHtml(d.name)}</option>`
+      )
+    )
+    .join('');
+}
+
+function renderImageDetail(previewImage) {
+  imageDetail.hidden = !previewImage;
+  if (!previewImage) return;
+
+  imageDetailPreview.src = `/storage/images/${previewImage.file}`;
+  imageDetailPreview.alt = previewImage.name || '';
+
+  imageCaptionInput.value = previewImage.caption || '';
+
+  const destinationsUnavailable = telegramDestinations !== null && !telegramDestinations.length;
+  imageDestinationSelect.innerHTML = renderDestinationOptions(previewImage.telegramDestination);
+  imageDestinationSelect.disabled = telegramDestinations === null || destinationsUnavailable;
+
+  imageShowBtn.classList.toggle('is-live', state.activeImageId === previewImage.id);
+  imageHideBtn.disabled = !state.activeImageId;
+
+  const hasDestination = Boolean(previewImage.telegramDestination);
+  imageSendBtn.disabled = !hasDestination || telegramSendPending;
+  imageSendBtn.textContent = telegramSendPending ? 'Invio…' : 'Invia';
+
+  if (telegramSendFeedback && telegramSendFeedback.imageId === previewImage.id) {
+    imageSendFeedback.hidden = false;
+    imageSendFeedback.textContent = telegramSendFeedback.ok ? 'Inviata ✓' : (telegramSendFeedback.error || 'Invio fallito');
+    imageSendFeedback.classList.toggle('error', !telegramSendFeedback.ok);
+  } else {
+    imageSendFeedback.hidden = true;
+  }
 }
 
 // The wrap element's CSS rotate() transform already turns this locally-flat
@@ -277,10 +359,44 @@ fowList.addEventListener('click', (e) => {
 
 imagesList.addEventListener('click', (e) => {
   const btn = e.target.closest('.image-thumb');
-  if (btn) socket.emit('image:show', { imageId: btn.dataset.id });
+  if (!btn) return;
+  previewImageId = btn.dataset.id;
+  render();
 });
 
-backToMapBtn.addEventListener('click', () => socket.emit('image:hide'));
+imageShowBtn.addEventListener('click', () => {
+  if (!previewImageId) return;
+  socket.emit('image:show', { imageId: previewImageId });
+});
+
+imageHideBtn.addEventListener('click', () => socket.emit('image:hide'));
+
+imageSendBtn.addEventListener('click', () => {
+  const previewImage = getPreviewImage(getActiveLocation());
+  if (!previewImage || !previewImage.telegramDestination || telegramSendPending) return;
+  telegramSendPending = true;
+  telegramSendFeedback = null;
+  socket.emit('image:sendTelegram', { locationId: state.activeLocationId, imageId: previewImage.id });
+  render();
+});
+
+imageCaptionInput.addEventListener('change', () => {
+  if (!previewImageId) return;
+  socket.emit('image:caption', {
+    locationId: state.activeLocationId,
+    imageId: previewImageId,
+    caption: imageCaptionInput.value
+  });
+});
+
+imageDestinationSelect.addEventListener('change', () => {
+  if (!previewImageId) return;
+  socket.emit('image:destination', {
+    locationId: state.activeLocationId,
+    imageId: previewImageId,
+    destination: imageDestinationSelect.value || null
+  });
+});
 
 document.querySelectorAll('[data-pan]').forEach((btn) => {
   btn.addEventListener('click', () => {
