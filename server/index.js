@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { loadState, saveState, applyStartupDefault, DEFAULT_GRID } = require('./state');
+const picsender = require('./picsender');
 
 const PORT = process.env.PORT || 3000;
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'storage');
@@ -156,11 +157,22 @@ app.post('/api/upload/image', uploadImage.single('file'), (req, res) => {
   location.images.push({
     id: nanoid(),
     name: req.body.name || req.file.originalname,
-    file: req.file.filename
+    file: req.file.filename,
+    caption: '',
+    telegramDestination: null
   });
   saveState(state);
   broadcastState();
   res.json({ ok: true, file: req.file.filename });
+});
+
+app.get('/api/telegram/destinations', async (req, res) => {
+  try {
+    const destinations = await picsender.getDestinations();
+    res.json(destinations);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
 });
 
 const server = http.createServer(app);
@@ -353,6 +365,39 @@ io.on('connection', (socket) => {
 
     saveState(state);
     broadcastState();
+  });
+
+  socket.on('image:caption', ({ locationId, imageId, caption }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const image = location?.images.find((i) => i.id === imageId);
+    if (!image) return;
+    image.caption = String(caption || '').slice(0, 1024); // limite didascalia di Telegram
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('image:destination', ({ locationId, imageId, destination }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const image = location?.images.find((i) => i.id === imageId);
+    if (!image) return;
+    image.telegramDestination = destination || null;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('image:sendTelegram', async ({ locationId, imageId }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const image = location?.images.find((i) => i.id === imageId);
+    if (!image) {
+      socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Immagine non trovata' });
+      return;
+    }
+    const result = await picsender.sendImage({
+      filePath: path.join(IMAGES_DIR, image.file),
+      caption: image.caption,
+      destinationName: image.telegramDestination
+    });
+    socket.emit('telegram:sendResult', { imageId, ok: result.ok, error: result.error });
   });
 
   socket.on('view:pan', ({ locationId, dx, dy }) => {

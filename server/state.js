@@ -61,6 +61,8 @@ function migrate(state) {
     if (location.isDefault === undefined) location.isDefault = false;
     (location.images || []).forEach((image) => {
       delete image.rotation;
+      if (image.caption === undefined) image.caption = '';
+      if (image.telegramDestination === undefined) image.telegramDestination = null;
     });
   });
 
