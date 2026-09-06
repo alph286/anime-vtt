@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anime VTT</title>
+<link rel="stylesheet" href="/shared/theme.css">
+<link rel="stylesheet" href="/home/home.css">
+</head>
+<body>
+<svg style="display:none">
+  <symbol id="i-tv" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-laptop" viewBox="0 0 24 24"><path d="M4 5h16v10H4z"/><path d="M2 19h20l-2-4H4z"/></symbol>
+</svg>
+
+<main id="home">
+  <h1>Anime VTT</h1>
+  <p class="hint">Scegli la vista per questo dispositivo.</p>
+
+  <nav class="route-panel">
+    <a class="route-switch" href="/display">
+      <span class="route-led"></span>
+      <svg class="icon"><use href="#i-tv"></use></svg>
+      <span class="route-name">Display</span>
+      <span class="route-desc">Vista TV — mappa e fog of war per i giocatori</span>
+    </a>
+    <a class="route-switch" href="/control">
+      <span class="route-led"></span>
+      <svg class="icon"><use href="#i-phone"></use></svg>
+      <span class="route-name">Control</span>
+      <span class="route-desc">Da smartphone — pilota la TV durante la sessione</span>
+    </a>
+    <a class="route-switch" href="/editor">
+      <span class="route-led"></span>
+      <svg class="icon"><use href="#i-laptop"></use></svg>
+      <span class="route-name">Editor</span>
+      <span class="route-desc">Da PC — prepara mappe, location e fog prima di giocare</span>
+    </a>
+  </nav>
+</main>
+</body>
+</html>

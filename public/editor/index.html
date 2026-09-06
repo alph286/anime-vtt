@@ -31,7 +31,7 @@
 </svg>
 
 <header class="topbar">
-  <select id="location-select"></select>
+  <select id="location-select" class="select-primary"></select>
   <button id="location-create" class="icon-btn" title="Nuova location">
     <svg class="icon"><use href="#i-plus"></use></svg>
   </button>
@@ -139,7 +139,7 @@
   </section>
 
   <aside class="col col-sidebar">
-    <section>
+    <section class="panel">
       <h2>Location</h2>
       <div id="location-list" class="image-editor-list"></div>
       <div id="location-archived-wrap" hidden>
@@ -148,13 +148,13 @@
       </div>
     </section>
 
-    <section>
+    <section class="panel">
       <h2>Immagini</h2>
       <div id="image-list" class="image-editor-list"></div>
       <label class="file-btn">Carica immagine<input type="file" id="image-upload" accept="image/*"></label>
     </section>
 
-    <section>
+    <section class="panel">
       <div class="section-header">
         <h2>Fog of war</h2>
         <button id="polygon-sort-az" class="icon-btn" title="Ordina alfabeticamente">
@@ -164,7 +164,7 @@
       <div id="polygon-list" class="list"></div>
     </section>
 
-    <section>
+    <section class="panel">
       <h2>Fine tuning griglia</h2>
       <div class="tv-controls">
         <label class="num-row">

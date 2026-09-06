@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-06T21:12:03Z",
+  "title": "Design System: Anime VTT — Sala Controllo",
+  "extensions": {
+    "colorMeta": {
+      "accent": { "role": "primary", "displayName": "Instrument Amber", "canonical": "#c9822c", "tonalRamp": ["#241a0e", "#3d2a14", "#5c3d18", "#7f531e", "#a36a24", "#c9822c", "#dba362", "#f0cfa3"] },
+      "danger": { "role": "secondary", "displayName": "Alarm Red", "canonical": "#a32d2d", "tonalRamp": ["#1f0f0f", "#331616", "#4c1e1e", "#661f1f", "#832626", "#a32d2d", "#c65858", "#e08a86"] },
+      "bg-page": { "role": "neutral", "displayName": "Page Black", "canonical": "#16181d", "tonalRamp": ["#0a0b0d", "#111318", "#16181d", "#1f232b", "#262b34", "#333947", "#8a93a3", "#cfd6e0"] },
+      "bg-panel": { "role": "neutral", "displayName": "Panel Charcoal", "canonical": "#1f232b" },
+      "bg-control": { "role": "neutral", "displayName": "Control Slate", "canonical": "#262b34" },
+      "bg-canvas": { "role": "neutral", "displayName": "Canvas Void", "canonical": "#0e1014" },
+      "border": { "role": "neutral", "displayName": "Border Line", "canonical": "#2c313b" },
+      "border-control": { "role": "neutral", "displayName": "Control Line", "canonical": "#333947" },
+      "grid-line": { "role": "neutral", "displayName": "Grid Line", "canonical": "#20242c" },
+      "text-primary": { "role": "neutral", "displayName": "Signal Text", "canonical": "#cfd6e0" },
+      "text-secondary": { "role": "neutral", "displayName": "Muted Text", "canonical": "#8a93a3" }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "Single index-page h1 only; not reused elsewhere." },
+      "label": { "displayName": "Label", "purpose": "Uppercase tracked section headers and tab-bar labels." },
+      "body": { "displayName": "Body", "purpose": "Buttons, inputs, list rows, route-switch names." },
+      "body-small": { "displayName": "Body Small", "purpose": "Hints, metadata, state tags, readouts, descriptions." }
+    },
+    "shadows": [
+      { "name": "selected-ring", "value": "0 0 0 2px var(--text-primary)", "purpose": "Marks a selected image thumbnail; a solid ring, not a blurred shadow." },
+      { "name": "icon-legibility", "value": "drop-shadow(0 1px 2px rgba(0,0,0,0.8))", "purpose": "Keeps a white overlay icon legible over a photographic thumbnail on hover; not a system elevation token." }
+    ],
+    "motion": [
+      { "name": "state-fade", "value": "0.15s-0.3s ease (background-color, opacity, transform: none)", "purpose": "Default transition for hover/active/toggle state changes; no easing curve token is defined beyond browser default ease." }
+    ],
+    "breakpoints": [
+      { "name": "control-wide", "value": "700px", "purpose": "Control surface switches from single-column tabbed phone layout to two-column desktop-width layout." },
+      { "name": "editor-narrow", "value": "1100px", "purpose": "Editor's two-column grid collapses to one column." },
+      { "name": "index-narrow", "value": "640px", "purpose": "Index route-panel switches from row to stacked column." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Accent Button",
+      "kind": "button",
+      "refersTo": "button-accent",
+      "description": "Action tied to the current live/on-air state (Mostra, Invia, preview-send). Never the default action.",
+      "html": "<button class=\"ds-btn-accent\">Mostra</button>",
+      "css": ".ds-btn-accent { background: #c9822c; color: #1a1a1a; border: 1px solid #c9822c; border-radius: 8px; padding: 10px 14px; font-weight: 600; font-family: system-ui, sans-serif; font-size: 14px; } .ds-btn-accent:hover { background: #dba362; border-color: #dba362; } .ds-btn-accent:focus-visible { outline: 2px solid #c9822c; outline-offset: 2px; } .ds-btn-accent:active { background: rgba(201,130,44,0.15); color: #c9822c; } .ds-btn-accent:disabled { opacity: 0.4; }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Baseline control-slate button used for most non-live actions across all three surfaces.",
+      "html": "<button class=\"ds-btn-default\">Annulla anteprima</button>",
+      "css": ".ds-btn-default { background: #262b34; color: #cfd6e0; border: 1px solid #333947; border-radius: 8px; padding: 10px 14px; font-family: system-ui, sans-serif; font-size: 14px; min-height: 44px; } .ds-btn-default:hover { border-color: #c9822c; } .ds-btn-default:active { background: rgba(201,130,44,0.15); } .ds-btn-default:focus-visible { outline: 2px solid #c9822c; outline-offset: 2px; }"
+    },
+    {
+      "name": "Danger Confirm Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Arm-then-confirm destructive step (reveal-all, delete). Solid alarm red, reserved for the confirm step, never a default state.",
+      "html": "<button class=\"ds-btn-danger\">Conferma cancellazione</button>",
+      "css": ".ds-btn-danger { background: #a32d2d; color: #fff; border: 1px solid #a32d2d; border-radius: 8px; padding: 10px 14px; font-family: system-ui, sans-serif; font-size: 14px; } .ds-btn-danger:hover { background: #c65858; border-color: #c65858; } .ds-btn-danger:focus-visible { outline: 2px solid #e08a86; outline-offset: 2px; }"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-btn",
+      "description": "Square control-slate button holding a single linear SVG icon; used for toolbar tools, pan-mode toggle, lightbox close.",
+      "html": "<button class=\"ds-icon-btn\" title=\"Ruota mappa 90°\"><svg class=\"ds-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4h8v8H4z\"/><path d=\"M16 12l4 4-4 4M20 16H12a4 4 0 0 1-4-4v-1\"/></svg></button>",
+      "css": ".ds-icon-btn { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border-radius: 8px; border: 1px solid #333947; background: #262b34; color: #cfd6e0; cursor: pointer; } .ds-icon-btn .ds-icon { width: 18px; height: 18px; } .ds-icon-btn:hover { border-color: #c9822c; } .ds-icon-btn:active { background: rgba(201,130,44,0.15); } .ds-icon-btn.ds-tool-active { background: #c9822c; color: #1a1a1a; border-color: #c9822c; } .ds-icon-btn:disabled { opacity: 0.4; cursor: default; }"
+    },
+    {
+      "name": "Location Select (primary)",
+      "kind": "input",
+      "refersTo": "select-primary",
+      "description": "The 'where am I' primary select, given a custom chevron and extra weight, shared verbatim between control's status bar and editor's topbar.",
+      "html": "<select class=\"ds-select-primary\"><option>Taverna del Cervo Nero</option><option>Foresta di Vharn</option></select>",
+      "css": ".ds-select-primary { height: 44px; padding: 0 34px 0 12px; border-radius: 8px; border: 1px solid #333947; background-color: #262b34; color: #cfd6e0; font-weight: 600; font-family: system-ui, sans-serif; font-size: 15px; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a93a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 12px center; } .ds-select-primary:focus-visible { outline: 2px solid #c9822c; outline-offset: 2px; }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Universal grouping container: control's .control-section, editor's .panel, and the index's .route-panel all share this treatment.",
+      "html": "<section class=\"ds-panel\"><h2 class=\"ds-panel-label\">Fog of war</h2><p style=\"color:#cfd6e0;font-family:system-ui,sans-serif;font-size:14px;margin:0;\">Tocca una zona per rivelarla.</p></section>",
+      "css": ".ds-panel { background: #1f232b; border: 1px solid #2c313b; border-radius: 12px; padding: 14px; } .ds-panel-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; color: #8a93a3; margin: 0 0 10px; font-family: system-ui, sans-serif; }"
+    },
+    {
+      "name": "Route Switch",
+      "kind": "custom",
+      "refersTo": "route-switch",
+      "description": "Signature index-page component: one segment of the three-way divided navigation panel, with an LED that lights on hover/touch instead of a card border.",
+      "html": "<a class=\"ds-route-switch\" href=\"#\"><span class=\"ds-route-led\"></span><svg class=\"ds-route-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#c9822c\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"7\" y=\"2\" width=\"10\" height=\"20\" rx=\"2\"/><path d=\"M11 18h2\"/></svg><span class=\"ds-route-name\">Control</span><span class=\"ds-route-desc\">Da smartphone — pilota la TV durante la sessione</span></a>",
+      "css": ".ds-route-switch { position: relative; flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 28px 22px; border-right: 1px solid #2c313b; color: #cfd6e0; text-decoration: none; font-family: system-ui, sans-serif; } .ds-route-switch:hover { background: #262b34; } .ds-route-switch:active { background: rgba(201,130,44,0.15); } .ds-route-led { position: absolute; top: 16px; right: 16px; width: 7px; height: 7px; border-radius: 50%; background: #333947; transition: background 0.15s; } .ds-route-switch:hover .ds-route-led, .ds-route-switch:active .ds-route-led { background: #c9822c; } .ds-route-icon { width: 26px; height: 26px; } .ds-route-name { font-size: 16px; font-weight: 600; } .ds-route-desc { font-size: 13px; color: #8a93a3; line-height: 1.4; }"
+    },
+    {
+      "name": "Tab Bar Button",
+      "kind": "nav",
+      "refersTo": "tab-btn",
+      "description": "Control's fixed bottom tab bar item: linear icon over an uppercase label, muted at rest, amber when active.",
+      "html": "<button class=\"ds-tab-btn ds-tab-btn-active\"><svg class=\"ds-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2Z\"/><path d=\"M9 3v16M15 5v16\"/></svg><span>Mappa</span></button>",
+      "css": ".ds-tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 60px; padding: 8px 4px 6px; border: none; background: none; color: #8a93a3; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; font-family: system-ui, sans-serif; } .ds-tab-btn .ds-icon { width: 20px; height: 20px; } .ds-tab-btn-active { color: #c9822c; } .ds-tab-btn:active { background: rgba(201,130,44,0.15); } .ds-tab-btn:disabled { opacity: 0.35; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "\"Sala controllo\" (the control room)",
+    "overview": "Anime VTT is a single-DM instrument, never a public-facing product: one dark theme, fixed, no light mode, because the only viewers who matter are the DM's own eyes in a dim room and a TV across the table. The system reads as broadcast/mixer-desk hardware — flat dark panels, one warm accent used only where something is live, selected, or armed, and controls sized and grouped like physical buttons and faders rather than web-app chrome. Density is generous (44px touch targets, 8-24px rhythm) because the primary surface is a phone held mid-session in penumbra; the editor inherits the same units at slightly tighter scale because a mouse is more precise than a thumb.\n\nThe world was built, not decorated: there is no display typeface, no illustration, no gradients beyond the diagnostic grid-line pattern standing in for an empty map. Confirmed rejection, stated directly in the build's own commentary: a card grid (icon + title + text, three floating boxes) was drafted for the index page and explicitly discarded as \"the generic scaffold pattern the craft floor rejects\" in favor of one divided panel with three affiliated switches — the control-room register, not a landing-page register.",
+    "keyCharacteristics": [
+      "One dark background, three tonal layers (page → panel → control), no light variant.",
+      "One accent color (amber), reserved for live/selected/active state — never decorative.",
+      "Flat surfaces; depth comes from tonal contrast and thin borders, not shadows.",
+      "Linear stroke icons only (no filled glyphs, no icon fonts).",
+      "System UI font throughout; no display face, ever."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Amber never decorates; it only appears on the thing that is currently live, selected, active, or armed. A screen with nothing active shows no amber.", "section": "colors" },
+      { "name": "The Three-Tier Surface Rule", "body": "Every surface sits on exactly one of three backgrounds — page, panel, or control — and the darker-to-lighter progression is the only depth cue; nothing is promoted a tier just for emphasis.", "section": "colors" },
+      { "name": "The Unlisted Black Rule", "body": "Fog of war renders as pure #000, not a token. It is a semantic 'hidden from players' state, deliberately outside the interface palette, and must never be reassigned a theme color.", "section": "colors" },
+      { "name": "The No-Display-Face Rule", "body": "Every surface uses the same system UI stack at every size; a hero moment is expressed with weight (700) and size (22px), never a second typeface.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces never cast shadow to indicate stacking. If something needs to read as 'above' its container, it gets a border and a lighter tone, not a shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do reserve amber for live/selected/active state only (The One Accent Rule).",
+      "Do build every grouping container as a .panel/.control-section-equivalent: bg-panel, 1px border, 12px radius, 14px padding.",
+      "Do keep fog of war pure #000 (or amber-on-reveal), never a themed color — it is semantic state, not UI chrome (The Unlisted Black Rule).",
+      "Do use inline linear-stroke SVG symbols for every icon; keep the shared <symbol> sprite pattern per page.",
+      "Do size touch targets at 44px on the phone surface; 36px is acceptable only on the mouse-driven editor."
+    ],
+    "donts": [
+      "Don't introduce a display/serif/decorative typeface anywhere; system-ui carries every role including the one 22px title.",
+      "Don't build a card grid (icon + title + text in separate floating boxes) for navigation or summary surfaces — the index build explicitly rejected this as generic scaffolding in favor of one divided panel; the divided-panel register is the system's answer to 'several equal choices,' not cards.",
+      "Don't add drop-shadows or elevation lift to signal hierarchy; use the page → panel → control tonal steps instead (The Flat-By-Default Rule).",
+      "Don't introduce a light theme or a light/dark toggle; the dark theme is a fixed brand commitment, not a default."
+    ]
+  }
+}

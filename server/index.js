@@ -32,15 +32,10 @@ app.use('/display', express.static(path.join(__dirname, '..', 'public', 'display
 app.use('/control', express.static(path.join(__dirname, '..', 'public', 'control')));
 app.use('/editor', express.static(path.join(__dirname, '..', 'public', 'editor')));
 app.use('/shared', express.static(path.join(__dirname, '..', 'public', 'shared')));
+app.use('/home', express.static(path.join(__dirname, '..', 'public', 'home')));
 
 app.get('/', (req, res) => {
-  res.send(
-    '<p>Anime VTT server attivo.</p><ul>' +
-      '<li><a href="/display">/display</a> — vista TV</li>' +
-      '<li><a href="/control">/control</a> — controllo da smartphone</li>' +
-      '<li><a href="/editor">/editor</a> — editor da PC</li>' +
-      '</ul>'
-  );
+  res.sendFile(path.join(__dirname, '..', 'public', 'home', 'index.html'));
 });
 
 app.get('/api/state', (req, res) => {

@@ -29,6 +29,33 @@
         ],
         "createdAt": "2026-09-05T08:58:50.138Z",
         "reason": "map-placeholder empty-canvas grid pattern (defined in control.css, attributed here by the detector), unchanged verbatim from the pre-redesign markup — a functional empty-state indicator, not decorative striping"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "public/editor/index.html"
+        ],
+        "createdAt": "2026-09-06T21:03:13.244Z",
+        "reason": "map-preview-img/lightbox-img have no static src by design -- populated at runtime by loadMapMedia()/shared/media.js and by openLightbox(), same pattern already ignored for public/control/index.html"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "public/editor/index.html"
+        ],
+        "createdAt": "2026-09-06T21:08:43.494Z",
+        "reason": "map-canvas-placeholder empty-canvas grid pattern (defined in editor.css, attributed here by the detector), unchanged verbatim from before this design pass -- a functional empty-state indicator, same pattern already ignored for public/control/*"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "public/editor/editor.css"
+        ],
+        "createdAt": "2026-09-06T21:08:48.237Z",
+        "reason": "map-canvas-placeholder empty-canvas grid pattern, unchanged verbatim from before this design pass -- a functional empty-state indicator, not decorative striping; same pattern already ignored for public/control/control.css"
       }
     ]
   }

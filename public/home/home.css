@@ -1,0 +1,126 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, sans-serif;
+  background: var(--bg-page);
+  color: var(--text-primary);
+}
+
+#home {
+  width: 100%;
+  max-width: 780px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.hint {
+  margin: 0 0 32px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Un solo pannello con tre posizioni, non tre card separate -- lo stesso
+   registro "quadro di comando" di /control: selettori affiancati su un unico
+   corpo, divisi da una linea, non contenitori individuali che galleggiano. */
+.route-panel {
+  display: flex;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .route-panel {
+    flex-direction: column;
+  }
+}
+
+.route-switch {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px 22px;
+  border-right: 1px solid var(--border);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.route-switch:last-child {
+  border-right: none;
+}
+
+@media (max-width: 640px) {
+  .route-switch {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .route-switch:last-child {
+    border-bottom: none;
+  }
+}
+
+.route-switch:hover {
+  background: var(--bg-control);
+}
+
+.route-switch:active {
+  background: var(--accent-bg-subtle);
+}
+
+/* Spia di selezione, spenta a riposo -- si accende al passaggio/tocco, come
+   l'indicatore di un vero selettore da quadro comandi. */
+.route-led {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-control);
+  transition: background 0.15s;
+}
+
+.route-switch:hover .route-led,
+.route-switch:active .route-led {
+  background: var(--accent);
+}
+
+.route-switch .icon {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.route-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.route-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
