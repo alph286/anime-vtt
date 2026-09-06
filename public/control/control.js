@@ -38,7 +38,6 @@ const gridOpacityLevel = document.getElementById('grid-opacity-level');
 const GRID_OPACITY_STEP = 0.1;
 const zoomOutBtn = document.getElementById('zoom-out');
 const zoomInBtn = document.getElementById('zoom-in');
-const zoomLevel = document.getElementById('zoom-level');
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 0.2;
@@ -216,7 +215,6 @@ function render() {
 
   renderImageDetail(getPreviewImage(location));
 
-  zoomLevel.textContent = `${Math.round(((previewLocation && previewLocation.map.liveView.scale) || 1) * 100)}%`;
   const hidePanZoomForImage = showingImage && !isPreviewing;
   panZoomSection.style.display = hidePanZoomForImage ? 'none' : 'block';
 
