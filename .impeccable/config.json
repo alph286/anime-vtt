@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "public/control/index.html"
+        ],
+        "createdAt": "2026-09-05T08:55:11.218Z",
+        "reason": "map-img has no static src by design — populated at runtime by loadMapMedia()/shared/media.js, identical to the pre-existing markup before this redesign"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "public/control/control.css"
+        ],
+        "createdAt": "2026-09-05T08:58:37.757Z",
+        "reason": "map-placeholder empty-canvas grid pattern, unchanged verbatim from the pre-redesign control.css — a functional empty-state indicator, not decorative striping"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "public/control/index.html"
+        ],
+        "createdAt": "2026-09-05T08:58:50.138Z",
+        "reason": "map-placeholder empty-canvas grid pattern (defined in control.css, attributed here by the detector), unchanged verbatim from the pre-redesign markup — a functional empty-state indicator, not decorative striping"
+      }
+    ]
+  }
+}

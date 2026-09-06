@@ -8,11 +8,20 @@
   display: none !important;
 }
 
+html, body {
+  height: 100%;
+  /* Tutto lo scroll vive dentro #control-tabs: la shell (e con essa la tab
+     bar in fondo) non deve mai scomparire sotto la piega per via di uno
+     scroll di pagina residuo. */
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
   background: var(--bg-page);
   color: var(--text-primary);
+  overscroll-behavior-y: none;
 }
 
 select, button, input[type="range"] {
@@ -21,77 +30,97 @@ select, button, input[type="range"] {
 }
 
 h2 {
-  font-size: 13px;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--text-secondary);
-  margin: 0 0 8px;
+  margin: 0 0 12px;
 }
 
-#wifi-dot {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 20;
-  transition: background-color 0.3s, opacity 0.3s;
-}
-
-#wifi-dot.ok {
-  background: #2e7d32;
-  opacity: 0;
-}
-
-#wifi-dot.bad {
-  background: #c62828;
-  opacity: 1;
-}
-
-#wifi-dot svg {
-  width: 18px;
-  height: 18px;
-  fill: #fff;
-}
+/* ---------- shell ---------- */
 
 #app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  padding: 16px;
-  gap: 16px;
-  max-width: 1400px;
+  /* 100vh su mobile è alto quanto la finestra CON la barra degli indirizzi
+     nascosta: al primo render (barra visibile) l'app risulta più alta dello
+     schermo reale e la tab bar in fondo finisce sotto la piega finché non
+     scrolli. dvh segue invece l'altezza visibile davvero in quel momento;
+     il valore vh resta come fallback per i browser che non conoscono dvh. */
+  height: 100vh;
+  height: 100dvh;
+  max-width: 720px;
   margin: 0 auto;
 }
 
-#map-column {
+/* ---------- barra di stato (wifi + location) ---------- */
+
+.status-bar {
+  flex-shrink: 0;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  padding-top: max(12px, env(safe-area-inset-top));
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
 }
 
-#control-column {
+#wifi-dot {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.3s, opacity 0.3s;
 }
 
-.row {
-  display: flex;
-  gap: 8px;
+#wifi-dot.ok {
+  background: transparent;
+  opacity: 0.35;
 }
 
-.row select {
+#wifi-dot.bad {
+  background: var(--danger-bg);
+  opacity: 1;
+  box-shadow: 0 0 0 1px var(--danger-border);
+}
+
+#wifi-dot svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--text-secondary);
+}
+
+#wifi-dot.bad svg {
+  fill: var(--danger-text);
+}
+
+.status-location {
   flex: 1;
+  min-width: 0;
   height: 44px;
+  padding: 0 12px;
   border-radius: 8px;
   border: 1px solid var(--border-control);
   background: var(--bg-control);
   color: var(--text-primary);
+  font-weight: 600;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a93a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+}
+
+/* ---------- banner anteprima / in onda ---------- */
+
+.confirm-row,
+.showing-banner {
+  flex-shrink: 0;
+  margin: 12px 14px 0;
 }
 
 .confirm-row {
@@ -103,8 +132,8 @@ h2 {
   color: var(--text-secondary);
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 .confirm-row strong {
@@ -115,24 +144,105 @@ h2 {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
+  font-weight: 600;
 }
 
 .showing-banner {
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
   color: var(--accent);
   background: var(--accent-bg-subtle);
   border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: 8px 12px;
+  border-radius: 10px;
+  padding: 10px 12px;
 }
+
+.showing-banner::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ---------- schede ---------- */
+
+#control-tabs {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-panel {
+  display: none;
+}
+
+#control-tabs[data-active-tab="mappa"] .tab-panel[data-tab="mappa"],
+#control-tabs[data-active-tab="fog"] .tab-panel[data-tab="fog"],
+#control-tabs[data-active-tab="immagini"] .tab-panel[data-tab="immagini"] {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tab-bar {
+  flex-shrink: 0;
+  display: flex;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 60px;
+  padding: 8px 4px 6px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.tab-btn .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.tab-btn.active {
+  color: var(--accent);
+}
+
+.tab-btn:disabled {
+  opacity: 0.35;
+}
+
+.tab-btn:active {
+  background: var(--accent-bg-subtle);
+}
+
+/* ---------- mappa: monitor + controlli ---------- */
 
 .map-preview {
   position: relative;
   width: 100%;
   aspect-ratio: var(--map-aspect, 4 / 3);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   background: var(--bg-canvas);
+  border: 1px solid var(--border-control);
 }
 
 .map-preview .media-wrap {
@@ -227,6 +337,8 @@ h2 {
   top: 8px;
   left: 8px;
   z-index: 6;
+  background: rgba(38, 43, 52, 0.85);
+  backdrop-filter: blur(4px);
 }
 
 #pan-mode-toggle.active {
@@ -250,6 +362,13 @@ h2 {
   touch-action: none;
 }
 
+.control-section {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
 .opacity-row {
   display: flex;
   align-items: center;
@@ -262,133 +381,19 @@ h2 {
   flex: 1;
 }
 
-.link-btn {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 13px;
-  color: var(--accent);
-}
-
-.list {
+.pan-zoom {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.fow-bulk {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.fow-bulk button {
-  flex: 1;
-}
-
-.fow-row {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  min-height: 48px;
-  border-radius: 8px;
-  border: 1px solid var(--border-control);
-  background: var(--bg-control);
-  font-size: 15px;
+  gap: 14px;
 }
 
-.fow-row.revealed {
-  background: var(--accent-bg-subtle);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.fow-state {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.fow-row.revealed .fow-state {
-  color: var(--accent);
-}
-
-.thumb-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.image-thumb {
-  position: relative;
-  width: 84px;
-  height: 84px;
-  border-radius: 8px;
-  border: 1px solid var(--border-control);
-  overflow: hidden;
-  padding: 0;
-  background: var(--bg-control);
-}
-
-.image-thumb.active {
-  border: 2px solid var(--accent);
-}
-
-.image-thumb-label {
-  position: absolute;
-  inset: auto 0 0 0;
-  font-size: 11px;
-  line-height: 1.3;
-  padding: 2px 4px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.image-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.hint {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid var(--border-control);
-  background: var(--bg-control);
-  color: var(--text-primary);
-  padding: 10px 14px;
-  min-height: 44px;
-}
-
-button.primary {
-  width: 100%;
-  background: var(--bg-control);
-  color: var(--text-primary);
-  border: 1px solid var(--border-control);
-  padding: 12px;
-}
-
-button.confirm {
-  background: var(--danger);
-  border-color: var(--danger);
-  color: #fff;
-}
-
-.pan-zoom {
+/* Reset e zoom restano sempre sulla stessa riga, uno accanto all'altro:
+   lo zoom non deve mai "cadere" sotto al tastierino di pan. */
+.zoom-controls {
   display: flex;
   align-items: center;
   gap: 16px;
-  flex-wrap: wrap;
 }
 
 .pad {
@@ -434,32 +439,124 @@ button.confirm {
   font-size: 13px;
 }
 
-@media (min-width: 700px) {
-  #app {
-    flex-direction: row;
-    align-items: stretch;
-    height: 100vh;
-    padding: 20px;
-  }
+/* ---------- fog of war (scheda) ---------- */
 
-  #map-column {
-    flex: 1 1 62%;
-    min-width: 0;
-  }
+.hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
 
-  .map-preview {
-    aspect-ratio: auto;
-    flex: 1;
-    min-height: 0;
-  }
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
-  #control-column {
-    flex: 1 1 38%;
-    min-width: 300px;
-    max-width: 460px;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
+.fow-bulk {
+  display: flex;
+  gap: 8px;
+}
+
+.fow-bulk button {
+  flex: 1;
+}
+
+.fow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  min-height: 48px;
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  font-size: 15px;
+}
+
+.fow-row.revealed {
+  background: var(--accent-bg-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fow-state {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.fow-row.revealed .fow-state {
+  color: var(--accent);
+}
+
+/* ---------- immagini (scheda) ---------- */
+
+.thumb-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.image-thumb {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  overflow: hidden;
+  padding: 0;
+  background: var(--bg-control);
+}
+
+.image-thumb.active {
+  border: 2px solid var(--accent);
+}
+
+.image-thumb-label {
+  position: absolute;
+  inset: auto 0 0 0;
+  font-size: 11px;
+  line-height: 1.3;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ---------- pulsanti generici ---------- */
+
+button {
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
+  padding: 10px 14px;
+  min-height: 44px;
+}
+
+button.primary {
+  width: 100%;
+  background: var(--bg-control);
+  color: var(--text-primary);
+  border: 1px solid var(--border-control);
+  padding: 12px;
+}
+
+button.confirm {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
 }
 
 button, .fog-overlay, .image-thumb, .fow-row, select, #pan-mode-toggle {
@@ -476,4 +573,69 @@ button:active, .fow-row:active, .image-thumb:active {
 .map-preview .fog-overlay:active {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+/* ---------- schermi larghi ---------- */
+
+@media (min-width: 700px) {
+  #app {
+    max-width: 1100px;
+    padding: 20px;
+  }
+
+  .status-bar,
+  .confirm-row,
+  .showing-banner {
+    margin-left: 0;
+    margin-right: 0;
+    border-radius: 12px;
+  }
+
+  .status-bar {
+    border-radius: 12px 12px 0 0;
+    border-bottom: none;
+  }
+
+  #control-tabs {
+    padding: 0;
+    margin-top: 16px;
+  }
+
+  #control-tabs[data-active-tab] {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr);
+    align-items: start;
+    gap: 20px;
+  }
+
+  /* La mappa e i suoi comandi live restano sempre visibili accanto al
+     resto: solo Fog/Immagini restano schede vere, la Mappa smette di
+     esserlo perché lo spazio in orizzontale c'è già tutto. Finché la
+     scheda attiva è "mappa" (stato iniziale, condiviso con il mobile) la
+     colonna di destra mostra Fog di default; Immagini prende il suo posto
+     solo quando è quella la scheda selezionata. */
+  #control-tabs[data-active-tab] .tab-panel[data-tab="mappa"] {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #control-tabs[data-active-tab="mappa"] .tab-panel[data-tab="fog"] {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .map-preview {
+    aspect-ratio: auto;
+    min-height: 420px;
+  }
+
+  .tab-bar {
+    border-radius: 0 0 12px 12px;
+  }
+
+  .tab-btn[data-tab-target="mappa"] {
+    display: none;
+  }
 }

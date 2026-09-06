@@ -42,6 +42,10 @@ const fowHideAllBtn = document.getElementById('fow-hide-all');
 const fowRevealAllBtn = document.getElementById('fow-reveal-all');
 const viewportRect = document.getElementById('viewport-rect');
 const panModeToggle = document.getElementById('pan-mode-toggle');
+const controlTabs = document.getElementById('control-tabs');
+const tabBar = document.getElementById('tab-bar');
+const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+const immaginiTabBtn = document.querySelector('.tab-btn[data-tab-target="immagini"]');
 
 function updateWifi() {
   const ok = socketConnected && displayConnected;
@@ -74,6 +78,30 @@ window.addEventListener('resize', () => {
   updateViewportRect(previewLocation);
 });
 
+// Le tre schede (Mappa / Fog / Immagini) sono un cambio di composizione,
+// non di funzionalità: mostrano/nascondono gli stessi pannelli di sempre.
+// Sugli schermi larghi (vedi media query in control.css) la scheda Mappa
+// resta comunque sempre visibile, il CSS ignora activeTab per quel pannello.
+function setActiveTab(tab) {
+  controlTabs.dataset.activeTab = tab;
+  tabButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tabTarget === tab));
+  // #map-preview può passare da display:none a visibile (o cambiare
+  // colonna, sui layout larghi) quando si cambia scheda: le sue misure
+  // (clientWidth/Height) erano 0 o diverse finché non era in vista, quindi
+  // vanno ricalcolate esattamente come al resize della finestra.
+  if (state) {
+    const previewLocation = getPreviewLocation();
+    renderMapPreview(previewLocation);
+    updateViewportRect(previewLocation);
+  }
+}
+
+tabBar.addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab-btn');
+  if (!btn || btn.disabled) return;
+  setActiveTab(btn.dataset.tabTarget);
+});
+
 let previewLocationId = null;
 
 function getActiveLocation() {
@@ -98,6 +126,10 @@ function render() {
     previewBannerName.textContent = previewLocation.name;
   }
   imagesSection.style.display = isPreviewing ? 'none' : 'block';
+  if (immaginiTabBtn) {
+    immaginiTabBtn.disabled = isPreviewing;
+    if (isPreviewing && controlTabs.dataset.activeTab === 'immagini') setActiveTab('mappa');
+  }
 
   if (showingImage && location) {
     const shownImg = (location.images || []).find((i) => i.id === state.activeImageId);

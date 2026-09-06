@@ -10,95 +10,120 @@
 <body>
 <svg style="display:none">
   <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2Z"/><path d="M9 3v16M15 5v16"/></symbol>
+  <symbol id="i-fog" viewBox="0 0 24 24"><path d="M3 8h13M3 12h18M3 16h13"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4.5 18 5.5-6 4 4.5L18 12l1.5 2.5"/></symbol>
 </svg>
 
-<div id="wifi-dot" class="bad">
-  <svg viewBox="0 0 24 24"><path d="M12 20a1.6 1.6 0 1 0 0-3.2A1.6 1.6 0 0 0 12 20Zm-6.4-6.2a9 9 0 0 1 12.8 0l-2 2a6.2 6.2 0 0 0-8.8 0l-2-2Zm-3.8-4a14 14 0 0 1 20.4 0l-2 2a11.2 11.2 0 0 0-16.4 0l-2-2Z"/></svg>
-</div>
-
 <div id="app">
-  <div id="map-column">
-    <div id="showing-banner" class="showing-banner" hidden>Stai mostrando <strong id="showing-banner-name"></strong> ai giocatori</div>
-    <div id="map-preview" class="map-preview">
-      <div class="media-wrap" id="map-media-wrap">
-        <div class="fit-box" id="map-fit-box">
-          <img id="map-img" class="media-img" draggable="false" hidden>
-          <video id="map-video" class="media-img" muted loop playsinline disablepictureinpicture hidden></video>
-          <div class="map-placeholder" id="map-placeholder" hidden></div>
-          <div class="fog-layer" id="map-fog-layer"></div>
-        </div>
-      </div>
-      <div id="viewport-rect" hidden></div>
-      <button id="pan-mode-toggle" class="icon-btn" title="Sposta inquadratura trascinando" disabled>
-        <svg class="icon"><use href="#i-move"></use></svg>
-      </button>
+  <header id="status-bar" class="status-bar">
+    <div id="wifi-dot" class="bad">
+      <svg viewBox="0 0 24 24"><path d="M12 20a1.6 1.6 0 1 0 0-3.2A1.6 1.6 0 0 0 12 20Zm-6.4-6.2a9 9 0 0 1 12.8 0l-2 2a6.2 6.2 0 0 0-8.8 0l-2-2Zm-3.8-4a14 14 0 0 1 20.4 0l-2 2a11.2 11.2 0 0 0-16.4 0l-2-2Z"/></svg>
     </div>
+    <select id="location-select" class="status-location"></select>
+  </header>
+
+  <div id="preview-banner" class="confirm-row" hidden>
+    <span>Anteprima: <strong id="preview-banner-name"></strong> — non visibile ai giocatori</span>
+    <button id="preview-send">Invia al display</button>
+    <button id="preview-cancel">Annulla anteprima</button>
   </div>
+  <div id="showing-banner" class="showing-banner" hidden>Stai mostrando <strong id="showing-banner-name"></strong> ai giocatori</div>
 
-  <div id="control-column">
-    <div class="row">
-      <select id="location-select"></select>
-    </div>
-    <div id="preview-banner" class="confirm-row" hidden>
-      <span>Anteprima: <strong id="preview-banner-name"></strong> — non visibile ai giocatori</span>
-      <button id="preview-send">Invia al display</button>
-      <button id="preview-cancel">Annulla anteprima</button>
-    </div>
+  <div id="control-tabs" data-active-tab="mappa">
 
-    <section id="grid-opacity-section">
-      <h2>Opacità griglia</h2>
-      <div class="zoom">
-        <button id="grid-opacity-out" title="Riduci opacità griglia">−</button>
-        <span id="grid-opacity-level">100%</span>
-        <button id="grid-opacity-in" title="Aumenta opacità griglia">+</button>
-      </div>
-    </section>
-
-    <section id="pan-zoom-section">
-      <h2>Vista live sulla mappa (pan / zoom)</h2>
-      <div class="pan-zoom">
-        <div class="pad">
-          <span></span>
-          <button data-pan="0,1">▲</button>
-          <span></span>
-          <button data-pan="1,0">◀</button>
-          <span></span>
-          <button data-pan="-1,0">▶</button>
-          <span></span>
-          <button data-pan="0,-1">▼</button>
-          <span></span>
+    <div class="tab-panel" data-tab="mappa">
+      <div id="map-column">
+        <div id="map-preview" class="map-preview">
+          <div class="media-wrap" id="map-media-wrap">
+            <div class="fit-box" id="map-fit-box">
+              <img id="map-img" class="media-img" draggable="false" hidden>
+              <video id="map-video" class="media-img" muted loop playsinline disablepictureinpicture hidden></video>
+              <div class="map-placeholder" id="map-placeholder" hidden></div>
+              <div class="fog-layer" id="map-fog-layer"></div>
+            </div>
+          </div>
+          <div id="viewport-rect" hidden></div>
+          <button id="pan-mode-toggle" class="icon-btn" title="Sposta inquadratura trascinando" disabled>
+            <svg class="icon"><use href="#i-move"></use></svg>
+          </button>
         </div>
-        <button id="view-reset" title="Reset vista">⟳</button>
+      </div>
+
+      <section id="pan-zoom-section" class="control-section">
+        <h2>Pan / zoom live</h2>
+        <div class="pan-zoom">
+          <div class="pad">
+            <span></span>
+            <button data-pan="0,1">▲</button>
+            <span></span>
+            <button data-pan="1,0">◀</button>
+            <span></span>
+            <button data-pan="-1,0">▶</button>
+            <span></span>
+            <button data-pan="0,-1">▼</button>
+            <span></span>
+          </div>
+          <div class="zoom-controls">
+            <button id="view-reset" title="Reset vista">⟳</button>
+            <div class="zoom">
+              <button id="zoom-out" title="Riduci zoom">−</button>
+              <span id="zoom-level">100%</span>
+              <button id="zoom-in" title="Aumenta zoom">+</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="grid-opacity-section" class="control-section">
+        <h2>Opacità griglia</h2>
         <div class="zoom">
-          <button id="zoom-out" title="Riduci zoom">−</button>
-          <span id="zoom-level">100%</span>
-          <button id="zoom-in" title="Aumenta zoom">+</button>
+          <button id="grid-opacity-out" title="Riduci opacità griglia">−</button>
+          <span id="grid-opacity-level">100%</span>
+          <button id="grid-opacity-in" title="Aumenta opacità griglia">+</button>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section>
-      <h2>Fog of war — tocca una zona per rivelarla/nasconderla</h2>
+      <section class="control-section">
+        <div class="opacity-row">
+          <label for="fog-opacity">Opacità FOG</label>
+          <input type="range" id="fog-opacity" min="0" max="100" value="45">
+        </div>
+      </section>
+    </div>
+
+    <div class="tab-panel" data-tab="fog">
+      <p class="hint">Tocca una zona per rivelarla o nasconderla.</p>
       <div class="fow-bulk">
         <button id="fow-hide-all">Nascondi tutto</button>
         <button id="fow-reveal-all">Rivela tutto</button>
       </div>
       <div id="fow-list" class="list"></div>
-    </section>
+    </div>
 
-    <section id="images-section">
-      <h2>Immagini</h2>
-      <div id="images-list" class="thumb-row"></div>
-      <button id="back-to-map" class="primary">Torna alla mappa</button>
-    </section>
+    <div class="tab-panel" data-tab="immagini">
+      <section id="images-section">
+        <div id="images-list" class="thumb-row"></div>
+        <button id="back-to-map" class="primary">Torna alla mappa</button>
+      </section>
+    </div>
 
-    <section>
-      <div class="opacity-row">
-        <label for="fog-opacity">opacità fog (solo qui, non sul display)</label>
-        <input type="range" id="fog-opacity" min="0" max="100" value="45">
-      </div>
-    </section>
   </div>
+
+  <nav id="tab-bar" class="tab-bar">
+    <button class="tab-btn active" data-tab-target="mappa">
+      <svg class="icon"><use href="#i-map"></use></svg>
+      <span>Mappa</span>
+    </button>
+    <button class="tab-btn" data-tab-target="fog">
+      <svg class="icon"><use href="#i-fog"></use></svg>
+      <span>Fog</span>
+    </button>
+    <button class="tab-btn" data-tab-target="immagini">
+      <svg class="icon"><use href="#i-image"></use></svg>
+      <span>Immagini</span>
+    </button>
+  </nav>
 </div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/shared/media.js"></script>
