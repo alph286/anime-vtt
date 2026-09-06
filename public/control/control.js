@@ -297,8 +297,15 @@ function renderMapPreview(location) {
     activeMapEl = loadMapMedia(mapImg, mapVideo, location.map.file, `/storage/maps/${location.map.file}`, () => {
       const nw = mediaW(activeMapEl);
       const nh = mediaH(activeMapEl);
-      if (nw && nh) mapPreview.style.setProperty('--map-aspect', `${nw} / ${nh}`);
       const rotation = computeTotalRotation(nw, nh, location.map.flip180, location.map.rotate90);
+      // Il contenitore deve avere la forma del contenuto DOPO la rotazione,
+      // non quella grezza dell'immagine -- altrimenti, per una mappa che
+      // viene ruotata di 90°/270° (es. ogni mappa verticale: l'auto-rotazione
+      // la ruota per riempire meglio uno schermo orizzontale), il riquadro
+      // resta della forma "sbagliata" e il fit lascia due bande vuote sopra
+      // e sotto (o ai lati) l'immagine.
+      const swapped = rotation === 90 || rotation === 270;
+      if (nw && nh) mapPreview.style.setProperty('--map-aspect', swapped ? `${nh} / ${nw}` : `${nw} / ${nh}`);
       const effective = layoutMapWrap(mapPreview, mapMediaWrap, rotation);
       const rect = fitRect(effective.width, effective.height, nw, nh);
       positionFitBox(mapFitBox, rect);
