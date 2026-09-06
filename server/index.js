@@ -7,7 +7,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState, applyStartupDefault, DEFAULT_GRID } = require('./state');
+const { loadState, saveState, applyStartupDefault, DEFAULT_GRID, DATA_DIR } = require('./state');
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -16,10 +16,19 @@ const PORT = process.env.PORT || 3000;
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'storage');
 const MAPS_DIR = path.join(STORAGE_DIR, 'maps');
 const IMAGES_DIR = path.join(STORAGE_DIR, 'images');
+const IMPORTS_DIR = path.join(DATA_DIR, 'imports');
+const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 
-for (const dir of [MAPS_DIR, IMAGES_DIR]) {
+for (const dir of [MAPS_DIR, IMAGES_DIR, IMPORTS_DIR, BACKUPS_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
+
+// Nessun token di importazione in sospeso può essere ancora valido dopo un
+// riavvio (vive solo in memoria nel browser che ha caricato il file): ripulisci
+// eventuali file temporanei rimasti da una sessione precedente.
+fs.readdirSync(IMPORTS_DIR).forEach((f) => {
+  try { fs.unlinkSync(path.join(IMPORTS_DIR, f)); } catch (err) { /* best effort */ }
+});
 
 let state = applyStartupDefault(loadState());
 
@@ -78,6 +87,13 @@ function deleteUploadedFile(dir, filename) {
   } catch (err) {
     if (err.code !== 'ENOENT') console.error(`Impossibile eliminare ${target}:`, err.message);
   }
+}
+
+function resolveImportPath(token) {
+  if (!token || typeof token !== 'string') return null;
+  const target = path.resolve(IMPORTS_DIR, token);
+  if (path.dirname(target) !== path.resolve(IMPORTS_DIR)) return null;
+  return target;
 }
 
 // Un file è orfano solo se NESSUNA location — attiva o archiviata — lo
@@ -198,6 +214,76 @@ app.get('/api/export/backup', (req, res) => {
     console.error('Export backup fallito:', err.message);
     res.destroy();
   });
+});
+
+const uploadImportFile = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, IMPORTS_DIR),
+    filename: (req, file, cb) => cb(null, `${nanoid()}.tar`)
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 * 1024 }
+});
+
+app.post('/api/import/inspect', uploadImportFile.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'file mancante' });
+  try {
+    const result = await exportImport.inspectImport(req.file.path);
+    res.json({ token: req.file.filename, kind: result.kind, summary: result.summary });
+  } catch (err) {
+    fs.unlink(req.file.path, () => {});
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/import/cancel', (req, res) => {
+  const filePath = resolveImportPath(req.body.token);
+  if (filePath) fs.unlink(filePath, () => {});
+  res.json({ ok: true });
+});
+
+app.post('/api/import/apply', async (req, res) => {
+  const filePath = resolveImportPath(req.body.token);
+  if (!filePath || !fs.existsSync(filePath)) {
+    return res.status(400).json({ error: 'Importazione scaduta o non trovata: ricarica il file.' });
+  }
+  try {
+    const manifest = await exportImport.readManifest(filePath);
+    if (manifest.kind === 'location') {
+      const newLocation = await exportImport.applyLocationImport(filePath, manifest, MAPS_DIR, IMAGES_DIR);
+      state.locations.push(newLocation);
+      saveState(state);
+      broadcastState();
+      res.json({ ok: true, kind: 'location', name: newLocation.name });
+    } else if (manifest.kind === 'backup') {
+      const oldMapFiles = new Set();
+      const oldImageFiles = new Set();
+      state.locations.forEach((l) => {
+        if (l.map.file) oldMapFiles.add(l.map.file);
+        (l.images || []).forEach((img) => oldImageFiles.add(img.file));
+      });
+
+      await exportImport.saveSafetySnapshot(state, MAPS_DIR, IMAGES_DIR, BACKUPS_DIR);
+      const restored = await exportImport.applyBackupRestore(filePath, manifest, MAPS_DIR, IMAGES_DIR);
+
+      state.locations = restored.locations;
+      state.campaign = restored.campaign;
+      state.gridPreset = restored.gridPreset;
+      applyStartupDefault(state);
+      saveState(state);
+
+      oldMapFiles.forEach((f) => deleteUploadedFile(MAPS_DIR, f));
+      oldImageFiles.forEach((f) => deleteUploadedFile(IMAGES_DIR, f));
+
+      broadcastState();
+      res.json({ ok: true, kind: 'backup', locationCount: state.locations.length });
+    } else {
+      res.status(400).json({ error: `Tipo di file sconosciuto: "${manifest.kind}"` });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    fs.unlink(filePath, () => {});
+  }
 });
 
 const server = http.createServer(app);
