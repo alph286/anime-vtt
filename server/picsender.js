@@ -56,7 +56,10 @@ async function sendViaPicsender(picsenderId, destinationIndex, caption) {
 async function deleteFromPicsender(picsenderId) {
   try {
     const base = baseUrl();
-    await fetch(`${base}/api/images/${picsenderId}`, { method: 'DELETE' });
+    const res = await fetch(`${base}/api/images/${picsenderId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      console.error('Pulizia PicSender fallita (non bloccante): PicSender ha risposto', res.status);
+    }
   } catch (err) {
     console.error('Pulizia PicSender fallita (non bloccante):', err.message);
   }
@@ -79,6 +82,9 @@ async function sendImage({ filePath, caption, destinationName }) {
     destinations = await getDestinations();
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+  if (!Array.isArray(destinations)) {
+    return { ok: false, error: 'PicSender ha risposto con un formato inatteso per le destinazioni' };
   }
   const dest = destinations.find((d) => d.name === destinationName);
   if (!dest) {

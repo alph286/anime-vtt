@@ -68,6 +68,14 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
   socketConnected = false;
   updateWifi();
+  // Un invio in corso non riceverà mai la sua risposta se la riconnessione
+  // ottiene un nuovo socket id (la risposta del server arriverebbe al
+  // vecchio socket, ormai morto): senza questo reset il flag resterebbe
+  // bloccato a true per sempre, con "Invia" disabilitato su ogni immagine.
+  telegramSendPending = false;
+  telegramSendFeedback = null;
+  clearTimeout(telegramSendFeedbackTimeout);
+  if (state) render();
 });
 socket.on('display:status', ({ connected }) => {
   displayConnected = connected;
