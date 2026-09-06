@@ -9,6 +9,8 @@ const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { loadState, saveState, applyStartupDefault, DEFAULT_GRID } = require('./state');
 const picsender = require('./picsender');
+const tar = require('tar-stream');
+const exportImport = require('./exportImport');
 
 const PORT = process.env.PORT || 3000;
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'storage');
@@ -168,6 +170,32 @@ app.get('/api/telegram/destinations', async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
+});
+
+app.get('/api/export/location/:id', (req, res) => {
+  const location = state.locations.find((l) => l.id === req.params.id);
+  if (!location) return res.status(404).json({ error: 'location non trovata' });
+  const pack = tar.pack();
+  const safeName = (location.name || 'location').replace(/[^\w\-. ]/g, '').trim() || 'location';
+  res.setHeader('Content-Type', 'application/x-tar');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}.vttlocation"`);
+  pack.pipe(res);
+  exportImport.writeLocationArchive(pack, location, MAPS_DIR, IMAGES_DIR).catch((err) => {
+    console.error('Export location fallito:', err.message);
+    res.destroy();
+  });
+});
+
+app.get('/api/export/backup', (req, res) => {
+  const pack = tar.pack();
+  const date = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'application/x-tar');
+  res.setHeader('Content-Disposition', `attachment; filename="backup-${date}.vttbackup"`);
+  pack.pipe(res);
+  exportImport.writeBackupArchive(pack, state, MAPS_DIR, IMAGES_DIR).catch((err) => {
+    console.error('Export backup fallito:', err.message);
+    res.destroy();
+  });
 });
 
 const server = http.createServer(app);
