@@ -105,6 +105,16 @@ window.addEventListener('resize', () => {
   }
 });
 
+// null = non ancora caricate; [] = caricate ma vuote, o PicSender non
+// raggiungibile — in entrambi i casi la tendina destinazione va disabilitata.
+let telegramDestinations = null;
+
+fetch('/api/telegram/destinations')
+  .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+  .then((list) => { telegramDestinations = list; })
+  .catch(() => { telegramDestinations = []; })
+  .then(() => { if (state) render(); });
+
 function getActiveLocation() {
   return state.locations.find((l) => l.id === state.activeLocationId);
 }
@@ -873,27 +883,53 @@ removeMapBtn.addEventListener('click', async () => {
 const armedImageDeletes = new Set();
 const imageDeleteTimers = new Map();
 
+function renderDestinationOptions(selectedName) {
+  if (telegramDestinations === null) {
+    return '<option value="">Caricamento…</option>';
+  }
+  if (!telegramDestinations.length) {
+    return '<option value="">Destinazioni non disponibili</option>';
+  }
+  return ['<option value="">— scegli destinazione —</option>']
+    .concat(
+      telegramDestinations.map(
+        (d) => `<option value="${escapeHtml(d.name)}" ${d.name === selectedName ? 'selected' : ''}>${escapeHtml(d.name)}</option>`
+      )
+    )
+    .join('');
+}
+
 function renderImageList(location) {
   const images = location.images || [];
   if (!images.length) {
     imageList.innerHTML = '<p class="hint">nessuna immagine per questa location</p>';
     return;
   }
+  const destinationsUnavailable = telegramDestinations !== null && !telegramDestinations.length;
   imageList.innerHTML = images
     .map((img) => {
       const armed = armedImageDeletes.has(img.id);
       return `
-        <div class="image-editor-row" data-id="${img.id}">
-          <button class="image-thumb-btn" data-preview="${img.id}" title="Anteprima a schermo intero">
-            <img src="/storage/images/${img.file}" alt="${escapeHtml(img.name)}">
-            <svg class="icon thumb-overlay-icon"><use href="#i-expand"></use></svg>
-          </button>
-          <input type="text" class="image-name-input" value="${escapeHtml(img.name)}"
-                 data-name-for="${img.id}" placeholder="etichetta">
-          <button class="icon-btn image-delete ${armed ? 'confirm' : ''}" data-delete="${img.id}"
-                  title="${armed ? 'Click di nuovo per confermare' : 'Elimina immagine'}">
-            <svg class="icon"><use href="#i-trash"></use></svg>
-          </button>
+        <div class="image-card" data-id="${img.id}">
+          <div class="image-editor-row">
+            <button class="image-thumb-btn" data-preview="${img.id}" title="Anteprima a schermo intero">
+              <img src="/storage/images/${img.file}" alt="${escapeHtml(img.name)}">
+              <svg class="icon thumb-overlay-icon"><use href="#i-expand"></use></svg>
+            </button>
+            <input type="text" class="image-name-input" value="${escapeHtml(img.name)}"
+                   data-name-for="${img.id}" placeholder="etichetta">
+            <button class="icon-btn image-delete ${armed ? 'confirm' : ''}" data-delete="${img.id}"
+                    title="${armed ? 'Click di nuovo per confermare' : 'Elimina immagine'}">
+              <svg class="icon"><use href="#i-trash"></use></svg>
+            </button>
+          </div>
+          <div class="image-meta-row">
+            <input type="text" class="image-caption-input" value="${escapeHtml(img.caption || '')}"
+                   data-caption-for="${img.id}" placeholder="didascalia per Telegram">
+            <select class="image-destination-select" data-destination-for="${img.id}" ${telegramDestinations === null || destinationsUnavailable ? 'disabled' : ''}>
+              ${renderDestinationOptions(img.telegramDestination)}
+            </select>
+          </div>
         </div>
       `;
     })
@@ -932,17 +968,36 @@ imageList.addEventListener('click', (e) => {
 });
 
 imageList.addEventListener('change', (e) => {
-  const input = e.target.closest('input[data-name-for]');
-  if (!input) return;
-  socket.emit('image:rename', {
-    locationId: state.activeLocationId,
-    imageId: input.dataset.nameFor,
-    name: input.value
-  });
+  const nameInput = e.target.closest('input[data-name-for]');
+  if (nameInput) {
+    socket.emit('image:rename', {
+      locationId: state.activeLocationId,
+      imageId: nameInput.dataset.nameFor,
+      name: nameInput.value
+    });
+    return;
+  }
+  const captionInput = e.target.closest('input[data-caption-for]');
+  if (captionInput) {
+    socket.emit('image:caption', {
+      locationId: state.activeLocationId,
+      imageId: captionInput.dataset.captionFor,
+      caption: captionInput.value
+    });
+    return;
+  }
+  const destinationSelect = e.target.closest('select[data-destination-for]');
+  if (destinationSelect) {
+    socket.emit('image:destination', {
+      locationId: state.activeLocationId,
+      imageId: destinationSelect.dataset.destinationFor,
+      destination: destinationSelect.value || null
+    });
+  }
 });
 
 imageList.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.matches('input[data-name-for]')) e.target.blur();
+  if (e.key === 'Enter' && e.target.matches('input[data-name-for], input[data-caption-for]')) e.target.blur();
 });
 
 function openLightbox(image) {

@@ -594,6 +594,31 @@ button:disabled {
   height: 16px;
 }
 
+.image-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.image-meta-row {
+  display: flex;
+  gap: 8px;
+}
+
+.image-caption-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  font-size: 13px;
+}
+
+.image-destination-select {
+  flex: 0 0 auto;
+  min-width: 160px;
+  height: 32px;
+  font-size: 13px;
+}
+
 .lightbox {
   position: fixed;
   inset: 0;
