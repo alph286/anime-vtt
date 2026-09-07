@@ -28,6 +28,7 @@
   <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9 6.4 20l1.4-6.3-4.8-4.3 6.4-.6z"/></symbol>
   <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></symbol>
   <symbol id="i-sort-az" viewBox="0 0 24 24"><path d="M4 6h6M4 12h9M4 18h12M18 4v14M18 18l3-3M18 18l-3-3"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></symbol>
 </svg>
 
 <header class="topbar">
@@ -35,7 +36,28 @@
   <button id="location-create" class="icon-btn" title="Nuova location">
     <svg class="icon"><use href="#i-plus"></use></svg>
   </button>
+  <div class="menu-wrap">
+    <button id="backup-menu-toggle" class="icon-btn" title="Esporta / importa">
+      <svg class="icon"><use href="#i-more"></use></svg>
+    </button>
+    <div id="backup-menu" class="dropdown-menu" hidden>
+      <button id="export-location-btn" class="dropdown-item">Esporta «<span id="export-location-name"></span>»</button>
+      <button id="export-backup-btn" class="dropdown-item">Esporta backup completo</button>
+      <button id="import-btn" class="dropdown-item">Importa...</button>
+    </div>
+  </div>
+  <input type="file" id="import-file-input" accept=".vttlocation,.vttbackup" hidden>
 </header>
+
+<p id="import-error" class="hint warning" hidden></p>
+
+<div id="import-confirm" class="import-confirm" hidden>
+  <p id="import-confirm-text"></p>
+  <div class="import-confirm-actions">
+    <button id="import-confirm-yes"></button>
+    <button id="import-confirm-no">Annulla</button>
+  </div>
+</div>
 
 <main class="editor-layout">
   <section class="col col-map">

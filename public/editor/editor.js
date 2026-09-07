@@ -15,6 +15,19 @@ let currentRotation = 0;
 
 const locationSelect = document.getElementById('location-select');
 const locationCreateBtn = document.getElementById('location-create');
+const backupMenuToggle = document.getElementById('backup-menu-toggle');
+const backupMenu = document.getElementById('backup-menu');
+const exportLocationBtn = document.getElementById('export-location-btn');
+const exportLocationName = document.getElementById('export-location-name');
+const exportBackupBtn = document.getElementById('export-backup-btn');
+const importBtn = document.getElementById('import-btn');
+const importFileInput = document.getElementById('import-file-input');
+const importError = document.getElementById('import-error');
+const importConfirm = document.getElementById('import-confirm');
+const importConfirmText = document.getElementById('import-confirm-text');
+const importConfirmYes = document.getElementById('import-confirm-yes');
+const importConfirmNo = document.getElementById('import-confirm-no');
+let pendingImportToken = null;
 const locationList = document.getElementById('location-list');
 const locationArchivedWrap = document.getElementById('location-archived-wrap');
 const locationArchivedList = document.getElementById('location-archived-list');
@@ -136,6 +149,9 @@ function bindNumberCommit(numEl, min, max, onChange) {
 
 function render() {
   const location = getActiveLocation();
+
+  exportLocationBtn.disabled = !location;
+  exportLocationName.textContent = location ? location.name : '—';
 
   locationSelect.innerHTML =
     (state.activeLocationId ? '' : '<option value="" selected disabled hidden>— nessuna location —</option>') +
@@ -1281,4 +1297,97 @@ orphansPurgeBtn.addEventListener('click', async () => {
   orphansPurgeBtn.hidden = true;
   orphansPurgeBtn.classList.remove('confirm');
   orphansList.innerHTML = `cancellati ${data.deleted.length} file.`;
+});
+
+backupMenuToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  backupMenu.hidden = !backupMenu.hidden;
+});
+document.addEventListener('click', () => { backupMenu.hidden = true; });
+backupMenu.addEventListener('click', (e) => e.stopPropagation());
+
+exportLocationBtn.addEventListener('click', () => {
+  if (!state.activeLocationId) return;
+  backupMenu.hidden = true;
+  window.location.href = `/api/export/location/${state.activeLocationId}`;
+});
+
+exportBackupBtn.addEventListener('click', () => {
+  backupMenu.hidden = true;
+  window.location.href = '/api/export/backup';
+});
+
+importBtn.addEventListener('click', () => {
+  backupMenu.hidden = true;
+  importFileInput.value = '';
+  importFileInput.click();
+});
+
+function formatExportDate(iso) {
+  try {
+    return new Date(iso).toLocaleDateString('it-IT');
+  } catch (err) {
+    return iso;
+  }
+}
+
+importFileInput.addEventListener('change', async () => {
+  const file = importFileInput.files[0];
+  if (!file) return;
+  importError.hidden = true;
+  importBtn.disabled = true;
+  importBtn.textContent = 'Analisi in corso...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/import/inspect', { method: 'POST', body: formData });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Importazione fallita');
+    pendingImportToken = body.token;
+    importConfirm.classList.toggle('danger', body.kind === 'backup');
+    if (body.kind === 'location') {
+      importConfirmText.textContent = `Importare la location «${body.summary.locationName}», esportata il ${formatExportDate(body.summary.exportedAt)}?`;
+      importConfirmYes.textContent = 'Importa';
+    } else {
+      importConfirmText.textContent = `Questo SOSTITUIRÀ tutte le ${state.locations.length} location attuali con le ${body.summary.locationCount} contenute nel backup, esportato il ${formatExportDate(body.summary.exportedAt)}. Una copia di sicurezza dei dati attuali verrà salvata automaticamente prima.`;
+      importConfirmYes.textContent = 'Sostituisci tutto';
+    }
+    importConfirm.hidden = false;
+  } catch (err) {
+    importError.textContent = err.message;
+    importError.hidden = false;
+  } finally {
+    importBtn.disabled = false;
+    importBtn.textContent = 'Importa...';
+  }
+});
+
+importConfirmNo.addEventListener('click', () => {
+  importConfirm.hidden = true;
+  if (pendingImportToken) {
+    fetch('/api/import/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: pendingImportToken })
+    });
+  }
+  pendingImportToken = null;
+});
+
+importConfirmYes.addEventListener('click', async () => {
+  const token = pendingImportToken;
+  importConfirm.hidden = true;
+  pendingImportToken = null;
+  try {
+    const res = await fetch('/api/import/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Importazione fallita');
+  } catch (err) {
+    importError.textContent = err.message;
+    importError.hidden = false;
+  }
 });
