@@ -62,6 +62,7 @@ const gridOpacityNum = document.getElementById('grid-opacity-num');
 const gridSavePresetBtn = document.getElementById('grid-save-preset');
 const gridApplyPresetBtn = document.getElementById('grid-apply-preset');
 
+const mapCanvasWrap = document.getElementById('map-canvas-wrap');
 const mapCanvas = document.getElementById('map-canvas');
 const mapCanvasZoom = document.getElementById('map-canvas-zoom');
 const mapMediaWrap = document.getElementById('map-media-wrap');
@@ -376,13 +377,17 @@ function pointFromClientXY(clientX, clientY) {
   return [Math.min(100, Math.max(0, x)), Math.min(100, Math.max(0, y))];
 }
 
-// Percentuale rispetto al riquadro DI #map-canvas (non di overlayBox, che è
-// dentro la parte che ruota con la mappa): la rosa dei venti è un elemento
+// Percentuale rispetto al riquadro DI #map-canvas-wrap (non di overlayBox, che
+// è dentro la parte che ruota con la mappa): la rosa dei venti è un elemento
 // fisso sullo schermo, non un dato mappa -- stessa idea di come si comporta
 // su /display, dove #viewport (l'equivalente del riquadro dello schermo) non
 // ruota mai insieme a #map-media-wrap.
+// Si misura il wrapper e non #map-canvas perché quest'ultimo può scorrere
+// (overflow:auto): il suo getBoundingClientRect() riporta comunque il riquadro
+// visibile non scrollato, mentre #compass-drag -- se ci vivesse dentro --
+// scorrerebbe col contenuto, e i due spazi divergerebbero dello scroll.
 function canvasPointFromClientXY(clientX, clientY) {
-  const rect = mapCanvas.getBoundingClientRect();
+  const rect = mapCanvasWrap.getBoundingClientRect();
   const x = ((clientX - rect.left) / rect.width) * 100;
   const y = ((clientY - rect.top) / rect.height) * 100;
   return [Math.min(100, Math.max(0, x)), Math.min(100, Math.max(0, y))];
@@ -562,6 +567,10 @@ document.addEventListener('pointercancel', () => {
   }
   draggingIndex = null;
   draggingPolygon = null;
+  // Senza questo reset un pointercancel durante il trascinamento della rosa
+  // dei venti lascerebbe compassDragging a true per sempre: essendo il primo
+  // ramo di pointermove/pointerup, bloccherebbe ogni altro drag dell'editor.
+  compassDragging = false;
 });
 
 function applyGridAlignment(start, end) {

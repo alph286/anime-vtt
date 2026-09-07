@@ -118,4 +118,4 @@ function applyStartupDefault(state) {
   return state;
 }
 
-module.exports = { loadState, saveState, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR, STATE_FILE };
+module.exports = { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR, STATE_FILE };

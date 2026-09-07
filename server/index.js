@@ -7,7 +7,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
+const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -251,6 +251,12 @@ app.post('/api/import/apply', async (req, res) => {
     if (manifest.kind === 'location') {
       const newLocation = await exportImport.applyLocationImport(filePath, manifest, MAPS_DIR, IMAGES_DIR);
       state.locations.push(newLocation);
+      // Un archivio esportato prima che un campo esistesse (es. map.compass)
+      // reintroduce una location "legacy" nello stato vivo: senza migrate()
+      // resterebbe senza quel campo -- e quindi coi controlli muti -- fino al
+      // prossimo riavvio del server, l'unico momento in cui loadState()
+      // ri-esegue la migrazione.
+      migrate(state);
       saveState(state);
       broadcastState();
       res.json({ ok: true, kind: 'location', name: newLocation.name });
@@ -272,6 +278,9 @@ app.post('/api/import/apply', async (req, res) => {
       // successivo (da un'azione qualunque) renderebbe definitivo un ripristino
       // mai confermato.
       const candidate = { ...state, locations: restored.locations, campaign: restored.campaign, gridPreset: restored.gridPreset };
+      // Stesso motivo del ramo 'location': un backup più vecchio dei campi
+      // aggiunti dopo va migrato subito, non al prossimo riavvio.
+      migrate(candidate);
       applyStartupDefault(candidate);
       saveState(candidate);
       state = candidate;

@@ -158,15 +158,17 @@
     <p class="hint">click destro su un vertice selezionato per eliminarlo singolarmente · con "allinea alla griglia" attivo, trascina un rettangolo su una cella già disegnata nella mappa.</p>
     <p id="map-upload-warning" class="hint warning" hidden></p>
 
-    <div id="map-canvas" class="map-canvas">
-      <div id="map-canvas-zoom" class="map-canvas-zoom">
-        <div id="map-media-wrap" class="media-wrap">
-          <div id="overlay-box" class="overlay-box fit-box">
-            <img id="map-preview-img" class="map-canvas-img" draggable="false" hidden>
-            <video id="map-preview-video" class="map-canvas-img" draggable="false" muted loop playsinline disablepictureinpicture hidden></video>
-            <div id="map-canvas-placeholder" class="map-canvas-placeholder"></div>
-            <svg id="grid-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
-            <svg id="polygon-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+    <div id="map-canvas-wrap" class="map-canvas-wrap">
+      <div id="map-canvas" class="map-canvas">
+        <div id="map-canvas-zoom" class="map-canvas-zoom">
+          <div id="map-media-wrap" class="media-wrap">
+            <div id="overlay-box" class="overlay-box fit-box">
+              <img id="map-preview-img" class="map-canvas-img" draggable="false" hidden>
+              <video id="map-preview-video" class="map-canvas-img" draggable="false" muted loop playsinline disablepictureinpicture hidden></video>
+              <div id="map-canvas-placeholder" class="map-canvas-placeholder"></div>
+              <svg id="grid-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+              <svg id="polygon-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+            </div>
           </div>
         </div>
       </div>

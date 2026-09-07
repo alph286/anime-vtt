@@ -297,15 +297,26 @@ button:active:not(:disabled),
   margin-bottom: 12px;
 }
 
-.map-canvas {
+/* Contenitore che NON scorre, con lo stesso riquadro visibile di #map-canvas:
+   ci vive #compass-drag, che altrimenti (da figlio di un elemento
+   overflow:auto) scorrerebbe insieme al contenuto e si scollegherebbe dalle
+   percentuali calcolate su getBoundingClientRect(), che invece riporta sempre
+   il riquadro visibile non scrollato. */
+.map-canvas-wrap {
   position: relative;
   width: 100%;
   height: min(62vh, 640px);
   min-height: 360px;
+  margin-bottom: 10px;
+}
+
+.map-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
   background: var(--bg-canvas);
   border-radius: 8px;
   overflow: auto;
-  margin-bottom: 10px;
 }
 
 .map-canvas-zoom {
