@@ -10,6 +10,8 @@ let currentMapScale = 1;
 let draggingIndex = null;
 let draggingPolygon = null;
 let gridAlignDrag = null;
+let compassDragging = false;
+let compassDragPos = null;
 let currentImageRect = null;
 let currentRotation = 0;
 
@@ -72,6 +74,13 @@ const gridSvg = document.getElementById('grid-svg');
 const polygonSvg = document.getElementById('polygon-svg');
 const mapUpload = document.getElementById('map-upload');
 const mapUploadWarning = document.getElementById('map-upload-warning');
+const compassToggleBtn = document.getElementById('compass-toggle');
+const compassRotationNum = document.getElementById('compass-rotation-num');
+const compassDragHandle = document.getElementById('compass-drag');
+compassDragHandle.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  compassDragging = true;
+});
 
 const polygonList = document.getElementById('polygon-list');
 const imageList = document.getElementById('image-list');
@@ -178,6 +187,7 @@ function render() {
     renderPolygonsSvg();
     polygonList.innerHTML = '';
     imageList.innerHTML = '<p class="hint">nessuna location attiva — creane una qui sopra.</p>';
+    compassDragHandle.hidden = true;
     updateZoomBox();
     return;
   }
@@ -187,6 +197,19 @@ function render() {
   currentMapScale = location.map.scale || 1;
   flip180Btn.classList.toggle('active', Boolean(location.map.flip180));
   rotate90Btn.classList.toggle('active', Boolean(location.map.rotate90));
+
+  const compass = location.map.compass;
+  compassToggleBtn.classList.toggle('active', Boolean(compass && compass.visible));
+  if (compass) {
+    compassRotationNum.value = String(compass.rotation);
+    compassDragHandle.hidden = false;
+    compassDragHandle.classList.toggle('off', !compass.visible);
+    compassDragHandle.style.left = `${compass.x}%`;
+    compassDragHandle.style.top = `${compass.y}%`;
+    compassDragHandle.style.transform = `translate(-50%, -50%) rotate(${compass.rotation}deg)`;
+  } else {
+    compassDragHandle.hidden = true;
+  }
 
   const grid = location.map.grid;
   gridToggleBtn.classList.toggle('active', grid.enabled);
@@ -353,6 +376,18 @@ function pointFromClientXY(clientX, clientY) {
   return [Math.min(100, Math.max(0, x)), Math.min(100, Math.max(0, y))];
 }
 
+// Percentuale rispetto al riquadro DI #map-canvas (non di overlayBox, che è
+// dentro la parte che ruota con la mappa): la rosa dei venti è un elemento
+// fisso sullo schermo, non un dato mappa -- stessa idea di come si comporta
+// su /display, dove #viewport (l'equivalente del riquadro dello schermo) non
+// ruota mai insieme a #map-media-wrap.
+function canvasPointFromClientXY(clientX, clientY) {
+  const rect = mapCanvas.getBoundingClientRect();
+  const x = ((clientX - rect.left) / rect.width) * 100;
+  const y = ((clientY - rect.top) / rect.height) * 100;
+  return [Math.min(100, Math.max(0, x)), Math.min(100, Math.max(0, y))];
+}
+
 // Polygon/grid coordinates are always stored relative to the map's own
 // (unrotated) pixel space. A click lands in visually-rotated screen space, so
 // convert immediately on the way in and only convert back for drawing on screen.
@@ -430,6 +465,14 @@ function updateGridAlignBox(start, end) {
 }
 
 document.addEventListener('pointermove', (e) => {
+  if (compassDragging) {
+    const [x, y] = canvasPointFromClientXY(e.clientX, e.clientY);
+    compassDragHandle.style.left = `${x}%`;
+    compassDragHandle.style.top = `${y}%`;
+    compassDragPos = [x, y];
+    return;
+  }
+
   if (gridAlignDrag) {
     const current = basePointFromClientXY(e.clientX, e.clientY);
     updateGridAlignBox(gridAlignDrag.start, current);
@@ -465,6 +508,16 @@ document.addEventListener('pointermove', (e) => {
 });
 
 document.addEventListener('pointerup', () => {
+  if (compassDragging) {
+    compassDragging = false;
+    const location = getActiveLocation();
+    if (location && compassDragPos) {
+      socket.emit('compass:update', { locationId: location.id, x: compassDragPos[0], y: compassDragPos[1] });
+    }
+    compassDragPos = null;
+    return;
+  }
+
   if (gridAlignDrag) {
     const { start, end, box } = gridAlignDrag;
     box.remove();
@@ -1403,4 +1456,16 @@ importConfirmYes.addEventListener('click', async () => {
     importError.textContent = err.message;
     importError.hidden = false;
   }
+});
+
+compassToggleBtn.addEventListener('click', () => {
+  const location = getActiveLocation();
+  if (!location || !location.map.compass) return;
+  socket.emit('compass:update', { locationId: location.id, visible: !location.map.compass.visible });
+});
+
+bindNumberCommit(compassRotationNum, 0, 359, (v) => {
+  const location = getActiveLocation();
+  if (!location) return;
+  socket.emit('compass:update', { locationId: location.id, rotation: Math.round(v) });
 });
