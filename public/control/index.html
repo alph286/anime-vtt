@@ -13,6 +13,7 @@
   <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2Z"/><path d="M9 3v16M15 5v16"/></symbol>
   <symbol id="i-fog" viewBox="0 0 24 24"><path d="M3 8h13M3 12h18M3 16h13"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4.5 18 5.5-6 4 4.5L18 12l1.5 2.5"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
 </svg>
 
 <div id="app">
@@ -78,6 +79,15 @@
           <button id="grid-opacity-out" title="Riduci opacità griglia">−</button>
           <span id="grid-opacity-level">100%</span>
           <button id="grid-opacity-in" title="Aumenta opacità griglia">+</button>
+        </div>
+      </section>
+
+      <section id="compass-section" class="control-section">
+        <div class="opacity-row">
+          <span>Rosa dei venti</span>
+          <button id="compass-toggle" class="icon-btn" title="Mostra/nascondi rosa dei venti">
+            <svg class="icon"><use href="#i-compass"></use></svg>
+          </button>
         </div>
       </section>
 

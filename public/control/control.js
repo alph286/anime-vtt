@@ -32,6 +32,8 @@ const imageHideBtn = document.getElementById('image-hide-btn');
 const imageSendFeedback = document.getElementById('image-send-feedback');
 const panZoomSection = document.getElementById('pan-zoom-section');
 const gridOpacitySection = document.getElementById('grid-opacity-section');
+const compassSection = document.getElementById('compass-section');
+const compassToggle = document.getElementById('compass-toggle');
 const gridOpacityOutBtn = document.getElementById('grid-opacity-out');
 const gridOpacityInBtn = document.getElementById('grid-opacity-in');
 const gridOpacityLevel = document.getElementById('grid-opacity-level');
@@ -223,6 +225,10 @@ function render() {
   if (gridEnabled) {
     gridOpacityLevel.textContent = `${Math.round((previewLocation.map.grid.opacity === undefined ? 1 : previewLocation.map.grid.opacity) * 100)}%`;
   }
+
+  compassSection.style.display = hidePanZoomForImage ? 'none' : 'block';
+  compassToggle.classList.toggle('active', Boolean(previewLocation && previewLocation.map.compass && previewLocation.map.compass.visible));
+
   updateViewportRect(previewLocation);
 }
 
@@ -644,3 +650,9 @@ mapPreview.addEventListener('pointermove', (e) => {
 
 mapPreview.addEventListener('pointerup', () => { panDrag = null; });
 mapPreview.addEventListener('pointercancel', () => { panDrag = null; });
+
+compassToggle.addEventListener('click', () => {
+  const previewLocation = getPreviewLocation();
+  if (!previewLocation || !previewLocation.map.compass) return;
+  socket.emit('compass:update', { locationId: previewLocationId, visible: !previewLocation.map.compass.visible });
+});
