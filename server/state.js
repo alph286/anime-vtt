@@ -5,6 +5,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 
 const DEFAULT_GRID = { enabled: false, cellSize: 100, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 };
+const DEFAULT_COMPASS = { visible: false, x: 88, y: 85, rotation: 0 };
 
 const DEFAULT_STATE = {
   campaign: { name: 'Anime Salve' },
@@ -21,6 +22,7 @@ const DEFAULT_STATE = {
         rotate90: false,
         liveView: { scale: 1, offsetX: 0, offsetY: 0 },
         grid: { ...DEFAULT_GRID },
+        compass: { ...DEFAULT_COMPASS },
         polygons: [
           { id: 'stanza-1', name: 'Stanza 1', points: [[5, 10], [40, 8], [42, 45], [8, 48]], revealed: false },
           { id: 'corridoio', name: 'Corridoio', points: [[55, 50], [92, 45], [94, 88], [58, 92]], revealed: false }
@@ -57,6 +59,11 @@ function migrate(state) {
     if (location.map.grid.color === undefined) location.map.grid.color = '#ffffff';
     if (location.map.grid.lineWidth === undefined) location.map.grid.lineWidth = 0.3;
     if (location.map.grid.opacity === undefined) location.map.grid.opacity = 1;
+    if (!location.map.compass) location.map.compass = { ...DEFAULT_COMPASS };
+    if (location.map.compass.visible === undefined) location.map.compass.visible = false;
+    if (location.map.compass.x === undefined) location.map.compass.x = DEFAULT_COMPASS.x;
+    if (location.map.compass.y === undefined) location.map.compass.y = DEFAULT_COMPASS.y;
+    if (location.map.compass.rotation === undefined) location.map.compass.rotation = 0;
     if (location.archived === undefined) location.archived = false;
     if (location.isDefault === undefined) location.isDefault = false;
     (location.images || []).forEach((image) => {
@@ -111,4 +118,4 @@ function applyStartupDefault(state) {
   return state;
 }
 
-module.exports = { loadState, saveState, applyStartupDefault, DEFAULT_GRID, DATA_DIR, STATE_FILE };
+module.exports = { loadState, saveState, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR, STATE_FILE };

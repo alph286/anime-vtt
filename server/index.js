@@ -7,7 +7,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState, applyStartupDefault, DEFAULT_GRID, DATA_DIR } = require('./state');
+const { loadState, saveState, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -354,6 +354,7 @@ io.on('connection', (socket) => {
         rotate90: false,
         liveView: { scale: 1, offsetX: 0, offsetY: 0 },
         grid: { ...DEFAULT_GRID },
+        compass: { ...DEFAULT_COMPASS },
         polygons: []
       },
       images: [],
@@ -625,6 +626,17 @@ io.on('connection', (socket) => {
     if (color !== undefined) location.map.grid.color = color;
     if (lineWidth !== undefined) location.map.grid.lineWidth = lineWidth;
     if (opacity !== undefined) location.map.grid.opacity = opacity;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('compass:update', ({ locationId, visible, x, y, rotation }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location || !location.map.compass) return;
+    if (visible !== undefined) location.map.compass.visible = Boolean(visible);
+    if (x !== undefined) location.map.compass.x = Math.min(100, Math.max(0, x));
+    if (y !== undefined) location.map.compass.y = Math.min(100, Math.max(0, y));
+    if (rotation !== undefined) location.map.compass.rotation = ((Math.round(rotation) % 360) + 360) % 360;
     saveState(state);
     broadcastState();
   });
