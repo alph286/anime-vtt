@@ -1334,7 +1334,20 @@ function formatExportDate(iso) {
 importFileInput.addEventListener('change', async () => {
   const file = importFileInput.files[0];
   if (!file) return;
+  // Scegliere un altro file senza aver prima confermato o annullato il
+  // precedente lascerebbe il suo file temporaneo (fino a 2GB) in data/imports/
+  // fino alla pulizia del prossimo riavvio, e il vecchio banner di conferma
+  // visibile sotto il nuovo flusso.
+  if (pendingImportToken) {
+    fetch('/api/import/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: pendingImportToken })
+    });
+    pendingImportToken = null;
+  }
   importError.hidden = true;
+  importConfirm.hidden = true;
   importBtn.disabled = true;
   importBtn.textContent = 'Analisi in corso...';
   const formData = new FormData();

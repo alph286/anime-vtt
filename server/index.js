@@ -265,11 +265,16 @@ app.post('/api/import/apply', async (req, res) => {
       await exportImport.saveSafetySnapshot(state, MAPS_DIR, IMAGES_DIR, BACKUPS_DIR);
       const restored = await exportImport.applyBackupRestore(filePath, manifest, MAPS_DIR, IMAGES_DIR);
 
-      state.locations = restored.locations;
-      state.campaign = restored.campaign;
-      state.gridPreset = restored.gridPreset;
-      applyStartupDefault(state);
-      saveState(state);
+      // Lo stato nuovo va costruito a parte e salvato PRIMA di diventare quello
+      // vivo: se saveState fallisce (disco pieno, permessi), `state` -- letto da
+      // ogni richiesta -- non è stato toccato, altrimenti il server servirebbe i
+      // dati del backup pur avendo risposto errore, e il primo saveState(state)
+      // successivo (da un'azione qualunque) renderebbe definitivo un ripristino
+      // mai confermato.
+      const candidate = { ...state, locations: restored.locations, campaign: restored.campaign, gridPreset: restored.gridPreset };
+      applyStartupDefault(candidate);
+      saveState(candidate);
+      state = candidate;
 
       oldMapFiles.forEach((f) => deleteUploadedFile(MAPS_DIR, f));
       oldImageFiles.forEach((f) => deleteUploadedFile(IMAGES_DIR, f));

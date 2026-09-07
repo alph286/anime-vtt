@@ -12,6 +12,10 @@ const fs = require('fs');
 const path = require('path');
 const tar = require('tar-stream');
 const { nanoid } = require('nanoid');
+// `pipeline` distrugge ENTRAMBE le estremità di un pipe quando una delle due
+// fallisce: con il vecchio `.pipe()` + due `.on('error')` separati, il lato di
+// lettura restava aperto (file descriptor mai chiuso) a ogni operazione fallita.
+const { pipeline } = require('stream/promises');
 
 function extOf(filename) {
   return path.extname(filename || '');
@@ -42,13 +46,13 @@ function planLocationFiles(location, idx, mapsDir, imagesDir) {
   const files = [];
   if (meta.map.file) {
     const archivePath = `locations/${idx}/map${extOf(meta.map.file)}`;
-    files.push({ srcPath: path.join(mapsDir, meta.map.file), archivePath });
+    files.push({ srcPath: path.join(mapsDir, meta.map.file), archivePath, locationName: location.name });
     meta.map.file = archivePath;
   }
   meta.images = meta.images.map((img, j) => {
     if (!img.file) return img;
     const archivePath = `locations/${idx}/image-${j}${extOf(img.file)}`;
-    files.push({ srcPath: path.join(imagesDir, img.file), archivePath });
+    files.push({ srcPath: path.join(imagesDir, img.file), archivePath, locationName: location.name });
     return { ...img, file: archivePath };
   });
   return { meta, files };
@@ -95,7 +99,7 @@ function streamFileIntoPack(pack, srcPath, archivePath) {
         return reject(err3);
       }
       entry.on('error', reject);
-      fs.createReadStream(srcPath).on('error', reject).pipe(entry);
+      pipeline(fs.createReadStream(srcPath), entry).catch(reject);
     });
   });
 }
@@ -103,7 +107,15 @@ function streamFileIntoPack(pack, srcPath, archivePath) {
 async function writeLocationArchive(pack, location, mapsDir, imagesDir) {
   const { meta, files } = planLocationFiles(location, 0, mapsDir, imagesDir);
   await writeManifestEntry(pack, { kind: 'location', exportedAt: new Date().toISOString(), location: meta });
-  for (const f of files) await streamFileIntoPack(pack, f.srcPath, f.archivePath);
+  // Un ENOENT grezzo qui non direbbe a quale location appartiene il file
+  // sparito (cancellato a mano fuori dall'app): arricchiamo l'errore col nome.
+  for (const f of files) {
+    try {
+      await streamFileIntoPack(pack, f.srcPath, f.archivePath);
+    } catch (err) {
+      throw new Error(`File mancante o illeggibile per la location "${f.locationName}": ${err.message}`);
+    }
+  }
   pack.finalize();
 }
 
@@ -122,7 +134,13 @@ async function writeBackupArchive(pack, state, mapsDir, imagesDir) {
     locations
   };
   await writeManifestEntry(pack, manifest);
-  for (const f of allFiles) await streamFileIntoPack(pack, f.srcPath, f.archivePath);
+  for (const f of allFiles) {
+    try {
+      await streamFileIntoPack(pack, f.srcPath, f.archivePath);
+    } catch (err) {
+      throw new Error(`File mancante o illeggibile per la location "${f.locationName}": ${err.message}`);
+    }
+  }
   pack.finalize();
 }
 
@@ -131,16 +149,40 @@ async function writeBackupArchive(pack, state, mapsDir, imagesDir) {
 // caricato sia, in fase di applicazione, per ridedurre `kind` dal file reale
 // invece di fidarsi di un valore che arriva dal client.
 function readManifest(filePath) {
+  // L'upload è ammesso fino a 2GB, ma un manifest legittimo è al massimo
+  // qualche centinaio di KB di metadati JSON: senza un tetto, un archivio
+  // costruito ad arte porterebbe in RAM gigabyte in una sola richiesta
+  // (OOM garantito sul Raspberry Pi a cui l'app è destinata).
+  const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
   return new Promise((resolve, reject) => {
     const extract = tar.extract();
+    const src = fs.createReadStream(filePath);
     let found = false;
     extract.on('entry', (header, stream, next) => {
       if (!found && header.name === 'manifest.json') {
         found = true;
         const chunks = [];
-        stream.on('data', (c) => chunks.push(c));
+        let total = 0;
+        let tooBig = false;
+        stream.on('data', (c) => {
+          if (tooBig) return;
+          total += c.length;
+          if (total > MAX_MANIFEST_BYTES) {
+            tooBig = true;
+            reject(new Error('manifest.json troppo grande: archivio non valido'));
+            // Anche lo stream di lettura dell'archivio va distrutto, non solo
+            // il parser: fermare solo il parser lascerebbe aperto un file
+            // descriptor per ogni upload rifiutato.
+            src.destroy();
+            stream.destroy();
+            extract.destroy();
+            return;
+          }
+          chunks.push(c);
+        });
         stream.on('error', reject);
         stream.on('end', () => {
+          if (tooBig) return;
           try {
             resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
           } catch (err) {
@@ -162,7 +204,7 @@ function readManifest(filePath) {
     // inglese e criptico per chi carica un file sbagliato dall'interfaccia;
     // lo sostituiamo con un messaggio in italiano coerente col resto dell'app.
     extract.on('error', () => reject(new Error('File non valido: non è un archivio riconoscibile.')));
-    fs.createReadStream(filePath).on('error', reject).pipe(extract);
+    src.on('error', reject).pipe(extract);
   });
 }
 
@@ -177,11 +219,28 @@ function collectExpectedFiles(manifest) {
   return files;
 }
 
+// Un manifest manomesso/malformato (una location senza la chiave `map`) non
+// deve esplodere tardi dentro applyLocationImport/applyBackupRestore con un
+// "Cannot read properties of undefined" -- e per il backup, per giunta DOPO
+// che lo snapshot di sicurezza è già stato scritto, buttando via quel lavoro a
+// ogni tentativo. Ogni token di importazione valido nasce necessariamente da
+// una /api/import/inspect andata a buon fine (è l'unica route che scrive in
+// IMPORTS_DIR), quindi validare qui protegge l'intero flusso.
+function validateManifestShape(manifest) {
+  const checkLocation = (loc, label) => {
+    if (!loc || typeof loc !== 'object') throw new Error(`Location non valida nel manifest (${label})`);
+    if (!loc.map || typeof loc.map !== 'object') throw new Error(`La location "${loc.name || label}" non ha i dati mappa nel manifest`);
+  };
+  if (manifest.kind === 'location') checkLocation(manifest.location, 'location');
+  else if (manifest.kind === 'backup') (manifest.locations || []).forEach((loc, i) => checkLocation(loc, `location #${i}`));
+}
+
 async function inspectImport(filePath) {
   const manifest = await readManifest(filePath);
   if (manifest.kind !== 'location' && manifest.kind !== 'backup') {
     throw new Error(`Tipo di file sconosciuto: "${manifest.kind}"`);
   }
+  validateManifestShape(manifest);
   const expected = collectExpectedFiles(manifest);
   const seen = new Set();
   await new Promise((resolve, reject) => {
@@ -193,7 +252,9 @@ async function inspectImport(filePath) {
       stream.on('end', next);
     });
     extract.on('finish', resolve);
-    extract.on('error', reject);
+    // Stesso motivo di readManifest: un archivio troncato/corrotto qui
+    // produrrebbe il messaggio inglese grezzo di tar-stream.
+    extract.on('error', () => reject(new Error('File non valido: non è un archivio riconoscibile.')));
     fs.createReadStream(filePath).on('error', reject).pipe(extract);
   });
   for (const f of expected) {
@@ -220,28 +281,38 @@ async function extractWantedFiles(filePath, wanted) {
   try {
     await new Promise((resolve, reject) => {
       const extract = tar.extract();
+      const src = fs.createReadStream(filePath);
+      // Se l'estrazione fallisce a metà (destinazione non scrivibile, archivio
+      // corrotto), la sola reject lascerebbe APERTO lo stream di lettura
+      // dell'archivio: un file descriptor per ogni tentativo fallito, e --
+      // dato che la route cancella il file temporaneo nel `finally` -- anche
+      // il suo spazio su disco (fino a 2GB) trattenuto finché il processo vive.
+      const fail = (err) => {
+        src.destroy();
+        extract.destroy();
+        reject(err);
+      };
       extract.on('entry', (header, stream, next) => {
         const destDir = wanted.get(header.name);
         if (!destDir) {
           stream.resume();
-          stream.on('error', reject);
+          stream.on('error', fail);
           stream.on('end', next);
           return;
         }
         const newName = `${nanoid()}${extOf(header.name)}`;
         const out = fs.createWriteStream(path.join(destDir, newName));
-        stream.on('error', reject);
-        out.on('error', reject);
-        stream.pipe(out);
-        out.on('finish', () => {
-          written.push({ dir: destDir, name: newName });
-          fileMap.set(header.name, newName);
-          next();
-        });
+        pipeline(stream, out)
+          .then(() => {
+            written.push({ dir: destDir, name: newName });
+            fileMap.set(header.name, newName);
+            next();
+          })
+          .catch(fail);
       });
       extract.on('finish', resolve);
-      extract.on('error', reject);
-      fs.createReadStream(filePath).on('error', reject).pipe(extract);
+      extract.on('error', fail);
+      src.on('error', fail).pipe(extract);
     });
     return fileMap;
   } catch (err) {
@@ -323,7 +394,10 @@ function saveSafetySnapshot(state, mapsDir, imagesDir, backupsDir) {
       if (settled) return;
       settled = true;
       out.destroy();
-      reject(err);
+      // Senza questa unlink resterebbe in data/backups/ un .vttbackup dal nome
+      // plausibile ma troncato/corrotto, proprio dove il DM andrebbe a cercare
+      // la sua rete di sicurezza dopo un ripristino fallito.
+      fs.unlink(dest, () => reject(err));
     };
     pack.on('error', fail);
     out.on('error', fail);
