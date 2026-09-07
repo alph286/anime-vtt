@@ -12,6 +12,7 @@ const mapGridSvg = document.getElementById('map-grid-svg');
 const imageFitBox = document.getElementById('image-fit-box');
 const shownImageImg = document.getElementById('shown-image-img');
 const wifiDot = document.getElementById('wifi-dot');
+const compassEl = document.getElementById('compass');
 
 let socketConnected = false;
 let controlConnected = false;
@@ -132,12 +133,27 @@ function render(state) {
   mapLayer.style.display = showingImage ? 'none' : 'block';
   imageLayer.style.display = showingImage ? 'block' : 'none';
 
+  renderCompass(location, showingImage);
+
   if (showingImage) {
     renderImage(location, state.activeImageId);
   } else {
     renderMap(state, location, previousShowingImage);
   }
   previousShowingImage = showingImage;
+}
+
+// La rosa dei venti è un elemento fisso sullo schermo (percentuali di
+// #viewport), indipendente dalla rotazione/pan/zoom della mappa -- mai
+// visibile sopra un'immagine mostrata ai giocatori.
+function renderCompass(location, showingImage) {
+  const compass = location && location.map.compass;
+  const visible = Boolean(compass && compass.visible) && !showingImage;
+  compassEl.hidden = !visible;
+  if (!visible) return;
+  compassEl.style.left = `${compass.x}%`;
+  compassEl.style.top = `${compass.y}%`;
+  compassEl.style.transform = `translate(-50%, -50%) rotate(${compass.rotation}deg)`;
 }
 
 function renderImage(location, activeImageId) {

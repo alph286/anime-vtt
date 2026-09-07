@@ -103,3 +103,32 @@ html, body {
   height: 18px;
   fill: #fff;
 }
+
+.compass {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.compass svg {
+  width: 100%;
+  height: 100%;
+}
+
+.compass-star {
+  fill: var(--accent);
+}
+
+.compass-hub {
+  fill: var(--bg-canvas);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.compass text {
+  fill: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
