@@ -1,7 +1,8 @@
 // Export/import di location e backup completi, come archivi tar letti/scritti
 // in streaming: mai l'intero archivio (o un intero file mappa) in memoria in
-// una volta sola. Il manifest.json (primo elemento dell'archivio) porta i
-// metadati; ogni file mappa/immagine ha un percorso interno stabile
+// una volta sola. Il manifest.json (scritto per primo in export, ma cercato
+// scandendo tutti gli elementi in lettura -- non si assume la sua posizione)
+// porta i metadati; ogni file mappa/immagine ha un percorso interno stabile
 // (locations/<indice>/map<ext> o locations/<indice>/image-<indice><ext>) che
 // il manifest referenzia direttamente in `map.file`/`images[].file` -- quella
 // stringa È il nome dell'elemento tar, nessuna lista separata da mantenere in
@@ -53,10 +54,30 @@ function planLocationFiles(location, idx, mapsDir, imagesDir) {
   return { meta, files };
 }
 
+// `pack.entry(...)` può fallire in DUE modi distinti se il pack è già
+// finalizzato o distrutto (es. un writer a valle -- il file di destinazione
+// di saveSafetySnapshot, o la response HTTP di una route di export -- è
+// fallito e ha già distrutto il pack mentre questo o un'altra scrittura
+// erano ancora in volo):
+// 1) lancia in modo SINCRONO ("already finalized or destroyed") se il pack è
+//    già morto AL MOMENTO della chiamata -- catturato dal try/catch qui sotto;
+// 2) altrimenti ritorna normalmente un oggetto "entry" (un Writable interno
+//    di tar-stream) che però può essere distrutto in modo ASINCRONO più
+//    tardi (se il pack viene distrutto mentre questa entry è ancora aperta)
+//    ed emette a sua volta un 'error' -- se nessuno lo ascolta, Node lo
+//    tratta come eccezione non gestita e crasha l'intero processo. Il
+//    try/catch copre il caso (1); `entry.on('error', reject)` copre il caso
+//    (2). Senza entrambi, un fallimento di scrittura a metà stream può far
+//    cadere l'intero server, non solo la singola richiesta.
 function writeManifestEntry(pack, manifest) {
   return new Promise((resolve, reject) => {
     const buf = Buffer.from(JSON.stringify(manifest, null, 2));
-    pack.entry({ name: 'manifest.json', size: buf.length }, buf, (err) => (err ? reject(err) : resolve()));
+    try {
+      const entry = pack.entry({ name: 'manifest.json', size: buf.length }, buf, (err) => (err ? reject(err) : resolve()));
+      entry.on('error', reject);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -67,7 +88,13 @@ function streamFileIntoPack(pack, srcPath, archivePath) {
   return new Promise((resolve, reject) => {
     fs.stat(srcPath, (err, stat) => {
       if (err) return reject(err);
-      const entry = pack.entry({ name: archivePath, size: stat.size }, (err2) => (err2 ? reject(err2) : resolve()));
+      let entry;
+      try {
+        entry = pack.entry({ name: archivePath, size: stat.size }, (err2) => (err2 ? reject(err2) : resolve()));
+      } catch (err3) {
+        return reject(err3);
+      }
+      entry.on('error', reject);
       fs.createReadStream(srcPath).on('error', reject).pipe(entry);
     });
   });
@@ -130,7 +157,11 @@ function readManifest(filePath) {
     extract.on('finish', () => {
       if (!found) reject(new Error('manifest.json non trovato nell\'archivio'));
     });
-    extract.on('error', reject);
+    // Un errore emesso qui viene dal parser tar stesso (es. file caricato che
+    // non è affatto un tar) -- il messaggio originale della libreria è in
+    // inglese e criptico per chi carica un file sbagliato dall'interfaccia;
+    // lo sostituiamo con un messaggio in italiano coerente col resto dell'app.
+    extract.on('error', () => reject(new Error('File non valido: non è un archivio riconoscibile.')));
     fs.createReadStream(filePath).on('error', reject).pipe(extract);
   });
 }
