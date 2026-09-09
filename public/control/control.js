@@ -38,6 +38,14 @@ const gridOpacityOutBtn = document.getElementById('grid-opacity-out');
 const gridOpacityInBtn = document.getElementById('grid-opacity-in');
 const gridOpacityLevel = document.getElementById('grid-opacity-level');
 const GRID_OPACITY_STEP = 0.1;
+const audioSection = document.getElementById('audio-section');
+const audioPlayPauseBtn = document.getElementById('audio-play-pause');
+const audioPlayPauseIcon = document.getElementById('audio-play-pause-icon');
+const audioStopBtn = document.getElementById('audio-stop');
+const audioVolumeOutBtn = document.getElementById('audio-volume-out');
+const audioVolumeInBtn = document.getElementById('audio-volume-in');
+const audioVolumeLevel = document.getElementById('audio-volume-level');
+const AUDIO_VOLUME_STEP = 0.1;
 const zoomOutBtn = document.getElementById('zoom-out');
 const zoomInBtn = document.getElementById('zoom-in');
 const ZOOM_MIN = 0.2;
@@ -228,6 +236,18 @@ function render() {
 
   compassSection.style.display = hidePanZoomForImage ? 'none' : 'block';
   compassToggle.classList.toggle('active', Boolean(previewLocation && previewLocation.map.compass && previewLocation.map.compass.visible));
+
+  // A differenza delle sezioni sopra, l'audio riflette sempre la location
+  // ATTIVA (`location`, non `previewLocation`): i comandi non hanno un
+  // concetto di anteprima, quindi anche la UI non deve suggerirne uno.
+  const audioTrack = location && location.map.audio;
+  const hasAudio = Boolean(audioTrack && audioTrack.file);
+  audioSection.style.display = hasAudio ? 'block' : 'none';
+  if (hasAudio) {
+    audioPlayPauseIcon.setAttribute('href', state.audioState === 'playing' ? '#i-pause' : '#i-play');
+    audioPlayPauseBtn.classList.toggle('active', state.audioState === 'playing');
+    audioVolumeLevel.textContent = `${Math.round((audioTrack.volume === undefined ? 0.7 : audioTrack.volume) * 100)}%`;
+  }
 
   updateViewportRect(previewLocation);
 }
@@ -656,3 +676,21 @@ compassToggle.addEventListener('click', () => {
   if (!previewLocation || !previewLocation.map.compass) return;
   socket.emit('compass:update', { locationId: previewLocationId, visible: !previewLocation.map.compass.visible });
 });
+
+audioPlayPauseBtn.addEventListener('click', () => {
+  socket.emit(state.audioState === 'playing' ? 'audio:pause' : 'audio:play', {});
+});
+
+audioStopBtn.addEventListener('click', () => {
+  socket.emit('audio:stop', {});
+});
+
+function stepAudioVolume(delta) {
+  const location = getActiveLocation();
+  if (!location || !location.map.audio || !location.map.audio.file) return;
+  const current = location.map.audio.volume === undefined ? 0.7 : location.map.audio.volume;
+  const next = Math.min(1, Math.max(0, Math.round((current + delta) * 10) / 10));
+  socket.emit('audio:volume', { volume: next });
+}
+audioVolumeOutBtn.addEventListener('click', () => stepAudioVolume(-AUDIO_VOLUME_STEP));
+audioVolumeInBtn.addEventListener('click', () => stepAudioVolume(AUDIO_VOLUME_STEP));
