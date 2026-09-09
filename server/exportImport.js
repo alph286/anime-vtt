@@ -28,7 +28,14 @@ function extOf(filename) {
 function manifestForLocation(location) {
   return {
     name: location.name,
-    map: { ...location.map, polygons: (location.map.polygons || []).map((p) => ({ ...p })) },
+    map: {
+      ...location.map,
+      polygons: (location.map.polygons || []).map((p) => ({ ...p })),
+      // L'audio non fa parte dell'export (fuori scope, vedi design doc):
+      // resettato a un default sicuro per non lasciare nel manifest un
+      // riferimento a un file che planLocationFiles() non copia nell'archivio.
+      audio: { name: '', file: null, volume: 0.7 }
+    },
     images: (location.images || []).map((img) => ({
       name: img.name || '',
       file: img.file,

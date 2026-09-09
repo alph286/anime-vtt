@@ -7,7 +7,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
+const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -16,10 +16,11 @@ const PORT = process.env.PORT || 3000;
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'storage');
 const MAPS_DIR = path.join(STORAGE_DIR, 'maps');
 const IMAGES_DIR = path.join(STORAGE_DIR, 'images');
+const AUDIO_DIR = path.join(STORAGE_DIR, 'audio');
 const IMPORTS_DIR = path.join(DATA_DIR, 'imports');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 
-for (const dir of [MAPS_DIR, IMAGES_DIR, IMPORTS_DIR, BACKUPS_DIR]) {
+for (const dir of [MAPS_DIR, IMAGES_DIR, AUDIO_DIR, IMPORTS_DIR, BACKUPS_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -72,6 +73,18 @@ function makeUpload(destDir, { allowVideo = false, maxFileSize = 50 * 1024 * 102
 const uploadMap = makeUpload(MAPS_DIR, { allowVideo: true, maxFileSize: 300 * 1024 * 1024 });
 const uploadImage = makeUpload(IMAGES_DIR);
 
+// L'audio non riusa makeUpload(): filtro mime (audio/*) e limite dimensione
+// diversi da mappe/immagini, e vogliamo poter cambiare l'uno senza rischiare
+// di toccare i percorsi di upload già in uso da mappe e immagini.
+const uploadAudio = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, AUDIO_DIR),
+    filename: (req, file, cb) => cb(null, `${nanoid()}${path.extname(file.originalname)}`)
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^audio\//.test(file.mimetype))
+});
+
 /**
  * Removes an uploaded file from disk, but only if it genuinely resolves inside
  * `dir` — a stored filename must never be able to reach outside its own folder.
@@ -102,9 +115,11 @@ function resolveImportPath(token) {
 function findOrphanFiles() {
   const referencedMaps = new Set();
   const referencedImages = new Set();
+  const referencedAudio = new Set();
   state.locations.forEach((location) => {
     if (location.map.file) referencedMaps.add(location.map.file);
     (location.images || []).forEach((img) => referencedImages.add(img.file));
+    if (location.map.audio && location.map.audio.file) referencedAudio.add(location.map.audio.file);
   });
 
   const scanDir = (dir, referenced, kind) =>
@@ -112,7 +127,11 @@ function findOrphanFiles() {
       .filter((name) => !referenced.has(name))
       .map((name) => ({ dir, name, kind, size: fs.statSync(path.join(dir, name)).size }));
 
-  return [...scanDir(MAPS_DIR, referencedMaps, 'maps'), ...scanDir(IMAGES_DIR, referencedImages, 'images')];
+  return [
+    ...scanDir(MAPS_DIR, referencedMaps, 'maps'),
+    ...scanDir(IMAGES_DIR, referencedImages, 'images'),
+    ...scanDir(AUDIO_DIR, referencedAudio, 'audio')
+  ];
 }
 
 app.post('/api/storage/orphans/scan', (req, res) => {
@@ -174,6 +193,28 @@ app.post('/api/upload/image', uploadImage.single('file'), (req, res) => {
     caption: '',
     telegramDestination: null
   });
+  saveState(state);
+  broadcastState();
+  res.json({ ok: true, file: req.file.filename });
+});
+
+app.post('/api/upload/audio', uploadAudio.single('file'), (req, res) => {
+  const location = state.locations.find((l) => l.id === req.body.locationId);
+  if (!location || !req.file) {
+    return res.status(400).json({ error: 'location o file mancante' });
+  }
+  const previousFile = location.map.audio.file;
+  const previousVolume = location.map.audio.volume === undefined ? DEFAULT_AUDIO.volume : location.map.audio.volume;
+  location.map.audio = {
+    name: req.body.name || req.file.originalname,
+    file: req.file.filename,
+    // Il volume di default (70%) vale solo alla prima assegnazione di una
+    // traccia: sostituire una traccia già presente conserva il volume già
+    // impostato dall'utente su /control.
+    volume: previousFile ? previousVolume : DEFAULT_AUDIO.volume
+  };
+  if (previousFile) deleteUploadedFile(AUDIO_DIR, previousFile);
+  if (state.activeLocationId === location.id) state.audioState = 'stopped';
   saveState(state);
   broadcastState();
   res.json({ ok: true, file: req.file.filename });
@@ -347,6 +388,7 @@ io.on('connection', (socket) => {
     if (!state.locations.some((l) => l.id === locationId)) return;
     state.activeLocationId = locationId;
     state.activeImageId = null;
+    state.audioState = 'stopped';
     saveState(state);
     broadcastState();
   });
@@ -364,6 +406,7 @@ io.on('connection', (socket) => {
         liveView: { scale: 1, offsetX: 0, offsetY: 0 },
         grid: { ...DEFAULT_GRID },
         compass: { ...DEFAULT_COMPASS },
+        audio: { ...DEFAULT_AUDIO },
         polygons: []
       },
       images: [],
@@ -373,6 +416,7 @@ io.on('connection', (socket) => {
     state.locations.push(location);
     state.activeLocationId = location.id;
     state.activeImageId = null;
+    state.audioState = 'stopped';
     saveState(state);
     broadcastState();
   });
@@ -646,6 +690,59 @@ io.on('connection', (socket) => {
     if (x !== undefined) location.map.compass.x = Math.min(100, Math.max(0, x));
     if (y !== undefined) location.map.compass.y = Math.min(100, Math.max(0, y));
     if (rotation !== undefined) location.map.compass.rotation = ((Math.round(rotation) % 360) + 360) % 360;
+    saveState(state);
+    broadcastState();
+  });
+
+  // A differenza di griglia/fog/rosa dei venti, questi comandi agiscono
+  // sempre sulla location attiva -- non esiste un'anteprima silenziosa per
+  // l'audio (suonerebbe comunque subito ai giocatori), quindi niente
+  // locationId dal client: previewLocationId non c'entra qui.
+  socket.on('audio:play', () => {
+    const location = getActiveLocation();
+    if (!location || !location.map.audio || !location.map.audio.file) return;
+    state.audioState = 'playing';
+    broadcastState();
+  });
+
+  socket.on('audio:pause', () => {
+    const location = getActiveLocation();
+    if (!location || !location.map.audio || !location.map.audio.file) return;
+    state.audioState = 'paused';
+    broadcastState();
+  });
+
+  socket.on('audio:stop', () => {
+    const location = getActiveLocation();
+    if (!location || !location.map.audio || !location.map.audio.file) return;
+    state.audioState = 'stopped';
+    broadcastState();
+  });
+
+  socket.on('audio:volume', ({ volume }) => {
+    const location = getActiveLocation();
+    if (!location || !location.map.audio || volume === undefined) return;
+    location.map.audio.volume = Math.min(1, Math.max(0, volume));
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('audio:delete', ({ locationId }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location || !location.map.audio || !location.map.audio.file) return;
+
+    deleteUploadedFile(AUDIO_DIR, location.map.audio.file);
+    location.map.audio = { ...DEFAULT_AUDIO };
+    if (state.activeLocationId === locationId) state.audioState = 'stopped';
+
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('audio:rename', ({ locationId, name }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location || !location.map.audio || !location.map.audio.file) return;
+    location.map.audio.name = String(name || '').slice(0, 120);
     saveState(state);
     broadcastState();
   });
