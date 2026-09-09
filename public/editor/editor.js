@@ -86,6 +86,7 @@ compassDragHandle.addEventListener('pointerdown', (e) => {
 const polygonList = document.getElementById('polygon-list');
 const imageList = document.getElementById('image-list');
 const imageUpload = document.getElementById('image-upload');
+const audioContent = document.getElementById('audio-content');
 
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
@@ -188,6 +189,7 @@ function render() {
     renderPolygonsSvg();
     polygonList.innerHTML = '';
     imageList.innerHTML = '<p class="hint">nessuna location attiva — creane una qui sopra.</p>';
+    audioContent.innerHTML = '';
     compassDragHandle.hidden = true;
     updateZoomBox();
     return;
@@ -239,6 +241,7 @@ function render() {
 
   renderPolygonList(location);
   renderImageList(location);
+  renderAudioPanel(location);
   updateZoomBox();
   updateOverlayBox();
 }
@@ -1014,6 +1017,34 @@ function renderImageList(location) {
     .join('');
 }
 
+// Stesso pattern arma-poi-conferma delle immagini, ma per un solo elemento
+// (non c'è un id per riga: la location attiva stessa fa da chiave).
+let audioDeleteArmed = false;
+let audioDeleteTimer = null;
+
+function renderAudioPanel(location) {
+  const audio = location.map.audio;
+  if (!audio || !audio.file) {
+    audioDeleteArmed = false;
+    audioContent.innerHTML = `
+      <label class="file-btn">Carica traccia audio<input type="file" id="audio-upload" accept="audio/*"></label>
+    `;
+    return;
+  }
+  audioContent.innerHTML = `
+    <div class="image-card">
+      <div class="image-editor-row">
+        <input type="text" class="image-name-input" id="audio-name-input" value="${escapeHtml(audio.name)}" placeholder="etichetta">
+        <button class="icon-btn image-delete ${audioDeleteArmed ? 'confirm' : ''}" id="audio-delete-btn"
+                title="${audioDeleteArmed ? 'Click di nuovo per confermare' : 'Elimina traccia'}">
+          <svg class="icon"><use href="#i-trash"></use></svg>
+        </button>
+      </div>
+      <label class="file-btn">Sostituisci traccia<input type="file" id="audio-upload" accept="audio/*"></label>
+    </div>
+  `;
+}
+
 imageList.addEventListener('click', (e) => {
   const previewBtn = e.target.closest('[data-preview]');
   if (previewBtn) {
@@ -1477,4 +1508,48 @@ bindNumberCommit(compassRotationNum, 0, 359, (v) => {
   const location = getActiveLocation();
   if (!location) return;
   socket.emit('compass:update', { locationId: location.id, rotation: Math.round(v) });
+});
+
+// L'input file viene ricreato a ogni renderAudioPanel() (l'id è lo stesso,
+// "audio-upload", sia nello stato "nessuna traccia" che "sostituisci"), quindi
+// il listener va sul contenitore stabile `audioContent`, non sull'input.
+audioContent.addEventListener('change', async (e) => {
+  const fileInput = e.target.closest('#audio-upload');
+  if (fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('locationId', state.activeLocationId);
+    formData.append('name', file.name);
+    await fetch('/api/upload/audio', { method: 'POST', body: formData });
+    fileInput.value = '';
+    return;
+  }
+
+  const nameInput = e.target.closest('#audio-name-input');
+  if (nameInput) {
+    socket.emit('audio:rename', { locationId: state.activeLocationId, name: nameInput.value });
+  }
+});
+
+audioContent.addEventListener('click', (e) => {
+  const deleteBtn = e.target.closest('#audio-delete-btn');
+  if (!deleteBtn) return;
+
+  if (!audioDeleteArmed) {
+    audioDeleteArmed = true;
+    renderAudioPanel(getActiveLocation());
+    clearTimeout(audioDeleteTimer);
+    audioDeleteTimer = setTimeout(() => {
+      audioDeleteArmed = false;
+      const loc = getActiveLocation();
+      if (loc) renderAudioPanel(loc);
+    }, 2500);
+    return;
+  }
+
+  clearTimeout(audioDeleteTimer);
+  audioDeleteArmed = false;
+  socket.emit('audio:delete', { locationId: state.activeLocationId });
 });
