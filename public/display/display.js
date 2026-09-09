@@ -13,6 +13,7 @@ const imageFitBox = document.getElementById('image-fit-box');
 const shownImageImg = document.getElementById('shown-image-img');
 const wifiDot = document.getElementById('wifi-dot');
 const compassEl = document.getElementById('compass');
+const sceneAudioEl = document.getElementById('scene-audio');
 
 let socketConnected = false;
 let controlConnected = false;
@@ -134,6 +135,7 @@ function render(state) {
   imageLayer.style.display = showingImage ? 'block' : 'none';
 
   renderCompass(location, showingImage);
+  renderAudio(location, state.audioState);
 
   if (showingImage) {
     renderImage(location, state.activeImageId);
@@ -154,6 +156,39 @@ function renderCompass(location, showingImage) {
   compassEl.style.left = `${compass.x}%`;
   compassEl.style.top = `${compass.y}%`;
   compassEl.style.transform = `translate(-50%, -50%) rotate(${compass.rotation}deg)`;
+}
+
+// L'elemento <audio> non è mai visibile -- solo suono, indipendente da quale
+// layer (mappa o immagine) è mostrato in quel momento, in linea con la
+// scelta di design che mostrare un'immagine ai giocatori non ferma l'audio.
+// `lastAudioFile` evita di riassegnare `src` (che farebbe ripartire da zero
+// anche una traccia identica) a ogni singolo state:update.
+let lastAudioFile = null;
+
+function renderAudio(location, audioState) {
+  const audio = location && location.map.audio;
+  const file = audio && audio.file;
+
+  if (file !== lastAudioFile) {
+    lastAudioFile = file;
+    sceneAudioEl.src = file ? `/storage/audio/${file}` : '';
+  }
+
+  sceneAudioEl.volume = audio && audio.volume !== undefined ? audio.volume : 0.7;
+
+  if (!file) return;
+
+  if (audioState === 'playing') {
+    // Un file audio mancante/corrotto rifiuta play() con una promise
+    // rigettata: fallisce silenziosamente, stesso principio già in uso per
+    // mappe/immagini con riferimenti non validi -- niente crash della pagina.
+    sceneAudioEl.play().catch(() => {});
+  } else if (audioState === 'paused') {
+    sceneAudioEl.pause();
+  } else {
+    sceneAudioEl.pause();
+    sceneAudioEl.currentTime = 0;
+  }
 }
 
 function renderImage(location, activeImageId) {
