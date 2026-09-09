@@ -171,7 +171,12 @@ function renderAudio(location, audioState) {
 
   if (file !== lastAudioFile) {
     lastAudioFile = file;
-    sceneAudioEl.src = file ? `/storage/audio/${file}` : '';
+    if (file) {
+      sceneAudioEl.src = `/storage/audio/${file}`;
+    } else {
+      sceneAudioEl.removeAttribute('src');
+      sceneAudioEl.load();
+    }
   }
 
   sceneAudioEl.volume = audio && audio.volume !== undefined ? audio.volume : 0.7;

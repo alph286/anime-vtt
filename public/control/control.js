@@ -242,7 +242,7 @@ function render() {
   // concetto di anteprima, quindi anche la UI non deve suggerirne uno.
   const audioTrack = location && location.map.audio;
   const hasAudio = Boolean(audioTrack && audioTrack.file);
-  audioSection.style.display = hasAudio ? 'block' : 'none';
+  audioSection.hidden = !hasAudio;
   if (hasAudio) {
     audioPlayPauseIcon.setAttribute('href', state.audioState === 'playing' ? '#i-pause' : '#i-play');
     audioPlayPauseBtn.classList.toggle('active', state.audioState === 'playing');
