@@ -1018,25 +1018,44 @@ function renderImageList(location) {
 }
 
 // Stesso pattern arma-poi-conferma delle immagini, ma per un solo elemento
-// (non c'è un id per riga: la location attiva stessa fa da chiave).
-let audioDeleteArmed = false;
+// (non c'è un id per riga: la coppia location+file fa da chiave, così l'arm
+// non sopravvive a un cambio location o a una sostituzione traccia).
+let audioDeleteArmedFor = null;
 let audioDeleteTimer = null;
+
+function getAudioDeleteKey(location) {
+  const audio = location && location.map.audio;
+  if (!audio || !audio.file) return null;
+  return `${location.id}:${audio.file}`;
+}
+
+function clearAudioDeleteArm() {
+  clearTimeout(audioDeleteTimer);
+  audioDeleteTimer = null;
+  audioDeleteArmedFor = null;
+}
 
 function renderAudioPanel(location) {
   const audio = location.map.audio;
   if (!audio || !audio.file) {
-    audioDeleteArmed = false;
+    clearAudioDeleteArm();
     audioContent.innerHTML = `
       <label class="file-btn">Carica traccia audio<input type="file" id="audio-upload" accept="audio/*"></label>
     `;
     return;
   }
+  const key = getAudioDeleteKey(location);
+  if (audioDeleteArmedFor !== null && audioDeleteArmedFor !== key) {
+    // Stato armato apparteneva a un'altra location/traccia: non riportarlo qui.
+    clearAudioDeleteArm();
+  }
+  const armed = audioDeleteArmedFor === key;
   audioContent.innerHTML = `
     <div class="image-card">
       <div class="image-editor-row">
         <input type="text" class="image-name-input" id="audio-name-input" value="${escapeHtml(audio.name)}" placeholder="etichetta">
-        <button class="icon-btn image-delete ${audioDeleteArmed ? 'confirm' : ''}" id="audio-delete-btn"
-                title="${audioDeleteArmed ? 'Click di nuovo per confermare' : 'Elimina traccia'}">
+        <button class="icon-btn image-delete ${armed ? 'confirm' : ''}" id="audio-delete-btn"
+                title="${armed ? 'Click di nuovo per confermare' : 'Elimina traccia'}">
           <svg class="icon"><use href="#i-trash"></use></svg>
         </button>
       </div>
@@ -1537,19 +1556,27 @@ audioContent.addEventListener('click', (e) => {
   const deleteBtn = e.target.closest('#audio-delete-btn');
   if (!deleteBtn) return;
 
-  if (!audioDeleteArmed) {
-    audioDeleteArmed = true;
-    renderAudioPanel(getActiveLocation());
+  const location = getActiveLocation();
+  const key = getAudioDeleteKey(location);
+  if (!key) return;
+
+  if (audioDeleteArmedFor !== key) {
+    audioDeleteArmedFor = key;
+    renderAudioPanel(location);
     clearTimeout(audioDeleteTimer);
     audioDeleteTimer = setTimeout(() => {
-      audioDeleteArmed = false;
+      // Si disarma solo se è ancora la stessa location+traccia per cui è
+      // scattato il timer: nel frattempo potrebbe essere già stato
+      // invalidato (e magari riarmato) da un cambio location o da render.
+      if (audioDeleteArmedFor !== key) return;
+      audioDeleteArmedFor = null;
+      audioDeleteTimer = null;
       const loc = getActiveLocation();
       if (loc) renderAudioPanel(loc);
     }, 2500);
     return;
   }
 
-  clearTimeout(audioDeleteTimer);
-  audioDeleteArmed = false;
+  clearAudioDeleteArm();
   socket.emit('audio:delete', { locationId: state.activeLocationId });
 });
