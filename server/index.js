@@ -559,6 +559,27 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  // Stesso schema di validazione di location:reorder: l'ordine proposto deve
+  // essere una permutazione esatta degli id già presenti, altrimenti viene
+  // ignorato (nessun id perso o duplicato per un client rimasto indietro).
+  socket.on('image:reorder', ({ locationId, orderedIds }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location || !Array.isArray(orderedIds)) return;
+    const currentIds = (location.images || []).map((img) => img.id);
+    const currentSet = new Set(currentIds);
+    const seen = new Set();
+    const validOrder = orderedIds.filter((id) => {
+      if (!currentSet.has(id) || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    if (validOrder.length !== currentIds.length) return;
+    const byId = new Map(location.images.map((img) => [img.id, img]));
+    location.images = validOrder.map((id) => byId.get(id));
+    saveState(state);
+    broadcastState();
+  });
+
   socket.on('image:caption', ({ locationId, imageId, caption }) => {
     const location = state.locations.find((l) => l.id === locationId);
     const image = location?.images.find((i) => i.id === imageId);
@@ -691,16 +712,30 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  socket.on('grid:update', ({ locationId, enabled, cellSize, offsetX, offsetY, color, lineWidth, opacity }) => {
+  socket.on('grid:update', ({ locationId, enabled, cellSize, baseCellSize, divisions, offsetX, offsetY, color, lineWidth, opacity }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     if (enabled !== undefined) location.map.grid.enabled = enabled;
-    if (cellSize !== undefined) location.map.grid.cellSize = cellSize;
     if (offsetX !== undefined) location.map.grid.offsetX = offsetX;
     if (offsetY !== undefined) location.map.grid.offsetY = offsetY;
     if (color !== undefined) location.map.grid.color = color;
     if (lineWidth !== undefined) location.map.grid.lineWidth = lineWidth;
     if (opacity !== undefined) location.map.grid.opacity = opacity;
+    if (baseCellSize !== undefined) location.map.grid.baseCellSize = baseCellSize;
+    if (divisions !== undefined) location.map.grid.divisions = Math.max(1, Math.round(divisions));
+    if (baseCellSize !== undefined || divisions !== undefined) {
+      // Traccia una nuova cella grezza, o cambia solo il numero di
+      // suddivisioni su quella già tracciata: in entrambi i casi la cella
+      // effettiva è sempre il loro quoziente.
+      location.map.grid.cellSize = Math.max(4, Math.round(location.map.grid.baseCellSize / location.map.grid.divisions));
+    } else if (cellSize !== undefined) {
+      // Modifica numerica diretta della cella (fine-tuning): un valore
+      // esplicito diventa la nuova base e azzera la suddivisione, così non
+      // resta "nascosto" dietro un moltiplicatore residuo della volta prima.
+      location.map.grid.cellSize = cellSize;
+      location.map.grid.baseCellSize = cellSize;
+      location.map.grid.divisions = 1;
+    }
     saveState(state);
     broadcastState();
   });
@@ -840,6 +875,11 @@ io.on('connection', (socket) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location || !state.gridPreset) return;
     location.map.grid.cellSize = state.gridPreset.cellSize;
+    // Una predefinita applicata è di fatto un valore esplicito, come il
+    // fine-tuning numerico: diventa la nuova base, nessuna suddivisione
+    // residua della griglia precedente.
+    location.map.grid.baseCellSize = state.gridPreset.cellSize;
+    location.map.grid.divisions = 1;
     location.map.grid.offsetX = state.gridPreset.offsetX;
     location.map.grid.offsetY = state.gridPreset.offsetY;
     location.map.grid.color = state.gridPreset.color;

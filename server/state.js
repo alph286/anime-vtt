@@ -4,7 +4,13 @@ const path = require('path');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 
-const DEFAULT_GRID = { enabled: false, cellSize: 100, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 };
+// `baseCellSize`/`divisions` sono la "cella grezza" tracciata sulla mappa e
+// il numero di suddivisioni applicate: `cellSize` resta sempre il loro
+// quoziente, già arrotondato -- ogni altro punto del codice (resa griglia su
+// editor/control/display) continua a leggere solo `cellSize`, ignaro della
+// suddivisione. Tenerli separati è ciò che permette di cambiare il numero di
+// suddivisioni *dopo* aver tracciato la griglia, senza dover ritracciare.
+const DEFAULT_GRID = { enabled: false, cellSize: 100, baseCellSize: 100, divisions: 1, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 };
 const DEFAULT_COMPASS = { visible: false, x: 88, y: 85, rotation: 0 };
 const DEFAULT_AUDIO = { name: '', file: null, volume: 0.7 };
 
@@ -68,6 +74,10 @@ function migrate(state) {
     if (location.map.grid.color === undefined) location.map.grid.color = '#ffffff';
     if (location.map.grid.lineWidth === undefined) location.map.grid.lineWidth = 0.3;
     if (location.map.grid.opacity === undefined) location.map.grid.opacity = 1;
+    // Griglie salvate prima dell'introduzione della suddivisione regolabile:
+    // la cella già esistente diventa la base, nessuna suddivisione applicata.
+    if (location.map.grid.baseCellSize === undefined) location.map.grid.baseCellSize = location.map.grid.cellSize;
+    if (location.map.grid.divisions === undefined) location.map.grid.divisions = 1;
     if (!location.map.compass) location.map.compass = { ...DEFAULT_COMPASS };
     if (location.map.compass.visible === undefined) location.map.compass.visible = false;
     if (location.map.compass.x === undefined) location.map.compass.x = DEFAULT_COMPASS.x;

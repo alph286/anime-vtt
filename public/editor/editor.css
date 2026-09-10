@@ -80,9 +80,8 @@ input[type="number"] {
 .editor-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-rows: auto 1fr;
   gap: 20px;
-  max-width: 1500px;
-  margin: 0 auto;
   padding: 20px 24px 40px;
   align-items: start;
 }
@@ -117,17 +116,19 @@ h2 {
   margin-bottom: 0;
 }
 
+/* Riga a sé sopra le due colonne (grid-column: span totale), non più dentro
+   la colonna mappa -- con flex-wrap va a capo su più righe quando lo spazio
+   non basta, invece di scorrere orizzontalmente fuori vista. */
 .toolbar {
+  grid-column: 1 / -1;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 10px;
+  gap: 4px 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px;
-  overflow-x: auto;
 }
 
 .toolbar-group {
@@ -560,6 +561,16 @@ button:active:not(:disabled),
   border-color: var(--accent);
 }
 
+/* La scheda immagine (non solo la sua riga superiore) è l'unità trascinata:
+   didascalia e destinazione sotto la maniglia viaggiano con lei. */
+.image-card.dragging {
+  opacity: 0.6;
+}
+
+.image-card.dragging .image-editor-row {
+  border-color: var(--accent);
+}
+
 .drag-handle {
   display: flex;
   align-items: center;
@@ -651,21 +662,22 @@ button:active:not(:disabled),
   gap: 6px;
 }
 
+/* Didascalia e destinazione una per riga: la prima usa così tutta la
+   larghezza della scheda invece di dividerla con la seconda. */
 .image-meta-row {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .image-caption-input {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   height: 32px;
   font-size: 13px;
 }
 
 .image-destination-select {
-  flex: 0 0 auto;
-  min-width: 160px;
+  width: 100%;
   height: 32px;
   font-size: 13px;
 }

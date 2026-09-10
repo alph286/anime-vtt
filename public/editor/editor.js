@@ -159,6 +159,31 @@ function bindNumberCommit(numEl, min, max, onChange) {
   });
 }
 
+// Come bindNumberCommit, ma applica ogni valore valido subito mentre si
+// scrive (evento `input`), non solo alla perdita del focus -- senza però
+// riscrivere il campo durante la digitazione: farlo sposterebbe il cursore
+// a metà parola. Il clamp/normalizzazione visibile nel campo resta solo
+// all'uscita (`change`), come in bindNumberCommit.
+function bindNumberLive(numEl, min, max, onChange) {
+  numEl.addEventListener('input', () => {
+    if (numEl.value === '') return;
+    const v = Number(numEl.value);
+    if (Number.isNaN(v)) return;
+    onChange(Math.min(max, Math.max(min, v)));
+  });
+  numEl.addEventListener('change', () => {
+    if (numEl.value === '') return;
+    let v = Number(numEl.value);
+    if (Number.isNaN(v)) return;
+    v = Math.min(max, Math.max(min, v));
+    numEl.value = String(v);
+    onChange(v);
+  });
+  numEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') numEl.blur();
+  });
+}
+
 function render() {
   const location = getActiveLocation();
 
@@ -220,6 +245,7 @@ function render() {
   gridToggleBtn.classList.toggle('active', grid.enabled);
   gridToggleBtn.title = grid.enabled ? 'Nascondi griglia' : 'Mostra griglia';
   gridSizeNum.value = String(grid.cellSize);
+  gridDivisionsNum.value = String(grid.divisions || 1);
   gridOffsetXNum.value = String(grid.offsetX);
   gridOffsetYNum.value = String(grid.offsetY);
   gridColorInput.value = grid.color || '#ffffff';
@@ -595,7 +621,12 @@ function applyGridAlignment(start, end) {
     cellH = side;
   }
   const divisions = Math.max(1, Math.round(Number(gridDivisionsNum.value) || 1));
-  const cellSize = Math.max(4, Math.round((cellW + cellH) / 2 / divisions));
+  // La cella tracciata è la base grezza: il server la divide per `divisions`
+  // e salva entrambe, così il numero di suddivisioni resta regolabile anche
+  // dopo (vedi listener su gridDivisionsNum più sotto), invece di essere
+  // "bruciato" dentro cellSize in questo solo istante.
+  const baseCellSize = Math.max(4, Math.round((cellW + cellH) / 2));
+  const cellSize = Math.max(4, Math.round(baseCellSize / divisions));
   const originX = Math.round((leftPct / 100) * nw);
   const originY = Math.round((topPct / 100) * nh);
   const offsetX = ((originX % cellSize) + cellSize) % cellSize;
@@ -604,7 +635,8 @@ function applyGridAlignment(start, end) {
   socket.emit('grid:update', {
     locationId: state.activeLocationId,
     enabled: true,
-    cellSize,
+    baseCellSize,
+    divisions,
     offsetX,
     offsetY
   });
@@ -800,7 +832,7 @@ locationSelect.addEventListener('change', () => {
   socket.emit('location:set', { locationId: locationSelect.value });
 });
 
-bindNumberCommit(mapScaleNum, 25, 1000, (v) => {
+bindNumberLive(mapScaleNum, 25, 1000, (v) => {
   currentMapScale = v / 100;
   updateZoomBox();
   updateOverlayBox();
@@ -814,6 +846,14 @@ gridToggleBtn.addEventListener('click', () => {
 
 bindNumberCommit(gridSizeNum, 4, 1000, (v) => {
   socket.emit('grid:update', { locationId: state.activeLocationId, cellSize: v });
+});
+
+// A differenza della cella tracciata col mouse (che fissa subito divisions
+// nell'istante del trascinamento), questo campo resta modificabile anche
+// dopo: il server ricalcola sempre la cella effettiva da baseCellSize/questo
+// valore, mai dal cellSize già in uso in quel momento.
+bindNumberCommit(gridDivisionsNum, 1, 20, (v) => {
+  socket.emit('grid:update', { locationId: state.activeLocationId, divisions: v });
 });
 
 // While dragging inside the native picker, preview locally only; the server
@@ -966,6 +1006,12 @@ removeMapBtn.addEventListener('click', async () => {
 const armedImageDeletes = new Set();
 const imageDeleteTimers = new Map();
 
+// Stesso pattern di locationDragState: mentre si trascina, il DOM (già
+// riordinato a vista da insertBefore) resta l'unica fonte di verità fino al
+// rilascio -- un render() nel frattempo (es. da un altro client) non deve
+// ricostruire la lista sotto il dito di chi sta trascinando.
+let imageDragState = null;
+
 function renderDestinationOptions(selectedName) {
   if (telegramDestinations === null) {
     return '<option value="">Caricamento…</option>';
@@ -985,9 +1031,14 @@ function renderDestinationOptions(selectedName) {
 function renderImageList(location) {
   const images = location.images || [];
   if (!images.length) {
+    imageDragState = null;
     imageList.innerHTML = '<p class="hint">nessuna immagine per questa location</p>';
     return;
   }
+  // Durante un trascinamento il DOM è già la fonte di verità (vedi
+  // imageDragState sopra): ricostruirlo qui sotto lo scambierebbe da sotto
+  // il dito di chi sta trascinando.
+  if (imageDragState) return;
   const destinationsUnavailable = telegramDestinations !== null && !telegramDestinations.length;
   imageList.innerHTML = images
     .map((img) => {
@@ -995,6 +1046,9 @@ function renderImageList(location) {
       return `
         <div class="image-card" data-id="${img.id}">
           <div class="image-editor-row">
+            <span class="drag-handle" data-drag="${img.id}" title="Trascina per riordinare">
+              <svg class="icon"><use href="#i-grip"></use></svg>
+            </span>
             <button class="image-thumb-btn" data-preview="${img.id}" title="Anteprima a schermo intero">
               <img src="/storage/images/${img.file}" alt="${escapeHtml(img.name)}">
               <svg class="icon thumb-overlay-icon"><use href="#i-expand"></use></svg>
@@ -1138,6 +1192,50 @@ imageList.addEventListener('change', (e) => {
 imageList.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.matches('input[data-name-for], input[data-caption-for]')) e.target.blur();
 });
+
+// Stesso meccanismo di trascinamento di renderLocationPanel/endLocationDrag,
+// ma la riga spostata è l'intera .image-card (non solo la sua riga
+// superiore), così la didascalia/destinazione sotto la maniglia viaggiano
+// insieme al resto della scheda.
+function getActiveImageRows() {
+  return Array.from(imageList.querySelectorAll('.image-card'));
+}
+
+imageList.addEventListener('pointerdown', (e) => {
+  if (imageDragState) return;
+  const handle = e.target.closest('[data-drag]');
+  if (!handle) return;
+  const row = handle.closest('.image-card');
+  if (!row) return;
+  imageDragState = { pointerId: e.pointerId, rowEl: row };
+  row.classList.add('dragging');
+  row.setPointerCapture(e.pointerId);
+});
+
+imageList.addEventListener('pointermove', (e) => {
+  if (!imageDragState || e.pointerId !== imageDragState.pointerId) return;
+  const draggedRow = imageDragState.rowEl;
+  const overRow = getActiveImageRows().find((row) => {
+    if (row === draggedRow) return false;
+    const rect = row.getBoundingClientRect();
+    return e.clientY >= rect.top && e.clientY <= rect.bottom;
+  });
+  if (!overRow) return;
+  const overRect = overRow.getBoundingClientRect();
+  const insertBefore = e.clientY < overRect.top + overRect.height / 2;
+  imageList.insertBefore(draggedRow, insertBefore ? overRow : overRow.nextSibling);
+});
+
+function endImageDrag(e) {
+  if (!imageDragState || e.pointerId !== imageDragState.pointerId) return;
+  imageDragState.rowEl.classList.remove('dragging');
+  const orderedIds = getActiveImageRows().map((row) => row.dataset.id);
+  imageDragState = null;
+  socket.emit('image:reorder', { locationId: state.activeLocationId, orderedIds });
+}
+
+window.addEventListener('pointerup', endImageDrag);
+window.addEventListener('pointercancel', endImageDrag);
 
 function openLightbox(image) {
   lightboxImg.src = `/storage/images/${image.file}`;
