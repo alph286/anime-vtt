@@ -339,6 +339,16 @@ button:active:not(:disabled),
   background: var(--bg-canvas);
   border-radius: 8px;
   overflow: auto;
+  /* Lo scroll resta funzionante (serve per pan/zoom) ma la barra visibile
+     no: a qualunque livello di zoom oltre il 100% il contenuto eccede
+     sempre il riquadro, quindi la barra sarebbe comunque presente in
+     permanenza -- puro rumore visivo, il trascinamento/rotellina bastano. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.map-canvas::-webkit-scrollbar {
+  display: none;
 }
 
 .map-canvas-zoom {
@@ -506,10 +516,35 @@ button:active:not(:disabled),
   height: auto;
 }
 
-.polygon-row .state-tag {
-  font-size: 11px;
+/* Occhio aperto/chiuso: mostra a colpo d'occhio se l'area è rivelata ai
+   giocatori e la si può cambiare direttamente da qui, senza dover passare da
+   /control -- prima era solo una scritta "nascosta"/"rivelata", non cliccabile. */
+.fow-toggle-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
   color: var(--text-secondary);
-  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fow-toggle-btn .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.fow-toggle-btn.revealed {
+  color: var(--accent);
+}
+
+.fow-toggle-btn:hover {
+  background: var(--bg-panel);
 }
 
 .tv-controls {

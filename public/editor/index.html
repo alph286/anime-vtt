@@ -34,6 +34,9 @@
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4.5 18 5.5-6 4 4.5L18 12l1.5 2.5"/></symbol>
   <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8a5 5 0 0 1 0 8"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14 20 9l-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h2"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7c1.6 0 3 .3 4.2.8M22 12s-1.6 2.8-4.2 4.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></symbol>
 </svg>
 
 <header class="topbar">
@@ -174,13 +177,15 @@
         <span id="editor-zoom-readout" class="zoom-readout">100%</span>
       </div>
 
-      <div id="undo-sep" class="toolbar-sep" hidden></div>
+      <div class="toolbar-sep"></div>
 
       <div class="toolbar-group">
-        <button id="undo-btn" class="icon-btn" title="Annulla" hidden>
+        <button id="undo-btn" class="icon-btn" title="Annulla" disabled>
           <svg class="icon"><use href="#i-undo"></use></svg>
         </button>
-        <span id="undo-label" class="zoom-readout" hidden></span>
+        <button id="redo-btn" class="icon-btn" title="Ripeti" disabled>
+          <svg class="icon"><use href="#i-redo"></use></svg>
+        </button>
       </div>
   </div>
 

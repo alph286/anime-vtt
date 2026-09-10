@@ -52,9 +52,8 @@ const fogOpacityNum = document.getElementById('fog-opacity-num');
 const mapScaleNum = document.getElementById('map-scale-num');
 const editorZoomReadout = document.getElementById('editor-zoom-readout');
 const editorZoomResetBtn = document.getElementById('editor-zoom-reset');
-const undoSep = document.getElementById('undo-sep');
 const undoBtn = document.getElementById('undo-btn');
-const undoLabel = document.getElementById('undo-label');
+const redoBtn = document.getElementById('redo-btn');
 
 const gridToggleBtn = document.getElementById('grid-toggle');
 const gridAlignToolBtn = document.getElementById('grid-align-tool');
@@ -97,47 +96,112 @@ const imageUpload = document.getElementById('image-upload');
 const audioMainContent = document.getElementById('audio-main-content');
 const audioSpecialContent = document.getElementById('audio-special-content');
 
-// Un solo "ultimo annullabile", non uno stack: deliberatamente limitato
-// all'azione più recente (poligono eliminato, griglia spostata/ritracciata),
-// non un undo generico per tutto l'editor. Ogni nuova azione annullabile
-// sovrascrive la precedente.
-let lastUndo = null; // { label, apply() }
+// Storico globale delle azioni confermate (poligono eliminato/rimosso un
+// punto/spostato, griglia spostata/ritracciata): uno stack vero, non un solo
+// "ultimo annullabile" -- ogni voce sa sia tornare indietro che rifare.
+// Mentre si sta disegnando un poligono nuovo (mode === 'draw'), Ctrl+Z/Y e i
+// due pulsanti agiscono invece SOLO sul livello locale più sotto (i punti non
+// ancora confermati): evita di dover fondere cronologicamente due storie
+// indipendenti -- i punti di un disegno in corso, azzerati non appena il
+// disegno finisce o viene annullato, e tutto ciò che è già stato confermato
+// prima di iniziarlo.
+let undoStack = [];
+let redoStack = [];
+const HISTORY_LIMIT = 50;
 
-function setLastUndo(label, apply) {
-  lastUndo = { label, apply };
-  undoSep.hidden = false;
-  undoBtn.hidden = false;
-  undoBtn.title = `Annulla: ${label}`;
-  undoLabel.hidden = false;
-  undoLabel.textContent = label;
+function pushHistory(label, undo, redo) {
+  undoStack.push({ label, undo, redo });
+  if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+  redoStack = [];
+  renderUndoRedoButtons();
 }
 
-function clearLastUndo() {
-  lastUndo = null;
-  undoSep.hidden = true;
-  undoBtn.hidden = true;
-  undoLabel.hidden = true;
+// Buffer locale dei punti tolti con Ctrl+Z durante il disegno di un poligono
+// non ancora confermato: si azzera a ogni nuovo punto aggiunto (un'azione
+// nuova invalida sempre il "ripeti" in sospeso, come nello stack globale) e
+// a ogni fine/annullo del disegno in corso (vedi resetDrawingPoints).
+let drawRedoBuffer = [];
+
+// Unico punto che azzera `drawingPoints`: tiene sincronizzato anche il
+// buffer di ripeti locale, che altrimenti conterrebbe punti di un disegno
+// ormai concluso o abbandonato.
+function resetDrawingPoints() {
+  drawingPoints = [];
+  drawRedoBuffer = [];
+}
+
+function pushDrawPoint(point) {
+  drawingPoints.push(point);
+  drawRedoBuffer = [];
+  renderPolygonsSvg();
+  renderUndoRedoButtons();
+}
+
+function undoDrawPoint() {
+  if (!drawingPoints.length) return;
+  drawRedoBuffer.push(drawingPoints.pop());
+  renderPolygonsSvg();
+  renderUndoRedoButtons();
+}
+
+function redoDrawPoint() {
+  if (!drawRedoBuffer.length) return;
+  drawingPoints.push(drawRedoBuffer.pop());
+  renderPolygonsSvg();
+  renderUndoRedoButtons();
 }
 
 function performUndo() {
-  if (!lastUndo) return;
-  lastUndo.apply();
-  clearLastUndo();
+  if (mode === 'draw') {
+    undoDrawPoint();
+    return;
+  }
+  const entry = undoStack.pop();
+  if (!entry) return;
+  entry.undo();
+  redoStack.push(entry);
+  renderUndoRedoButtons();
+}
+
+function performRedo() {
+  if (mode === 'draw') {
+    redoDrawPoint();
+    return;
+  }
+  const entry = redoStack.pop();
+  if (!entry) return;
+  entry.redo();
+  undoStack.push(entry);
+  renderUndoRedoButtons();
+}
+
+function renderUndoRedoButtons() {
+  const canUndo = mode === 'draw' ? drawingPoints.length > 0 : undoStack.length > 0;
+  const canRedo = mode === 'draw' ? drawRedoBuffer.length > 0 : redoStack.length > 0;
+  undoBtn.disabled = !canUndo;
+  redoBtn.disabled = !canRedo;
+  const undoTarget = mode === 'draw' ? 'ultimo punto' : undoStack[undoStack.length - 1]?.label;
+  const redoTarget = mode === 'draw' ? 'punto tolto' : redoStack[redoStack.length - 1]?.label;
+  undoBtn.title = canUndo ? `Annulla: ${undoTarget}` : 'Annulla';
+  redoBtn.title = canRedo ? `Ripeti: ${redoTarget}` : 'Ripeti';
 }
 
 undoBtn.addEventListener('click', performUndo);
+redoBtn.addEventListener('click', performRedo);
 
 document.addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey;
-  if (!mod || e.key.toLowerCase() !== 'z' || e.shiftKey) return;
-  // Dentro un campo di testo (nome location, etichetta, ecc.) Ctrl+Z deve
-  // restare l'undo nativo del browser sul testo digitato, non il nostro.
+  if (!mod || e.shiftKey) return;
+  const key = e.key.toLowerCase();
+  if (key !== 'z' && key !== 'y') return;
+  // Dentro un campo di testo (nome location, etichetta, ecc.) Ctrl+Z/Y deve
+  // restare l'undo/redo nativo del browser sul testo digitato, non il nostro.
   // `e.target` può essere `document` stesso quando nessun elemento ha il
   // focus, che non ha `.matches` (non è un Element) -- va escluso esplicitamente.
   if (e.target instanceof Element && e.target.matches('input, textarea')) return;
-  if (!lastUndo) return;
   e.preventDefault();
-  performUndo();
+  if (key === 'z') performUndo();
+  else performRedo();
 });
 
 const lightbox = document.getElementById('lightbox');
@@ -253,7 +317,7 @@ function render() {
   if (!location) {
     setLocationControlsDisabled(true);
     mode = 'select';
-    drawingPoints = [];
+    resetDrawingPoints();
     selectedPolygonId = null;
     draggingIndex = null;
     draggingPolygon = null;
@@ -422,9 +486,31 @@ function renderPolygonsSvg() {
           e.preventDefault();
           e.stopPropagation();
           if (poly.points.length <= 3) return;
+          const locationId = location.id;
+          const polygonId = poly.id;
+          const removedPoint = poly.points[index];
           poly.points.splice(index, 1);
+          const afterPoints = poly.points.map((p) => [...p]);
           renderPolygonsSvg();
-          socket.emit('polygon:update', { locationId: location.id, polygonId: poly.id, points: poly.points });
+          socket.emit('polygon:update', { locationId, polygonId, points: afterPoints });
+          pushHistory(`punto rimosso da "${poly.name}"`,
+            () => {
+              const loc = getActiveLocation();
+              const p = loc?.map.polygons.find((pp) => pp.id === polygonId);
+              if (!p) return;
+              p.points.splice(index, 0, removedPoint);
+              if (polygonId === selectedPolygonId) renderPolygonsSvg();
+              socket.emit('polygon:update', { locationId, polygonId, points: p.points });
+            },
+            () => {
+              const loc = getActiveLocation();
+              const p = loc?.map.polygons.find((pp) => pp.id === polygonId);
+              if (!p) return;
+              p.points.splice(index, 1);
+              if (polygonId === selectedPolygonId) renderPolygonsSvg();
+              socket.emit('polygon:update', { locationId, polygonId, points: p.points });
+            }
+          );
         });
         overlayBox.appendChild(handle);
       });
@@ -450,6 +536,7 @@ function renderPolygonsSvg() {
   drawCancelBtn.hidden = drawingPoints.length === 0;
   deletePolygonBtn.disabled = !selectedPolygonId;
   if (deleteArmedFor !== selectedPolygonId) resetDeleteArm();
+  renderUndoRedoButtons();
 }
 
 function pointFromClientXY(clientX, clientY) {
@@ -496,8 +583,7 @@ function pointInPolygon([x, y], points) {
 overlayBox.addEventListener('click', (e) => {
   if (mode !== 'draw') return;
   const point = basePointFromClientXY(e.clientX, e.clientY);
-  drawingPoints.push(point);
-  renderPolygonsSvg();
+  pushDrawPoint(point);
 });
 
 overlayBox.addEventListener('pointerdown', (e) => {
@@ -633,7 +719,33 @@ document.addEventListener('pointerup', () => {
     if (!location) return;
     const poly = location.map.polygons.find((p) => p.id === draggingPolygon.polygonId);
     if (poly) {
-      socket.emit('polygon:update', { locationId: location.id, polygonId: poly.id, points: poly.points });
+      const { polygonId, originalPoints } = draggingPolygon;
+      const locationId = location.id;
+      const newPoints = poly.points.map((p) => [...p]);
+      socket.emit('polygon:update', { locationId, polygonId, points: newPoints });
+      // Nessuna voce nello storico se non ci si è mossi per niente (drag
+      // iniziato e finito sullo stesso punto): non è un'azione da annullare.
+      const moved = originalPoints.some(([x, y], i) => x !== newPoints[i][0] || y !== newPoints[i][1]);
+      if (moved) {
+        pushHistory(`area "${poly.name}" spostata`,
+          () => {
+            const loc = getActiveLocation();
+            const p = loc?.map.polygons.find((pp) => pp.id === polygonId);
+            if (!p) return;
+            p.points = originalPoints.map((pt) => [...pt]);
+            if (polygonId === selectedPolygonId) renderPolygonsSvg();
+            socket.emit('polygon:update', { locationId, polygonId, points: p.points });
+          },
+          () => {
+            const loc = getActiveLocation();
+            const p = loc?.map.polygons.find((pp) => pp.id === polygonId);
+            if (!p) return;
+            p.points = newPoints.map((pt) => [...pt]);
+            if (polygonId === selectedPolygonId) renderPolygonsSvg();
+            socket.emit('polygon:update', { locationId, polygonId, points: p.points });
+          }
+        );
+      }
     }
     draggingPolygon = null;
   }
@@ -683,7 +795,7 @@ function applyGridAlignment(start, end) {
   const offsetX = ((originX % cellSize) + cellSize) % cellSize;
   const offsetY = ((originY % cellSize) + cellSize) % cellSize;
 
-  snapshotGridForUndo(getActiveLocation(), 'griglia ritracciata');
+  pushGridHistory(getActiveLocation(), 'griglia ritracciata', { enabled: true, baseCellSize, divisions, offsetX, offsetY });
   socket.emit('grid:update', {
     locationId: state.activeLocationId,
     enabled: true,
@@ -696,7 +808,7 @@ function applyGridAlignment(start, end) {
 
 toolSelectBtn.addEventListener('click', () => {
   mode = 'select';
-  drawingPoints = [];
+  resetDrawingPoints();
   toolSelectBtn.classList.add('active');
   toolDrawBtn.classList.remove('active');
   gridAlignToolBtn.classList.remove('active');
@@ -730,14 +842,15 @@ drawFinishBtn.addEventListener('click', () => {
   const location = getActiveLocation();
   const name = `Area ${(location.map.polygons || []).length + 1}`;
   socket.emit('polygon:create', { locationId: state.activeLocationId, name, points: drawingPoints });
-  drawingPoints = [];
+  resetDrawingPoints();
   mode = 'select';
   toolSelectBtn.classList.add('active');
   toolDrawBtn.classList.remove('active');
+  renderPolygonsSvg();
 });
 
 drawCancelBtn.addEventListener('click', () => {
-  drawingPoints = [];
+  resetDrawingPoints();
   renderPolygonsSvg();
 });
 
@@ -774,9 +887,11 @@ deletePolygonBtn.addEventListener('click', () => {
   socket.emit('polygon:delete', { locationId, polygonId });
   selectedPolygonId = null;
   if (polygon) {
-    setLastUndo(`poligono "${polygon.name}" eliminato`, () => {
-      socket.emit('polygon:restore', { locationId, index, polygon: { ...polygon } });
-    });
+    const snapshot = { ...polygon };
+    pushHistory(`poligono "${polygon.name}" eliminato`,
+      () => socket.emit('polygon:restore', { locationId, index, polygon: snapshot }),
+      () => socket.emit('polygon:delete', { locationId, polygonId: snapshot.id })
+    );
   }
 });
 
@@ -814,7 +929,10 @@ function renderPolygonList(location) {
             <svg class="icon"><use href="#i-grip"></use></svg>
           </span>
           <input type="text" value="${escapeHtml(poly.name)}" data-name-for="${poly.id}">
-          <span class="state-tag">${poly.revealed ? 'rivelata' : 'nascosta'}</span>
+          <button class="fow-toggle-btn ${poly.revealed ? 'revealed' : ''}" data-fow-toggle="${poly.id}"
+                  title="${poly.revealed ? 'Rivelata — clic per nascondere' : 'Nascosta — clic per rivelare'}">
+            <svg class="icon"><use href="#${poly.revealed ? 'i-eye' : 'i-eye-off'}"></use></svg>
+          </button>
         </div>
       `
     )
@@ -822,6 +940,11 @@ function renderPolygonList(location) {
 }
 
 polygonList.addEventListener('click', (e) => {
+  const toggleBtn = e.target.closest('[data-fow-toggle]');
+  if (toggleBtn) {
+    socket.emit('fow:toggle', { locationId: state.activeLocationId, polygonId: toggleBtn.dataset.fowToggle });
+    return;
+  }
   const row = e.target.closest('.polygon-row');
   if (!row || e.target.matches('input') || e.target.closest('[data-drag-polygon]')) return;
   mode = 'select';
@@ -885,7 +1008,7 @@ window.addEventListener('pointercancel', endPolygonDrag);
 
 locationSelect.addEventListener('change', () => {
   selectedPolygonId = null;
-  drawingPoints = [];
+  resetDrawingPoints();
   editorZoom = 1;
   editorZoomReadout.textContent = '100%';
   mapCanvas.scrollLeft = 0;
@@ -948,38 +1071,35 @@ bindNumberCommit(gridOffsetYNum, -100000, 100000, (v) => {
 // entrambi possono alterare posizione/dimensione della cella in un modo che
 // non si corregge scrivendo un numero -- a differenza degli altri campi
 // griglia (colore, opacità, spessore), dove basta ridigitare il valore
-// giusto. baseCellSize/divisions bastano a ricostruire anche cellSize (il
-// server lo ricalcola da loro), quindi non serve includerlo qui.
-function snapshotGridForUndo(location, label) {
+// giusto. `patch` sono i soli campi che cambiano; `before`/`after` restano
+// oggetti completi (il server applica sempre grid:update per intero), così
+// annullare e ripetere restano entrambi un solo evento preciso, non una
+// ricostruzione approssimata. Se il patch include baseCellSize/divisions,
+// cellSize va ricalcolato esattamente come fa il server, mai portato avanti
+// tale e quale.
+function pushGridHistory(location, label, patch) {
   const locationId = location.id;
-  const grid = { ...location.map.grid };
-  setLastUndo(label, () => {
-    socket.emit('grid:update', {
-      locationId,
-      enabled: grid.enabled,
-      baseCellSize: grid.baseCellSize,
-      divisions: grid.divisions,
-      offsetX: grid.offsetX,
-      offsetY: grid.offsetY,
-      color: grid.color,
-      lineWidth: grid.lineWidth,
-      opacity: grid.opacity
-    });
-  });
+  const before = { ...location.map.grid };
+  const after = { ...before, ...patch };
+  if (patch.baseCellSize !== undefined || patch.divisions !== undefined) {
+    after.cellSize = Math.max(4, Math.round(after.baseCellSize / after.divisions));
+  }
+  pushHistory(label,
+    () => socket.emit('grid:update', { locationId, ...before }),
+    () => socket.emit('grid:update', { locationId, ...after })
+  );
 }
 
 document.querySelectorAll('[data-grid-move]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const location = getActiveLocation();
-    snapshotGridForUndo(location, 'griglia spostata');
     const [dx, dy] = btn.dataset.gridMove.split(',').map(Number);
     const cellSize = location.map.grid.cellSize || 100;
     const step = Math.max(1, Math.round(cellSize * 0.1));
-    socket.emit('grid:update', {
-      locationId: location.id,
-      offsetX: (location.map.grid.offsetX || 0) + dx * step,
-      offsetY: (location.map.grid.offsetY || 0) + dy * step
-    });
+    const offsetX = (location.map.grid.offsetX || 0) + dx * step;
+    const offsetY = (location.map.grid.offsetY || 0) + dy * step;
+    pushGridHistory(location, 'griglia spostata', { offsetX, offsetY });
+    socket.emit('grid:update', { locationId: location.id, offsetX, offsetY });
   });
 });
 
