@@ -64,6 +64,17 @@ function migrate(state) {
   if (state.activeAudioTrack === undefined) state.activeAudioTrack = 'main';
   if (state.audioTriggerSeq === undefined) state.audioTriggerSeq = 0;
 
+  // Prima di questa feature, PICSENDER_URL viveva solo in `.env`. La prima
+  // volta che uno state.json non ha ancora `settings`, lo si eredita da lì
+  // (se presente) così chi l'aveva già configurato non deve reinserirlo. Una
+  // volta che `settings` esiste, non si tocca più: l'utente lo gestisce da
+  // /opzioni.
+  if (!state.settings) {
+    state.settings = { picsenderUrl: process.env.PICSENDER_URL || '' };
+  } else if (state.settings.picsenderUrl === undefined) {
+    state.settings.picsenderUrl = '';
+  }
+
   (state.locations || []).forEach((location) => {
     delete location.map.rotation;
     if (location.map.scale === undefined) location.map.scale = 1;
@@ -123,11 +134,18 @@ function loadState() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
   if (!fs.existsSync(STATE_FILE)) {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(DEFAULT_STATE, null, 2));
-    return migrate(JSON.parse(JSON.stringify(DEFAULT_STATE)));
+    const migrated = migrate(JSON.parse(JSON.stringify(DEFAULT_STATE)));
+    fs.writeFileSync(STATE_FILE, JSON.stringify(migrated, null, 2));
+    return migrated;
   }
   try {
-    return migrate(JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8')));
+    const loaded = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    const migrated = migrate(loaded);
+    // Persist any migration changes back to disk (e.g., new settings field)
+    if (JSON.stringify(loaded) !== JSON.stringify(migrated)) {
+      saveState(migrated);
+    }
+    return migrated;
   } catch (err) {
     // state.json is sometimes hand-edited; a typo must not crash-loop the server
     // with a cryptic stacktrace, nor silently wipe the data. Explain and stop.
