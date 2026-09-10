@@ -30,6 +30,9 @@
   <symbol id="i-sort-az" viewBox="0 0 24 24"><path d="M4 6h6M4 12h9M4 18h12M18 4v14M18 18l3-3M18 18l-3-3"/></symbol>
   <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></symbol>
   <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-7.2 7-12a7 7 0 1 0-14 0c0 4.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4.5 18 5.5-6 4 4.5L18 12l1.5 2.5"/></symbol>
+  <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8a5 5 0 0 1 0 8"/></symbol>
 </svg>
 
 <header class="topbar">
@@ -37,6 +40,19 @@
   <button id="location-create" class="icon-btn" title="Nuova location">
     <svg class="icon"><use href="#i-plus"></use></svg>
   </button>
+  <div class="menu-wrap">
+    <button id="orphans-menu-toggle" class="icon-btn" title="Pulisci file orfani">
+      <svg class="icon"><use href="#i-trash"></use></svg>
+    </button>
+    <div id="orphans-menu" class="dropdown-menu" hidden>
+      <button id="orphans-scan-btn" class="dropdown-item">Cerca file orfani</button>
+      <div id="orphans-panel" hidden>
+        <div id="orphans-list" class="hint"></div>
+        <button id="orphans-purge-btn" hidden>conferma cancellazione</button>
+      </div>
+    </div>
+  </div>
+
   <div class="menu-wrap">
     <button id="backup-menu-toggle" class="icon-btn" title="Esporta / importa">
       <svg class="icon"><use href="#i-more"></use></svg>
@@ -186,79 +202,93 @@
   </section>
 
   <aside class="col col-sidebar">
-    <section class="panel">
-      <h2>Location</h2>
-      <div id="location-list" class="image-editor-list"></div>
-      <div id="location-archived-wrap" hidden>
-        <p class="hint">Archiviate</p>
-        <div id="location-archived-list" class="image-editor-list"></div>
+    <nav id="sidebar-tabs" class="sidebar-tab-bar">
+      <button class="icon-btn tool active" data-tab-target="location" title="Location">
+        <svg class="icon"><use href="#i-pin"></use></svg>
+      </button>
+      <button class="icon-btn tool" data-tab-target="immagini" title="Immagini">
+        <svg class="icon"><use href="#i-image"></use></svg>
+      </button>
+      <button class="icon-btn tool" data-tab-target="fog" title="Fog of war">
+        <svg class="icon"><use href="#i-fog"></use></svg>
+      </button>
+      <button class="icon-btn tool" data-tab-target="audio" title="Audio">
+        <svg class="icon"><use href="#i-speaker"></use></svg>
+      </button>
+      <button class="icon-btn tool" data-tab-target="grid" title="Fine tuning griglia">
+        <svg class="icon"><use href="#i-grid"></use></svg>
+      </button>
+    </nav>
+
+    <div id="sidebar-panels" data-active-tab="location">
+      <section class="tab-panel panel" data-tab="location">
+        <h2>Location</h2>
+        <div id="location-list" class="image-editor-list"></div>
+        <div id="location-archived-wrap" hidden>
+          <p class="hint">Archiviate</p>
+          <div id="location-archived-list" class="image-editor-list"></div>
+        </div>
+      </section>
+
+      <section class="tab-panel panel" data-tab="immagini">
+        <h2>Immagini</h2>
+        <div id="image-list" class="image-editor-list"></div>
+        <label class="file-btn">Carica immagine<input type="file" id="image-upload" accept="image/*"></label>
+      </section>
+
+      <section class="tab-panel panel" data-tab="fog">
+        <div class="section-header">
+          <h2>Fog of war</h2>
+          <button id="polygon-sort-az" class="icon-btn" title="Ordina alfabeticamente">
+            <svg class="icon"><use href="#i-sort-az"></use></svg>
+          </button>
+        </div>
+        <div id="polygon-list" class="list"></div>
+      </section>
+
+      <div class="tab-panel" data-tab="audio">
+        <section class="panel">
+          <h2>Traccia principale</h2>
+          <div id="audio-main-content"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Traccia speciale</h2>
+          <div id="audio-special-content"></div>
+        </section>
       </div>
-    </section>
 
-    <section class="panel">
-      <h2>Immagini</h2>
-      <div id="image-list" class="image-editor-list"></div>
-      <label class="file-btn">Carica immagine<input type="file" id="image-upload" accept="image/*"></label>
-    </section>
-
-    <section class="panel">
-      <h2>Traccia principale</h2>
-      <div id="audio-main-content"></div>
-    </section>
-
-    <section class="panel">
-      <h2>Traccia speciale</h2>
-      <div id="audio-special-content"></div>
-    </section>
-
-    <section class="panel">
-      <div class="section-header">
-        <h2>Fog of war</h2>
-        <button id="polygon-sort-az" class="icon-btn" title="Ordina alfabeticamente">
-          <svg class="icon"><use href="#i-sort-az"></use></svg>
-        </button>
-      </div>
-      <div id="polygon-list" class="list"></div>
-    </section>
-
-    <section class="panel">
-      <h2>Fine tuning griglia</h2>
-      <div class="tv-controls">
-        <label class="num-row">
-          <span class="grid-label">cella</span>
-          <input type="number" id="grid-size-num" min="4" max="1000" value="100">
-          <span class="unit">px</span>
-        </label>
-        <div class="grid-move">
-          <label class="grid-label">sposta</label>
-          <div class="pad">
-            <span></span>
-            <button data-grid-move="0,-1">▲</button>
-            <span></span>
-            <button data-grid-move="-1,0">◀</button>
-            <span></span>
-            <button data-grid-move="1,0">▶</button>
-            <span></span>
-            <button data-grid-move="0,1">▼</button>
-            <span></span>
+      <section class="tab-panel panel" data-tab="grid">
+        <h2>Fine tuning griglia</h2>
+        <div class="tv-controls">
+          <label class="num-row">
+            <span class="grid-label">cella</span>
+            <input type="number" id="grid-size-num" min="4" max="1000" value="100">
+            <span class="unit">px</span>
+          </label>
+          <div class="grid-move">
+            <label class="grid-label">sposta</label>
+            <div class="pad">
+              <span></span>
+              <button data-grid-move="0,-1">▲</button>
+              <span></span>
+              <button data-grid-move="-1,0">◀</button>
+              <span></span>
+              <button data-grid-move="1,0">▶</button>
+              <span></span>
+              <button data-grid-move="0,1">▼</button>
+              <span></span>
+            </div>
           </div>
+          <div class="grid-offsets">
+            <label>offset X <input type="number" id="grid-offset-x-num" value="0"></label>
+            <label>offset Y <input type="number" id="grid-offset-y-num" value="0"></label>
+          </div>
+          <button id="grid-save-preset">salva come predefinita</button>
+          <button id="grid-apply-preset">applica predefinita</button>
         </div>
-        <div class="grid-offsets">
-          <label>offset X <input type="number" id="grid-offset-x-num" value="0"></label>
-          <label>offset Y <input type="number" id="grid-offset-y-num" value="0"></label>
-        </div>
-        <button id="grid-save-preset">salva come predefinita</button>
-        <button id="grid-apply-preset">applica predefinita</button>
-      </div>
-    </section>
-
-    <section>
-      <button id="orphans-scan-btn" class="link-btn">pulisci file orfani</button>
-      <div id="orphans-panel" hidden>
-        <div id="orphans-list" class="hint"></div>
-        <button id="orphans-purge-btn" hidden>conferma cancellazione</button>
-      </div>
-    </section>
+      </section>
+    </div>
   </aside>
 </main>
 

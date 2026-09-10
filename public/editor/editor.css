@@ -97,6 +97,27 @@ section {
   min-width: 0;
 }
 
+/* Cinque scorciatoie fisse, non uno strumento che cresce: una riga di icone
+   sta bene ai 280px della colonna, niente bisogno di etichette testuali. */
+.sidebar-tab-bar {
+  display: flex;
+  gap: 4px;
+}
+
+.tab-panel {
+  display: none;
+}
+
+#sidebar-panels[data-active-tab="location"] .tab-panel[data-tab="location"],
+#sidebar-panels[data-active-tab="immagini"] .tab-panel[data-tab="immagini"],
+#sidebar-panels[data-active-tab="fog"] .tab-panel[data-tab="fog"],
+#sidebar-panels[data-active-tab="audio"] .tab-panel[data-tab="audio"],
+#sidebar-panels[data-active-tab="grid"] .tab-panel[data-tab="grid"] {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 h2 {
   font-size: 13px;
   text-transform: uppercase;

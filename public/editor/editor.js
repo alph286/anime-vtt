@@ -17,8 +17,13 @@ let currentRotation = 0;
 
 const locationSelect = document.getElementById('location-select');
 const locationCreateBtn = document.getElementById('location-create');
+const orphansMenuToggle = document.getElementById('orphans-menu-toggle');
+const orphansMenu = document.getElementById('orphans-menu');
 const backupMenuToggle = document.getElementById('backup-menu-toggle');
 const backupMenu = document.getElementById('backup-menu');
+const sidebarTabBar = document.getElementById('sidebar-tabs');
+const sidebarTabButtons = Array.from(document.querySelectorAll('#sidebar-tabs [data-tab-target]'));
+const sidebarPanels = document.getElementById('sidebar-panels');
 const exportLocationBtn = document.getElementById('export-location-btn');
 const exportLocationName = document.getElementById('export-location-name');
 const exportBackupBtn = document.getElementById('export-backup-btn');
@@ -1520,12 +1525,43 @@ orphansPurgeBtn.addEventListener('click', async () => {
   orphansList.innerHTML = `cancellati ${data.deleted.length} file.`;
 });
 
+// Un solo menu a tendina aperto alla volta: aprirne uno chiude l'altro,
+// invece di lasciarli sovrapposti.
+function closeHeaderMenus() {
+  backupMenu.hidden = true;
+  orphansMenu.hidden = true;
+}
+document.addEventListener('click', closeHeaderMenus);
+backupMenu.addEventListener('click', (e) => e.stopPropagation());
+orphansMenu.addEventListener('click', (e) => e.stopPropagation());
+
 backupMenuToggle.addEventListener('click', (e) => {
   e.stopPropagation();
-  backupMenu.hidden = !backupMenu.hidden;
+  const willOpen = backupMenu.hidden;
+  closeHeaderMenus();
+  backupMenu.hidden = !willOpen;
 });
-document.addEventListener('click', () => { backupMenu.hidden = true; });
-backupMenu.addEventListener('click', (e) => e.stopPropagation());
+
+orphansMenuToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const willOpen = orphansMenu.hidden;
+  closeHeaderMenus();
+  orphansMenu.hidden = !willOpen;
+});
+
+// Le cinque schede della colonna destra sono un cambio di composizione, non
+// di funzionalità: mostrano/nascondono gli stessi pannelli di sempre (stesso
+// principio delle schede di /control).
+function setActiveSidebarTab(tab) {
+  sidebarPanels.dataset.activeTab = tab;
+  sidebarTabButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tabTarget === tab));
+}
+
+sidebarTabBar.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-tab-target]');
+  if (!btn) return;
+  setActiveSidebarTab(btn.dataset.tabTarget);
+});
 
 exportLocationBtn.addEventListener('click', () => {
   if (!state.activeLocationId) return;
