@@ -7,7 +7,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
+const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -16,10 +16,11 @@ const PORT = process.env.PORT || 3000;
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'storage');
 const MAPS_DIR = path.join(STORAGE_DIR, 'maps');
 const IMAGES_DIR = path.join(STORAGE_DIR, 'images');
+const AUDIO_DIR = path.join(STORAGE_DIR, 'audio');
 const IMPORTS_DIR = path.join(DATA_DIR, 'imports');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 
-for (const dir of [MAPS_DIR, IMAGES_DIR, IMPORTS_DIR, BACKUPS_DIR]) {
+for (const dir of [MAPS_DIR, IMAGES_DIR, AUDIO_DIR, IMPORTS_DIR, BACKUPS_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -72,6 +73,18 @@ function makeUpload(destDir, { allowVideo = false, maxFileSize = 50 * 1024 * 102
 const uploadMap = makeUpload(MAPS_DIR, { allowVideo: true, maxFileSize: 300 * 1024 * 1024 });
 const uploadImage = makeUpload(IMAGES_DIR);
 
+// L'audio non riusa makeUpload(): filtro mime (audio/*) e limite dimensione
+// diversi da mappe/immagini, e vogliamo poter cambiare l'uno senza rischiare
+// di toccare i percorsi di upload già in uso da mappe e immagini.
+const uploadAudio = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, AUDIO_DIR),
+    filename: (req, file, cb) => cb(null, `${nanoid()}${path.extname(file.originalname)}`)
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^audio\//.test(file.mimetype))
+});
+
 /**
  * Removes an uploaded file from disk, but only if it genuinely resolves inside
  * `dir` — a stored filename must never be able to reach outside its own folder.
@@ -102,9 +115,12 @@ function resolveImportPath(token) {
 function findOrphanFiles() {
   const referencedMaps = new Set();
   const referencedImages = new Set();
+  const referencedAudio = new Set();
   state.locations.forEach((location) => {
     if (location.map.file) referencedMaps.add(location.map.file);
     (location.images || []).forEach((img) => referencedImages.add(img.file));
+    if (location.map.audio && location.map.audio.main && location.map.audio.main.file) referencedAudio.add(location.map.audio.main.file);
+    if (location.map.audio && location.map.audio.special && location.map.audio.special.file) referencedAudio.add(location.map.audio.special.file);
   });
 
   const scanDir = (dir, referenced, kind) =>
@@ -112,7 +128,11 @@ function findOrphanFiles() {
       .filter((name) => !referenced.has(name))
       .map((name) => ({ dir, name, kind, size: fs.statSync(path.join(dir, name)).size }));
 
-  return [...scanDir(MAPS_DIR, referencedMaps, 'maps'), ...scanDir(IMAGES_DIR, referencedImages, 'images')];
+  return [
+    ...scanDir(MAPS_DIR, referencedMaps, 'maps'),
+    ...scanDir(IMAGES_DIR, referencedImages, 'images'),
+    ...scanDir(AUDIO_DIR, referencedAudio, 'audio')
+  ];
 }
 
 app.post('/api/storage/orphans/scan', (req, res) => {
@@ -177,6 +197,38 @@ app.post('/api/upload/image', uploadImage.single('file'), (req, res) => {
   saveState(state);
   broadcastState();
   res.json({ ok: true, file: req.file.filename });
+});
+
+app.post('/api/upload/audio', uploadAudio.single('file'), (req, res) => {
+  const location = state.locations.find((l) => l.id === req.body.locationId);
+  const slot = req.body.slot;
+  if (!location || !req.file || (slot !== 'main' && slot !== 'special')) {
+    return res.status(400).json({ error: 'location, file o slot mancante/non valido' });
+  }
+  const previousFile = location.map.audio[slot].file;
+  const previousVolume = location.map.audio[slot].volume === undefined ? DEFAULT_AUDIO.volume : location.map.audio[slot].volume;
+  location.map.audio[slot] = {
+    name: req.body.name || req.file.originalname,
+    file: req.file.filename,
+    // Il volume di default (70%) vale solo alla prima assegnazione di una
+    // traccia: sostituire una traccia già presente conserva il volume già
+    // impostato dall'utente su /control.
+    volume: previousFile ? previousVolume : DEFAULT_AUDIO.volume
+  };
+  if (previousFile) deleteUploadedFile(AUDIO_DIR, previousFile);
+  if (state.activeLocationId === location.id && slot === state.activeAudioTrack) {
+    // Si sta sostituendo la traccia che sta attualmente suonando: se è la
+    // speciale, si torna alla principale (stesso comportamento di una fine
+    // naturale); se è la principale, semplicemente si ferma.
+    if (slot === 'special') {
+      returnToMain(location);
+    } else {
+      state.audioState = 'stopped';
+    }
+  }
+  saveState(state);
+  broadcastState();
+  res.json({ ok: true, file: req.file.filename, slot });
 });
 
 app.get('/api/telegram/destinations', async (req, res) => {
@@ -300,6 +352,14 @@ app.post('/api/import/apply', async (req, res) => {
   }
 });
 
+// Riporta la riproduzione alla principale -- stesso comportamento sia che
+// la speciale sia appena finita da sola, sia che sia stata fermata
+// manualmente, sia che sia stata sostituita/eliminata mentre suonava.
+function returnToMain(location) {
+  state.activeAudioTrack = 'main';
+  state.audioState = location.map.audio.main.file ? 'playing' : 'stopped';
+}
+
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -344,9 +404,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('location:set', ({ locationId }) => {
-    if (!state.locations.some((l) => l.id === locationId)) return;
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
     state.activeLocationId = locationId;
     state.activeImageId = null;
+    state.activeAudioTrack = 'main';
+    state.audioState = location.map.audio.main.file ? 'playing' : 'stopped';
     saveState(state);
     broadcastState();
   });
@@ -364,6 +427,7 @@ io.on('connection', (socket) => {
         liveView: { scale: 1, offsetX: 0, offsetY: 0 },
         grid: { ...DEFAULT_GRID },
         compass: { ...DEFAULT_COMPASS },
+        audio: { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } },
         polygons: []
       },
       images: [],
@@ -373,6 +437,8 @@ io.on('connection', (socket) => {
     state.locations.push(location);
     state.activeLocationId = location.id;
     state.activeImageId = null;
+    state.activeAudioTrack = 'main';
+    state.audioState = 'stopped';
     saveState(state);
     broadcastState();
   });
@@ -646,6 +712,111 @@ io.on('connection', (socket) => {
     if (x !== undefined) location.map.compass.x = Math.min(100, Math.max(0, x));
     if (y !== undefined) location.map.compass.y = Math.min(100, Math.max(0, y));
     if (rotation !== undefined) location.map.compass.rotation = ((Math.round(rotation) % 360) + 360) % 360;
+    saveState(state);
+    broadcastState();
+  });
+
+  // A differenza di griglia/fog/rosa dei venti, questi comandi agiscono
+  // sempre sulla location attiva -- non esiste un'anteprima silenziosa per
+  // l'audio (suonerebbe comunque subito ai giocatori), quindi niente
+  // locationId dal client: previewLocationId non c'entra qui. Agiscono
+  // sempre su `location.map.audio[state.activeAudioTrack]`, qualunque essa
+  // sia in quel momento -- mai forzatamente sulla principale.
+  socket.on('audio:play', () => {
+    const location = getActiveLocation();
+    const track = location && location.map.audio[state.activeAudioTrack];
+    if (!track || !track.file) return;
+    state.audioState = 'playing';
+    broadcastState();
+  });
+
+  socket.on('audio:pause', () => {
+    const location = getActiveLocation();
+    const track = location && location.map.audio[state.activeAudioTrack];
+    if (!track || !track.file) return;
+    state.audioState = 'paused';
+    broadcastState();
+  });
+
+  socket.on('audio:stop', () => {
+    const location = getActiveLocation();
+    const track = location && location.map.audio[state.activeAudioTrack];
+    if (!track || !track.file) return;
+    if (state.activeAudioTrack === 'special') {
+      returnToMain(location);
+    } else {
+      state.audioState = 'stopped';
+    }
+    broadcastState();
+  });
+
+  socket.on('audio:volume', ({ volume }) => {
+    const location = getActiveLocation();
+    const track = location && location.map.audio[state.activeAudioTrack];
+    if (!track || volume === undefined) return;
+    track.volume = Math.min(1, Math.max(0, volume));
+    saveState(state);
+    broadcastState();
+  });
+
+  // Fa partire la speciale da capo, sempre, anche se era già in corso --
+  // utile per far ripartire lo sting se il boss "ricompare". `audioTriggerSeq`
+  // è l'unico modo per /display di distinguere questo caso (stesso slot,
+  // stesso file, ma va comunque riazzerata la posizione) da un
+  // state:update qualunque che non deve toccare la posizione di riproduzione.
+  socket.on('audio:playSpecial', () => {
+    const location = getActiveLocation();
+    if (!location || !location.map.audio.special.file) return;
+    state.activeAudioTrack = 'special';
+    state.audioState = 'playing';
+    state.audioTriggerSeq += 1;
+    broadcastState();
+  });
+
+  // /display lo emette quando l'elemento <audio> genera l'evento nativo
+  // `ended` (può succedere solo per la speciale, mai in loop) -- ignorato se
+  // nel frattempo activeAudioTrack non è più 'special' (es. il GM ha già
+  // premuto Stop o cambiato location prima che l'evento arrivasse), per non
+  // annullare uno stato più recente con un evento arrivato in ritardo.
+  socket.on('audio:specialEnded', ({ seq } = {}) => {
+    const location = getActiveLocation();
+    if (!location || state.activeAudioTrack !== 'special') return;
+    // Il contatore protegge da un evento `ended` in transito che appartiene a
+    // una riproduzione già superata da un audio:playSpecial più recente --
+    // senza questo controllo, un retrigger fatto esattamente mentre la
+    // vecchia riproduzione sta finendo verrebbe cancellato dall'evento in
+    // ritardo. seq === undefined (client non aggiornato) mantiene il
+    // comportamento precedente.
+    if (seq !== undefined && seq !== state.audioTriggerSeq) return;
+    returnToMain(location);
+    broadcastState();
+  });
+
+  socket.on('audio:delete', ({ locationId, slot }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const track = location && (slot === 'main' || slot === 'special') && location.map.audio[slot];
+    if (!track || !track.file) return;
+
+    deleteUploadedFile(AUDIO_DIR, track.file);
+    location.map.audio[slot] = { ...DEFAULT_AUDIO };
+
+    if (state.activeLocationId === locationId && slot === state.activeAudioTrack) {
+      if (slot === 'special') {
+        returnToMain(location);
+      } else {
+        state.audioState = 'stopped';
+      }
+    }
+
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('audio:rename', ({ locationId, slot, name }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const track = location && (slot === 'main' || slot === 'special') && location.map.audio[slot];
+    if (!track || !track.file) return;
+    track.name = String(name || '').slice(0, 120);
     saveState(state);
     broadcastState();
   });

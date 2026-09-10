@@ -3,8 +3,10 @@ node_modules/
 data/state.json
 storage/maps/*
 storage/images/*
+storage/audio/*
 !storage/maps/.gitkeep
 !storage/images/.gitkeep
+!storage/audio/.gitkeep
 .superpowers/
 data/imports/
 data/backups/

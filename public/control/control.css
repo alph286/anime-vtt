@@ -353,6 +353,22 @@ h2 {
   border-color: var(--accent);
 }
 
+#audio-play-pause.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+#audio-playback-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#audio-special-row {
+  margin-bottom: 10px;
+}
+
 .map-preview.pan-mode-active {
   cursor: move;
 }

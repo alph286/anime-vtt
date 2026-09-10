@@ -16,6 +16,7 @@ const { nanoid } = require('nanoid');
 // fallisce: con il vecchio `.pipe()` + due `.on('error')` separati, il lato di
 // lettura restava aperto (file descriptor mai chiuso) a ogni operazione fallita.
 const { pipeline } = require('stream/promises');
+const { DEFAULT_AUDIO } = require('./state');
 
 function extOf(filename) {
   return path.extname(filename || '');
@@ -28,7 +29,14 @@ function extOf(filename) {
 function manifestForLocation(location) {
   return {
     name: location.name,
-    map: { ...location.map, polygons: (location.map.polygons || []).map((p) => ({ ...p })) },
+    map: {
+      ...location.map,
+      polygons: (location.map.polygons || []).map((p) => ({ ...p })),
+      // L'audio non fa parte dell'export (fuori scope, vedi design doc):
+      // resettato a un default sicuro per non lasciare nel manifest un
+      // riferimento a un file che planLocationFiles() non copia nell'archivio.
+      audio: { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } }
+    },
     images: (location.images || []).map((img) => ({
       name: img.name || '',
       file: img.file,
