@@ -123,9 +123,13 @@ function findOrphanFiles() {
     if (location.map.audio && location.map.audio.special && location.map.audio.special.file) referencedAudio.add(location.map.audio.special.file);
   });
 
+  // .gitkeep (nelle cartelle storage/*) è un segnaposto che tiene la
+  // cartella tracciata da git quando è vuota: non è mai referenziato da
+  // nessuna location per definizione, ma non è comunque un file "orfano"
+  // da segnalare/cancellare.
   const scanDir = (dir, referenced, kind) =>
     fs.readdirSync(dir)
-      .filter((name) => !referenced.has(name))
+      .filter((name) => name !== '.gitkeep' && !referenced.has(name))
       .map((name) => ({ dir, name, kind, size: fs.statSync(path.join(dir, name)).size }));
 
   return [
