@@ -17,7 +17,7 @@ creare da nessuna parte.
 
 ## Cos'è, in pratica
 
-Il programma ha **tre pagine**, ognuna con un ruolo diverso:
+Il programma ha **quattro pagine**, ognuna con un ruolo diverso:
 
 - **`/editor`** — la usi prima della sessione, dal tuo PC: qui carichi le
   mappe, disegni le zone coperte dalla nebbia di guerra, carichi le immagini
@@ -27,10 +27,12 @@ Il programma ha **tre pagine**, ognuna con un ruolo diverso:
   mostri un'immagine ai giocatori.
 - **`/display`** — è quella che resta aperta sulla TV, a schermo intero: i
   giocatori la guardano e basta, non la toccano mai.
+- **`/opzioni`** — impostazioni generali: qui configuri l'URL di PicSender e
+  il nome della campagna, senza dover toccare file a mano.
 
-Le tre pagine restano sincronizzate in tempo reale: quello che fai sul
-telefono in `/control` appare subito sulla TV in `/display`, senza bisogno di
-premere "aggiorna" o ricaricare nulla.
+`/editor`, `/control` e `/display` restano sincronizzate in tempo reale:
+quello che fai sul telefono in `/control` appare subito sulla TV in
+`/display`, senza bisogno di premere "aggiorna" o ricaricare nulla.
 
 ## Cosa ti serve prima di iniziare
 
@@ -132,9 +134,15 @@ Se in futuro vuoi capire cosa contiene, sono quattro righe:
 - `STORAGE_DIR=./storage` — dove vengono salvate le mappe e le immagini che
   carichi.
 - `PICSENDER_URL=` — riguarda una funzione facoltativa per inviare foto su
-  Telegram tramite un altro programma esterno (PicSender). Se non ti
-  interessa, lascia questa riga vuota: il resto del programma funziona
-  comunque, semplicemente quella singola funzione non sarà disponibile.
+  Telegram tramite un altro programma esterno (PicSender). **Non serve più
+  modificare questa riga:** l'URL di PicSender ora si imposta dalla pagina
+  `/opzioni` una volta avviato il programma (vedi sotto). Questa riga in
+  `.env` serve solo a chi aveva già configurato PicSender prima
+  dell'introduzione di `/opzioni`: al primo avvio dopo l'aggiornamento, il
+  valore viene letto una sola volta da qui e trasferito automaticamente
+  nelle impostazioni salvate — dopo quel primo avvio, modificare `.env` non
+  ha più nessun effetto. Se stai partendo da zero, lascia pure questa riga
+  vuota e configura tutto da `/opzioni`.
 
 ### 6. Avvia il programma
 
@@ -148,7 +156,7 @@ tiene acceso il programma. Se la chiudi, il programma si spegne (più avanti,
 nella sezione sul Raspberry Pi, trovi come farlo partire da solo senza
 tenere aperto nulla).
 
-### 7. Apri le tre pagine
+### 7. Apri le pagine
 
 Sullo stesso computer dove hai avviato il programma, apri un browser
 (Chrome, Firefox, Safari, quello che usi di solito) e vai su:
@@ -156,6 +164,8 @@ Sullo stesso computer dove hai avviato il programma, apri un browser
 - `http://localhost:3000/editor` — per preparare le mappe
 - `http://localhost:3000/control` — per pilotare la sessione
 - `http://localhost:3000/display` — quella che andrà sulla TV
+- `http://localhost:3000/opzioni` — per configurare l'URL di PicSender e il
+  nome della campagna
 
 Per aprire `/control` dal telefono (che è il modo in cui verrà usata
 davvero, durante la sessione), il telefono deve essere sulla stessa rete
@@ -243,8 +253,8 @@ scaricabile, utile anche solo per spostare tutto su un altro computer.
 
 **Posso usarlo per la mia campagna, con un altro nome?** Sì. Il nome
 "Anime Salve" compare solo come testo nell'interfaccia — puoi cambiarlo
-modificando il file `data/state.json` dopo il primo avvio, oppure lasciarlo
-così, non ha nessun effetto sul funzionamento.
+dalla pagina `/opzioni` (campo "Nome campagna"), oppure lasciarlo così, non
+ha nessun effetto sul funzionamento.
 
 ## Ambienti separati
 
