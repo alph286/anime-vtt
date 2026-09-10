@@ -119,8 +119,8 @@ function findOrphanFiles() {
   state.locations.forEach((location) => {
     if (location.map.file) referencedMaps.add(location.map.file);
     (location.images || []).forEach((img) => referencedImages.add(img.file));
-    if (location.map.audio.main && location.map.audio.main.file) referencedAudio.add(location.map.audio.main.file);
-    if (location.map.audio.special && location.map.audio.special.file) referencedAudio.add(location.map.audio.special.file);
+    if (location.map.audio && location.map.audio.main && location.map.audio.main.file) referencedAudio.add(location.map.audio.main.file);
+    if (location.map.audio && location.map.audio.special && location.map.audio.special.file) referencedAudio.add(location.map.audio.special.file);
   });
 
   const scanDir = (dir, referenced, kind) =>
@@ -778,9 +778,16 @@ io.on('connection', (socket) => {
   // nel frattempo activeAudioTrack non è più 'special' (es. il GM ha già
   // premuto Stop o cambiato location prima che l'evento arrivasse), per non
   // annullare uno stato più recente con un evento arrivato in ritardo.
-  socket.on('audio:specialEnded', () => {
+  socket.on('audio:specialEnded', ({ seq } = {}) => {
     const location = getActiveLocation();
     if (!location || state.activeAudioTrack !== 'special') return;
+    // Il contatore protegge da un evento `ended` in transito che appartiene a
+    // una riproduzione già superata da un audio:playSpecial più recente --
+    // senza questo controllo, un retrigger fatto esattamente mentre la
+    // vecchia riproduzione sta finendo verrebbe cancellato dall'evento in
+    // ritardo. seq === undefined (client non aggiornato) mantiene il
+    // comportamento precedente.
+    if (seq !== undefined && seq !== state.audioTriggerSeq) return;
     returnToMain(location);
     broadcastState();
   });

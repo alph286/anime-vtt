@@ -698,7 +698,8 @@ audioStopBtn.addEventListener('click', () => {
 
 function stepAudioVolume(delta) {
   const location = getActiveLocation();
-  const track = location && location.map.audio[state.activeAudioTrack];
+  const audio = location && location.map.audio;
+  const track = audio && audio[state.activeAudioTrack];
   if (!track || !track.file) return;
   const current = track.volume === undefined ? 0.7 : track.volume;
   const next = Math.min(1, Math.max(0, Math.round((current + delta) * 10) / 10));

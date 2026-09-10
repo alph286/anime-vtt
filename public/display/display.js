@@ -19,7 +19,18 @@ const sceneAudioEl = document.getElementById('scene-audio');
 // in loop, non genera mai `ended`. Non decide da solo di tornare alla
 // principale -- si limita a riportare il fatto al server.
 sceneAudioEl.addEventListener('ended', () => {
-  socket.emit('audio:specialEnded');
+  socket.emit('audio:specialEnded', { seq: lastAudioTriggerSeq });
+});
+
+// Un file speciale corrotto/mancante non genera mai `ended` (play() fallisce
+// silenziosamente in renderAudio) -- senza questo, il server resterebbe
+// bloccato su activeAudioTrack:'special' per sempre, perché nessun evento
+// natural-end arriverebbe mai a farlo tornare alla principale. Mai per la
+// principale (sempre in loop): lì "fermare tutta la funzione" per un file
+// rotto sarebbe sbagliato.
+sceneAudioEl.addEventListener('error', () => {
+  if (sceneAudioEl.loop) return; // la principale non ha un "ritorno" da fare
+  socket.emit('audio:specialEnded', { seq: lastAudioTriggerSeq });
 });
 
 let socketConnected = false;
