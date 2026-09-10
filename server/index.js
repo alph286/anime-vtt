@@ -668,6 +668,27 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  // Annulla di un polygon:delete: a differenza di polygon:create (che genera
+  // sempre un nuovo id), qui il client manda l'intero poligono così com'era
+  // -- stesso id, stessa posizione nell'elenco, stesso stato rivelato -- per
+  // ripristinarlo esattamente, non ricrearne uno equivalente ma diverso.
+  socket.on('polygon:restore', ({ locationId, polygon, index }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location || !polygon || !polygon.id || !Array.isArray(polygon.points)) return;
+    // Nessun duplicato se il poligono esiste già (es. un doppio undo, o un
+    // client rimasto indietro che reinvia lo stesso ripristino).
+    if (location.map.polygons.some((p) => p.id === polygon.id)) return;
+    const insertAt = Number.isInteger(index) ? Math.min(Math.max(0, index), location.map.polygons.length) : location.map.polygons.length;
+    location.map.polygons.splice(insertAt, 0, {
+      id: polygon.id,
+      name: String(polygon.name || 'nuova area').slice(0, 200),
+      points: polygon.points,
+      revealed: Boolean(polygon.revealed)
+    });
+    saveState(state);
+    broadcastState();
+  });
+
   socket.on('polygon:reorder', ({ locationId, orderedIds }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location || !Array.isArray(orderedIds)) {

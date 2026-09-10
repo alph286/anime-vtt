@@ -79,7 +79,7 @@ input[type="number"] {
 
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   grid-template-rows: auto 1fr;
   gap: 20px;
   padding: 20px 24px 40px;
@@ -98,7 +98,7 @@ section {
 }
 
 /* Cinque scorciatoie fisse, non uno strumento che cresce: una riga di icone
-   sta bene ai 280px della colonna, niente bisogno di etichette testuali. */
+   sta bene alla larghezza della colonna, niente bisogno di etichette testuali. */
 .sidebar-tab-bar {
   display: flex;
   gap: 4px;

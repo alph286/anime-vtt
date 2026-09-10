@@ -52,6 +52,9 @@ const fogOpacityNum = document.getElementById('fog-opacity-num');
 const mapScaleNum = document.getElementById('map-scale-num');
 const editorZoomReadout = document.getElementById('editor-zoom-readout');
 const editorZoomResetBtn = document.getElementById('editor-zoom-reset');
+const undoSep = document.getElementById('undo-sep');
+const undoBtn = document.getElementById('undo-btn');
+const undoLabel = document.getElementById('undo-label');
 
 const gridToggleBtn = document.getElementById('grid-toggle');
 const gridAlignToolBtn = document.getElementById('grid-align-tool');
@@ -93,6 +96,49 @@ const imageList = document.getElementById('image-list');
 const imageUpload = document.getElementById('image-upload');
 const audioMainContent = document.getElementById('audio-main-content');
 const audioSpecialContent = document.getElementById('audio-special-content');
+
+// Un solo "ultimo annullabile", non uno stack: deliberatamente limitato
+// all'azione più recente (poligono eliminato, griglia spostata/ritracciata),
+// non un undo generico per tutto l'editor. Ogni nuova azione annullabile
+// sovrascrive la precedente.
+let lastUndo = null; // { label, apply() }
+
+function setLastUndo(label, apply) {
+  lastUndo = { label, apply };
+  undoSep.hidden = false;
+  undoBtn.hidden = false;
+  undoBtn.title = `Annulla: ${label}`;
+  undoLabel.hidden = false;
+  undoLabel.textContent = label;
+}
+
+function clearLastUndo() {
+  lastUndo = null;
+  undoSep.hidden = true;
+  undoBtn.hidden = true;
+  undoLabel.hidden = true;
+}
+
+function performUndo() {
+  if (!lastUndo) return;
+  lastUndo.apply();
+  clearLastUndo();
+}
+
+undoBtn.addEventListener('click', performUndo);
+
+document.addEventListener('keydown', (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod || e.key.toLowerCase() !== 'z' || e.shiftKey) return;
+  // Dentro un campo di testo (nome location, etichetta, ecc.) Ctrl+Z deve
+  // restare l'undo nativo del browser sul testo digitato, non il nostro.
+  // `e.target` può essere `document` stesso quando nessun elemento ha il
+  // focus, che non ha `.matches` (non è un Element) -- va escluso esplicitamente.
+  if (e.target instanceof Element && e.target.matches('input, textarea')) return;
+  if (!lastUndo) return;
+  e.preventDefault();
+  performUndo();
+});
 
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
@@ -637,6 +683,7 @@ function applyGridAlignment(start, end) {
   const offsetX = ((originX % cellSize) + cellSize) % cellSize;
   const offsetY = ((originY % cellSize) + cellSize) % cellSize;
 
+  snapshotGridForUndo(getActiveLocation(), 'griglia ritracciata');
   socket.emit('grid:update', {
     locationId: state.activeLocationId,
     enabled: true,
@@ -719,9 +766,18 @@ deletePolygonBtn.addEventListener('click', () => {
     return;
   }
   const polygonId = selectedPolygonId;
+  const locationId = state.activeLocationId;
+  const location = getActiveLocation();
+  const index = location.map.polygons.findIndex((p) => p.id === polygonId);
+  const polygon = location.map.polygons[index];
   resetDeleteArm();
-  socket.emit('polygon:delete', { locationId: state.activeLocationId, polygonId });
+  socket.emit('polygon:delete', { locationId, polygonId });
   selectedPolygonId = null;
+  if (polygon) {
+    setLastUndo(`poligono "${polygon.name}" eliminato`, () => {
+      socket.emit('polygon:restore', { locationId, index, polygon: { ...polygon } });
+    });
+  }
 });
 
 flip180Btn.addEventListener('click', () => {
@@ -888,9 +944,34 @@ bindNumberCommit(gridOffsetYNum, -100000, 100000, (v) => {
   socket.emit('grid:update', { locationId: state.activeLocationId, offsetY: v });
 });
 
+// Condiviso tra il tastierino "sposta" e il ritracciamento della griglia:
+// entrambi possono alterare posizione/dimensione della cella in un modo che
+// non si corregge scrivendo un numero -- a differenza degli altri campi
+// griglia (colore, opacità, spessore), dove basta ridigitare il valore
+// giusto. baseCellSize/divisions bastano a ricostruire anche cellSize (il
+// server lo ricalcola da loro), quindi non serve includerlo qui.
+function snapshotGridForUndo(location, label) {
+  const locationId = location.id;
+  const grid = { ...location.map.grid };
+  setLastUndo(label, () => {
+    socket.emit('grid:update', {
+      locationId,
+      enabled: grid.enabled,
+      baseCellSize: grid.baseCellSize,
+      divisions: grid.divisions,
+      offsetX: grid.offsetX,
+      offsetY: grid.offsetY,
+      color: grid.color,
+      lineWidth: grid.lineWidth,
+      opacity: grid.opacity
+    });
+  });
+}
+
 document.querySelectorAll('[data-grid-move]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const location = getActiveLocation();
+    snapshotGridForUndo(location, 'griglia spostata');
     const [dx, dy] = btn.dataset.gridMove.split(',').map(Number);
     const cellSize = location.map.grid.cellSize || 100;
     const step = Math.max(1, Math.round(cellSize * 0.1));
@@ -1526,26 +1607,31 @@ orphansPurgeBtn.addEventListener('click', async () => {
 });
 
 // Un solo menu a tendina aperto alla volta: aprirne uno chiude l'altro,
-// invece di lasciarli sovrapposti.
-function closeHeaderMenus() {
-  backupMenu.hidden = true;
-  orphansMenu.hidden = true;
-}
-document.addEventListener('click', closeHeaderMenus);
+// invece di lasciarli sovrapposti. Il menu orfani fa eccezione al click
+// fuori (vedi sotto): può contenere una scansione in corso che si perderebbe
+// al primo click distratto altrove nella pagina.
+function closeBackupMenu() { backupMenu.hidden = true; }
+function closeOrphansMenu() { orphansMenu.hidden = true; }
+
+document.addEventListener('click', closeBackupMenu);
 backupMenu.addEventListener('click', (e) => e.stopPropagation());
 orphansMenu.addEventListener('click', (e) => e.stopPropagation());
 
 backupMenuToggle.addEventListener('click', (e) => {
   e.stopPropagation();
   const willOpen = backupMenu.hidden;
-  closeHeaderMenus();
+  closeOrphansMenu();
   backupMenu.hidden = !willOpen;
 });
 
+// Resta aperto finché non lo richiudi tu stesso (di nuovo su questa icona,
+// o aprendo il menu esporta/importa) -- mai per un click fuori qualsiasi,
+// altrimenti i risultati di una scansione appena fatta sparirebbero al primo
+// click distratto sul resto della pagina prima di aver confermato o meno.
 orphansMenuToggle.addEventListener('click', (e) => {
   e.stopPropagation();
   const willOpen = orphansMenu.hidden;
-  closeHeaderMenus();
+  closeBackupMenu();
   orphansMenu.hidden = !willOpen;
 });
 
