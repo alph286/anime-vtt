@@ -3,17 +3,21 @@
 // PicSender resta solo un tramite verso Telegram: ogni invio carica una copia
 // temporanea, la invia, poi la cancella subito (vedi sendImage). Le foto di
 // anime-vtt non vengono mai toccate da questo modulo.
+//
+// L'URL di PicSender non vive più in process.env: arriva come parametro da
+// chi chiama (server/index.js lo legge da state.settings.picsenderUrl), così
+// questo modulo resta puro e testabile senza dover impostare variabili
+// d'ambiente.
 
 const fs = require('fs');
 const path = require('path');
 
-function baseUrl() {
-  const url = process.env.PICSENDER_URL || '';
-  return url.replace(/\/+$/, '');
+function baseUrl(url) {
+  return String(url || '').replace(/\/+$/, '');
 }
 
-async function getDestinations() {
-  const base = baseUrl();
+async function getDestinations(url) {
+  const base = baseUrl(url);
   if (!base) throw new Error('PICSENDER_URL non configurato');
   let res;
   try {
@@ -25,8 +29,7 @@ async function getDestinations() {
   return res.json();
 }
 
-async function uploadToPicsender(filePath) {
-  const base = baseUrl();
+async function uploadToPicsender(base, filePath) {
   const buffer = fs.readFileSync(filePath);
   const form = new FormData();
   form.append('images', new Blob([buffer]), path.basename(filePath));
@@ -38,8 +41,7 @@ async function uploadToPicsender(filePath) {
   return saved.id;
 }
 
-async function sendViaPicsender(picsenderId, destinationIndex, caption) {
-  const base = baseUrl();
+async function sendViaPicsender(base, picsenderId, destinationIndex, caption) {
   const res = await fetch(`${base}/api/send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -51,11 +53,8 @@ async function sendViaPicsender(picsenderId, destinationIndex, caption) {
   }
 }
 
-// Best-effort: una pulizia fallita non deve mai nascondere l'esito
-// dell'invio, che è quello che conta per chi ha premuto "Invia".
-async function deleteFromPicsender(picsenderId) {
+async function deleteFromPicsender(base, picsenderId) {
   try {
-    const base = baseUrl();
     const res = await fetch(`${base}/api/images/${picsenderId}`, { method: 'DELETE' });
     if (!res.ok) {
       console.error('Pulizia PicSender fallita (non bloccante): PicSender ha risposto', res.status);
@@ -65,21 +64,17 @@ async function deleteFromPicsender(picsenderId) {
   }
 }
 
-/**
- * Ciclo completo: upload -> risoluzione nome destinazione -> send -> delete
- * (best-effort). Non lancia mai: ogni fallimento diventa { ok: false, error }.
- */
-async function sendImage({ filePath, caption, destinationName }) {
-  if (!baseUrl()) {
+async function sendImage({ url, filePath, caption, destinationName }) {
+  const base = baseUrl(url);
+  if (!base) {
     return { ok: false, error: 'PicSender non configurato (PICSENDER_URL mancante)' };
   }
   if (!destinationName) {
     return { ok: false, error: 'Nessuna destinazione assegnata a questa foto' };
   }
-
   let destinations;
   try {
-    destinations = await getDestinations();
+    destinations = await getDestinations(url);
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -90,22 +85,19 @@ async function sendImage({ filePath, caption, destinationName }) {
   if (!dest) {
     return { ok: false, error: `Destinazione «${destinationName}» non più configurata su PicSender` };
   }
-
   let picsenderId;
   try {
-    picsenderId = await uploadToPicsender(filePath);
+    picsenderId = await uploadToPicsender(base, filePath);
   } catch (err) {
     return { ok: false, error: err.message };
   }
-
   try {
-    await sendViaPicsender(picsenderId, dest.index, caption);
+    await sendViaPicsender(base, picsenderId, dest.index, caption);
   } catch (err) {
-    await deleteFromPicsender(picsenderId);
+    await deleteFromPicsender(base, picsenderId);
     return { ok: false, error: err.message };
   }
-
-  await deleteFromPicsender(picsenderId);
+  await deleteFromPicsender(base, picsenderId);
   return { ok: true };
 }
 
