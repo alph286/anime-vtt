@@ -35,7 +35,7 @@ function manifestForLocation(location) {
       // L'audio non fa parte dell'export (fuori scope, vedi design doc):
       // resettato a un default sicuro per non lasciare nel manifest un
       // riferimento a un file che planLocationFiles() non copia nell'archivio.
-      audio: { ...DEFAULT_AUDIO }
+      audio: { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } }
     },
     images: (location.images || []).map((img) => ({
       name: img.name || '',

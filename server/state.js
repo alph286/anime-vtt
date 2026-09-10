@@ -24,7 +24,7 @@ const DEFAULT_STATE = {
         liveView: { scale: 1, offsetX: 0, offsetY: 0 },
         grid: { ...DEFAULT_GRID },
         compass: { ...DEFAULT_COMPASS },
-        audio: { ...DEFAULT_AUDIO },
+        audio: { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } },
         polygons: [
           { id: 'stanza-1', name: 'Stanza 1', points: [[5, 10], [40, 8], [42, 45], [8, 48]], revealed: false },
           { id: 'corridoio', name: 'Corridoio', points: [[55, 50], [92, 45], [94, 88], [58, 92]], revealed: false }
@@ -37,7 +37,9 @@ const DEFAULT_STATE = {
   ],
   activeLocationId: 'taverna',
   activeImageId: null,
-  audioState: 'stopped'
+  activeAudioTrack: 'main',
+  audioState: 'stopped',
+  audioTriggerSeq: 0
 };
 
 function migrate(state) {
@@ -53,6 +55,8 @@ function migrate(state) {
   if (state.gridPreset.opacity === undefined) state.gridPreset.opacity = 1;
 
   if (state.audioState === undefined) state.audioState = 'stopped';
+  if (state.activeAudioTrack === undefined) state.activeAudioTrack = 'main';
+  if (state.audioTriggerSeq === undefined) state.audioTriggerSeq = 0;
 
   (state.locations || []).forEach((location) => {
     delete location.map.rotation;
@@ -69,10 +73,29 @@ function migrate(state) {
     if (location.map.compass.x === undefined) location.map.compass.x = DEFAULT_COMPASS.x;
     if (location.map.compass.y === undefined) location.map.compass.y = DEFAULT_COMPASS.y;
     if (location.map.compass.rotation === undefined) location.map.compass.rotation = 0;
-    if (!location.map.audio) location.map.audio = { ...DEFAULT_AUDIO };
-    if (location.map.audio.name === undefined) location.map.audio.name = '';
-    if (location.map.audio.file === undefined) location.map.audio.file = null;
-    if (location.map.audio.volume === undefined) location.map.audio.volume = DEFAULT_AUDIO.volume;
+    if (!location.map.audio) {
+      location.map.audio = { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } };
+    } else if (!location.map.audio.main && !location.map.audio.special) {
+      // Forma precedente (una sola traccia, prima di main+special): quella
+      // già caricata diventa la principale, nessuna perdita per chi l'aveva
+      // già caricata con la feature a singola traccia.
+      location.map.audio = {
+        main: {
+          name: location.map.audio.name || '',
+          file: location.map.audio.file === undefined ? null : location.map.audio.file,
+          volume: location.map.audio.volume === undefined ? DEFAULT_AUDIO.volume : location.map.audio.volume
+        },
+        special: { ...DEFAULT_AUDIO }
+      };
+    }
+    if (!location.map.audio.main) location.map.audio.main = { ...DEFAULT_AUDIO };
+    if (!location.map.audio.special) location.map.audio.special = { ...DEFAULT_AUDIO };
+    if (location.map.audio.main.name === undefined) location.map.audio.main.name = '';
+    if (location.map.audio.main.file === undefined) location.map.audio.main.file = null;
+    if (location.map.audio.main.volume === undefined) location.map.audio.main.volume = DEFAULT_AUDIO.volume;
+    if (location.map.audio.special.name === undefined) location.map.audio.special.name = '';
+    if (location.map.audio.special.file === undefined) location.map.audio.special.file = null;
+    if (location.map.audio.special.volume === undefined) location.map.audio.special.volume = DEFAULT_AUDIO.volume;
     if (location.archived === undefined) location.archived = false;
     if (location.isDefault === undefined) location.isDefault = false;
     (location.images || []).forEach((image) => {
@@ -124,6 +147,7 @@ function applyStartupDefault(state) {
   const chosen = preferred || nonArchived[0] || null;
   state.activeLocationId = chosen ? chosen.id : null;
   state.activeImageId = null;
+  state.activeAudioTrack = 'main';
   state.audioState = 'stopped';
   return state;
 }
