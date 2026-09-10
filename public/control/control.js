@@ -39,6 +39,10 @@ const gridOpacityInBtn = document.getElementById('grid-opacity-in');
 const gridOpacityLevel = document.getElementById('grid-opacity-level');
 const GRID_OPACITY_STEP = 0.1;
 const audioSection = document.getElementById('audio-section');
+const audioSpecialRow = document.getElementById('audio-special-row');
+const audioSpecialBtn = document.getElementById('audio-special-btn');
+const audioPlaybackGroup = document.getElementById('audio-playback-group');
+const audioTrackLabel = document.getElementById('audio-track-label');
 const audioPlayPauseBtn = document.getElementById('audio-play-pause');
 const audioPlayPauseIcon = document.getElementById('audio-play-pause-icon');
 const audioStopBtn = document.getElementById('audio-stop');
@@ -240,13 +244,20 @@ function render() {
   // A differenza delle sezioni sopra, l'audio riflette sempre la location
   // ATTIVA (`location`, non `previewLocation`): i comandi non hanno un
   // concetto di anteprima, quindi anche la UI non deve suggerirne uno.
-  const audioTrack = location && location.map.audio;
-  const hasAudio = Boolean(audioTrack && audioTrack.file);
-  audioSection.hidden = !hasAudio;
-  if (hasAudio) {
+  const audio = location && location.map.audio;
+  const hasMain = Boolean(audio && audio.main && audio.main.file);
+  const hasSpecial = Boolean(audio && audio.special && audio.special.file);
+  audioSection.hidden = !hasMain && !hasSpecial;
+  audioSpecialRow.hidden = !hasSpecial;
+
+  const activeTrack = audio && audio[state.activeAudioTrack];
+  const hasActiveTrack = Boolean(activeTrack && activeTrack.file);
+  audioPlaybackGroup.hidden = !hasActiveTrack;
+  if (hasActiveTrack) {
+    audioTrackLabel.textContent = state.activeAudioTrack === 'special' ? 'Speciale' : 'Principale';
     audioPlayPauseIcon.setAttribute('href', state.audioState === 'playing' ? '#i-pause' : '#i-play');
     audioPlayPauseBtn.classList.toggle('active', state.audioState === 'playing');
-    audioVolumeLevel.textContent = `${Math.round((audioTrack.volume === undefined ? 0.7 : audioTrack.volume) * 100)}%`;
+    audioVolumeLevel.textContent = `${Math.round((activeTrack.volume === undefined ? 0.7 : activeTrack.volume) * 100)}%`;
   }
 
   updateViewportRect(previewLocation);
@@ -687,10 +698,15 @@ audioStopBtn.addEventListener('click', () => {
 
 function stepAudioVolume(delta) {
   const location = getActiveLocation();
-  if (!location || !location.map.audio || !location.map.audio.file) return;
-  const current = location.map.audio.volume === undefined ? 0.7 : location.map.audio.volume;
+  const track = location && location.map.audio[state.activeAudioTrack];
+  if (!track || !track.file) return;
+  const current = track.volume === undefined ? 0.7 : track.volume;
   const next = Math.min(1, Math.max(0, Math.round((current + delta) * 10) / 10));
   socket.emit('audio:volume', { volume: next });
 }
 audioVolumeOutBtn.addEventListener('click', () => stepAudioVolume(-AUDIO_VOLUME_STEP));
 audioVolumeInBtn.addEventListener('click', () => stepAudioVolume(AUDIO_VOLUME_STEP));
+
+audioSpecialBtn.addEventListener('click', () => {
+  socket.emit('audio:playSpecial', {});
+});

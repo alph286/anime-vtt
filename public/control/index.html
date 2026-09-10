@@ -17,6 +17,7 @@
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 4v16M16 4v16"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></symbol>
 </svg>
 
 <div id="app">
@@ -96,18 +97,27 @@
 
       <section id="audio-section" class="control-section" hidden>
         <h2>Audio</h2>
-        <div class="opacity-row">
-          <button id="audio-play-pause" class="icon-btn" title="Play/Pausa">
-            <svg class="icon"><use id="audio-play-pause-icon" href="#i-play"></use></svg>
-          </button>
-          <button id="audio-stop" class="icon-btn" title="Stop">
-            <svg class="icon"><use href="#i-stop"></use></svg>
+        <div id="audio-special-row" class="opacity-row" hidden>
+          <span>Traccia speciale</span>
+          <button id="audio-special-btn" class="icon-btn" title="Fai partire la traccia speciale">
+            <svg class="icon"><use href="#i-bolt"></use></svg>
           </button>
         </div>
-        <div class="zoom">
-          <button id="audio-volume-out" title="Riduci volume">−</button>
-          <span id="audio-volume-level">70%</span>
-          <button id="audio-volume-in" title="Aumenta volume">+</button>
+        <div id="audio-playback-group" hidden>
+          <p id="audio-track-label" class="hint"></p>
+          <div class="opacity-row">
+            <button id="audio-play-pause" class="icon-btn" title="Play/Pausa">
+              <svg class="icon"><use id="audio-play-pause-icon" href="#i-play"></use></svg>
+            </button>
+            <button id="audio-stop" class="icon-btn" title="Stop">
+              <svg class="icon"><use href="#i-stop"></use></svg>
+            </button>
+          </div>
+          <div class="zoom">
+            <button id="audio-volume-out" title="Riduci volume">−</button>
+            <span id="audio-volume-level">70%</span>
+            <button id="audio-volume-in" title="Aumenta volume">+</button>
+          </div>
         </div>
       </section>
 
