@@ -11,6 +11,7 @@ const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAUL
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
+const packageJson = require('../package.json');
 
 const PORT = process.env.PORT || 3000;
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'storage');
@@ -45,6 +46,7 @@ app.use('/control', express.static(path.join(__dirname, '..', 'public', 'control
 app.use('/editor', express.static(path.join(__dirname, '..', 'public', 'editor')));
 app.use('/shared', express.static(path.join(__dirname, '..', 'public', 'shared')));
 app.use('/home', express.static(path.join(__dirname, '..', 'public', 'home')));
+app.use('/opzioni', express.static(path.join(__dirname, '..', 'public', 'opzioni')));
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'home', 'index.html'));
@@ -52,6 +54,24 @@ app.get('/', (req, res) => {
 
 app.get('/api/state', (req, res) => {
   res.json(state);
+});
+
+app.get('/api/info', (req, res) => {
+  res.json({
+    version: packageJson.version,
+    dataDir: DATA_DIR,
+    storageDir: STORAGE_DIR
+  });
+});
+
+app.post('/api/settings', (req, res) => {
+  const { picsenderUrl, campaignName } = req.body;
+  state.settings.picsenderUrl = typeof picsenderUrl === 'string' ? picsenderUrl.trim() : '';
+  if (!state.campaign) state.campaign = { name: '' };
+  if (typeof campaignName === 'string') state.campaign.name = campaignName.trim();
+  saveState(state);
+  broadcastState();
+  res.json({ ok: true });
 });
 
 function makeUpload(destDir, { allowVideo = false, maxFileSize = 50 * 1024 * 1024 } = {}) {
@@ -237,7 +257,7 @@ app.post('/api/upload/audio', uploadAudio.single('file'), (req, res) => {
 
 app.get('/api/telegram/destinations', async (req, res) => {
   try {
-    const destinations = await picsender.getDestinations();
+    const destinations = await picsender.getDestinations(state.settings.picsenderUrl);
     res.json(destinations);
   } catch (err) {
     res.status(502).json({ error: err.message });
@@ -610,6 +630,7 @@ io.on('connection', (socket) => {
       return;
     }
     const result = await picsender.sendImage({
+      url: state.settings.picsenderUrl,
       filePath: path.join(IMAGES_DIR, image.file),
       caption: image.caption,
       destinationName: image.telegramDestination
