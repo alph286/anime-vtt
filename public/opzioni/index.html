@@ -38,11 +38,12 @@
     </div>
 
     <div class="card-actions">
-      <button id="save-settings-btn" class="btn-accent">Salva</button>
-      <button id="test-connection-btn">Testa connessione</button>
+      <button id="save-settings-btn" class="btn-accent" disabled>Salva</button>
+      <button id="test-connection-btn" disabled>Testa connessione</button>
     </div>
-    <p id="settings-status" class="hint" hidden></p>
-    <p id="test-connection-result" class="hint" hidden></p>
+    <p class="hint">Verifica l'URL attualmente salvato — se hai modificato il campo, salva prima di testare.</p>
+    <p id="settings-status" class="hint" role="status" aria-live="polite" hidden></p>
+    <p id="test-connection-result" class="hint" role="status" aria-live="polite" hidden></p>
   </section>
 
   <section class="card">

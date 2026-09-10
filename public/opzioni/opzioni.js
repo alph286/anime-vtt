@@ -13,6 +13,13 @@ fetch('/api/state')
   .then((state) => {
     picsenderUrlInput.value = (state.settings && state.settings.picsenderUrl) || '';
     campaignNameInput.value = (state.campaign && state.campaign.name) || '';
+    saveSettingsBtn.disabled = false;
+    testConnectionBtn.disabled = false;
+  })
+  .catch(() => {
+    settingsStatus.hidden = false;
+    settingsStatus.className = 'hint warning';
+    settingsStatus.textContent = 'Impossibile caricare le impostazioni attuali. Ricarica la pagina.';
   });
 
 fetch('/api/info')
@@ -50,9 +57,19 @@ testConnectionBtn.addEventListener('click', async () => {
   testConnectionResult.className = 'hint';
   testConnectionResult.textContent = 'Verifica in corso...';
   try {
-    const res = await fetch('/api/telegram/destinations');
-    const data = await res.json();
+    let res, data;
+    try {
+      res = await fetch('/api/telegram/destinations');
+      data = await res.json();
+    } catch (err) {
+      testConnectionResult.className = 'hint warning';
+      testConnectionResult.textContent = 'Errore di rete. Riprova.';
+      return;
+    }
     if (!res.ok) throw new Error(data.error || String(res.status));
+    if (!Array.isArray(data)) {
+      throw new Error('PicSender ha risposto con un formato inatteso per le destinazioni');
+    }
     const count = data.length;
     const noun = count === 1 ? 'destinazione' : 'destinazioni';
     const verb = count === 1 ? 'trovata' : 'trovate';

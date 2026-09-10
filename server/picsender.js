@@ -53,6 +53,8 @@ async function sendViaPicsender(base, picsenderId, destinationIndex, caption) {
   }
 }
 
+// Best-effort: una pulizia fallita non deve mai nascondere l'esito dell'invio,
+// che è quello che conta per chi ha premuto «Invia».
 async function deleteFromPicsender(base, picsenderId) {
   try {
     const res = await fetch(`${base}/api/images/${picsenderId}`, { method: 'DELETE' });
@@ -64,6 +66,8 @@ async function deleteFromPicsender(base, picsenderId) {
   }
 }
 
+// Ciclo completo: upload -> risoluzione nome destinazione -> send -> delete
+// (best-effort). Non lancia mai: ogni fallimento diventa { ok: false, error }.
 async function sendImage({ url, filePath, caption, destinationName }) {
   const base = baseUrl(url);
   if (!base) {
