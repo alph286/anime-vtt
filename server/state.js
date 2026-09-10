@@ -140,9 +140,12 @@ function loadState() {
   }
   try {
     const loaded = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    const beforeSnapshot = JSON.stringify(loaded);
     const migrated = migrate(loaded);
-    // Persist any migration changes back to disk (e.g., new settings field)
-    if (JSON.stringify(loaded) !== JSON.stringify(migrated)) {
+    // Persist any migration changes back to disk (e.g., new settings field) —
+    // compare against beforeSnapshot, not against loaded, since migrate()
+    // mutates its argument in place (same object reference).
+    if (JSON.stringify(migrated) !== beforeSnapshot) {
       saveState(migrated);
     }
     return migrated;
