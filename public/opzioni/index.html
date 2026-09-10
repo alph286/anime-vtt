@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anime VTT — Opzioni</title>
+<link rel="stylesheet" href="/shared/theme.css">
+<link rel="stylesheet" href="opzioni.css">
+</head>
+<body>
+<svg style="display:none">
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4 10 14M9 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+</svg>
+
+<header class="topbar">
+  <a href="/editor" class="back-link">
+    <svg class="icon"><use href="#i-arrow-left"></use></svg>
+    Editor
+  </a>
+  <h1>Opzioni</h1>
+</header>
+
+<main>
+  <section class="card">
+    <h2>PicSender e campagna</h2>
+
+    <div class="field">
+      <label for="picsender-url-input">URL PicSender</label>
+      <input type="text" id="picsender-url-input" placeholder="http://192.168.1.10:5000">
+      <p class="hint">Usato per inviare foto su Telegram dall'editor. Lascia vuoto se non lo usi.</p>
+    </div>
+
+    <div class="field">
+      <label for="campaign-name-input">Nome campagna</label>
+      <input type="text" id="campaign-name-input" placeholder="Nome campagna">
+      <p class="hint">Solo informativo: appare nei metadati di export/import.</p>
+    </div>
+
+    <div class="card-actions">
+      <button id="save-settings-btn" class="btn-accent">Salva</button>
+      <button id="test-connection-btn">Testa connessione</button>
+    </div>
+    <p id="settings-status" class="hint" hidden></p>
+    <p id="test-connection-result" class="hint" hidden></p>
+  </section>
+
+  <section class="card">
+    <h2>Link rapidi</h2>
+    <div class="card-actions">
+      <a href="/control" target="_blank" rel="noopener" class="btn-accent link-btn">
+        <svg class="icon"><use href="#i-external"></use></svg>
+        Apri /control
+      </a>
+      <a href="/display" target="_blank" rel="noopener" class="btn-accent link-btn">
+        <svg class="icon"><use href="#i-external"></use></svg>
+        Apri /display
+      </a>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Percorsi di salvataggio</h2>
+    <p class="hint">Utili per un backup manuale delle cartelle.</p>
+    <div class="path-row">
+      <span class="path-label">Dati (state.json)</span>
+      <code id="data-dir-value" class="path-value">—</code>
+    </div>
+    <div class="path-row">
+      <span class="path-label">File caricati (mappe, immagini, audio)</span>
+      <code id="storage-dir-value" class="path-value">—</code>
+    </div>
+  </section>
+
+  <footer class="credits">
+    <p>Made with love, substances and vibe coding by <a href="https://github.com/alph286" target="_blank" rel="noopener">Alph286</a></p>
+    <p id="version-value" class="hint">—</p>
+  </footer>
+</main>
+
+<script src="opzioni.js"></script>
+</body>
+</html>
