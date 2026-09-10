@@ -15,6 +15,13 @@ const wifiDot = document.getElementById('wifi-dot');
 const compassEl = document.getElementById('compass');
 const sceneAudioEl = document.getElementById('scene-audio');
 
+// Scatta solo per la speciale (mai in loop): la principale, essendo sempre
+// in loop, non genera mai `ended`. Non decide da solo di tornare alla
+// principale -- si limita a riportare il fatto al server.
+sceneAudioEl.addEventListener('ended', () => {
+  socket.emit('audio:specialEnded');
+});
+
 let socketConnected = false;
 let controlConnected = false;
 let lastState = null;
@@ -135,7 +142,7 @@ function render(state) {
   imageLayer.style.display = showingImage ? 'block' : 'none';
 
   renderCompass(location, showingImage);
-  renderAudio(location, state.audioState);
+  renderAudio(location, state.activeAudioTrack, state.audioState, state.audioTriggerSeq);
 
   if (showingImage) {
     renderImage(location, state.activeImageId);
@@ -161,16 +168,30 @@ function renderCompass(location, showingImage) {
 // L'elemento <audio> non è mai visibile -- solo suono, indipendente da quale
 // layer (mappa o immagine) è mostrato in quel momento, in linea con la
 // scelta di design che mostrare un'immagine ai giocatori non ferma l'audio.
-// `lastAudioFile` evita di riassegnare `src` (che farebbe ripartire da zero
-// anche una traccia identica) a ogni singolo state:update.
-let lastAudioFile = null;
+// `lastAudioKey` combina slot attivo + file: evita di riassegnare `src`
+// (che farebbe ripartire da zero anche una traccia identica) a ogni singolo
+// state:update, ma forza comunque il reload quando si passa da main a
+// special (o viceversa) anche se per coincidenza nessuno dei due ha un file.
+let lastAudioKey = null;
+// Premere di nuovo "Traccia speciale" mentre sta già suonando non cambia né
+// lo slot né il file (stesso `lastAudioKey`), quindi non ricaricherebbe da
+// solo il src -- ma deve comunque far ripartire la traccia da capo. Il
+// server incrementa `audioTriggerSeq` a ogni audio:playSpecial; qui basta
+// accorgersi che è cambiato mentre la traccia attiva è 'special'.
+let lastAudioTriggerSeq = null;
 
-function renderAudio(location, audioState) {
-  const audio = location && location.map.audio;
-  const file = audio && audio.file;
+function renderAudio(location, activeAudioTrack, audioState, audioTriggerSeq) {
+  const track = location && location.map.audio[activeAudioTrack];
+  const file = track && track.file;
+  const key = `${activeAudioTrack}:${file || ''}`;
+  const keyChanged = key !== lastAudioKey;
 
-  if (file !== lastAudioFile) {
-    lastAudioFile = file;
+  if (keyChanged) {
+    lastAudioKey = key;
+    // La principale è sempre in loop, la speciale mai: senza questo, uno
+    // sting speciale non fermerebbe mai da solo per far tornare la
+    // principale, o peggio la principale si fermerebbe dopo un solo giro.
+    sceneAudioEl.loop = activeAudioTrack === 'main';
     if (file) {
       sceneAudioEl.src = `/storage/audio/${file}`;
     } else {
@@ -179,7 +200,15 @@ function renderAudio(location, audioState) {
     }
   }
 
-  sceneAudioEl.volume = audio && audio.volume !== undefined ? audio.volume : 0.7;
+  const retriggered = activeAudioTrack === 'special' && audioTriggerSeq !== lastAudioTriggerSeq;
+  lastAudioTriggerSeq = audioTriggerSeq;
+  // Se il src è già stato ricaricato sopra (keyChanged), riparte già da zero
+  // da solo -- azzerare di nuovo qui sarebbe innocuo ma ridondante.
+  if (retriggered && !keyChanged) {
+    sceneAudioEl.currentTime = 0;
+  }
+
+  sceneAudioEl.volume = track && track.volume !== undefined ? track.volume : 0.7;
 
   if (!file) return;
 
