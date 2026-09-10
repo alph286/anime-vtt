@@ -188,6 +188,7 @@ h2 {
   border: 1px solid var(--border-control);
   background: var(--bg-control);
   color: var(--text-primary);
+  text-decoration: none;
   cursor: pointer;
 }
 

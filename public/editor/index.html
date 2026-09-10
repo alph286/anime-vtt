@@ -37,6 +37,7 @@
   <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14 20 9l-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h2"/></symbol>
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7c1.6 0 3 .3 4.2.8M22 12s-1.6 2.8-4.2 4.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1M18.5 18.5l-2.1-2.1M7.6 7.6 5.5 5.5"/></symbol>
 </svg>
 
 <header class="topbar">
@@ -70,6 +71,11 @@
       <button id="import-btn" class="dropdown-item">Importa...</button>
     </div>
   </div>
+
+  <a href="/opzioni" class="icon-btn" title="Opzioni">
+    <svg class="icon"><use href="#i-gear"></use></svg>
+  </a>
+
   <input type="file" id="import-file-input" accept=".vttlocation,.vttbackup" hidden>
 </header>
 
