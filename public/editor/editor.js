@@ -86,7 +86,8 @@ compassDragHandle.addEventListener('pointerdown', (e) => {
 const polygonList = document.getElementById('polygon-list');
 const imageList = document.getElementById('image-list');
 const imageUpload = document.getElementById('image-upload');
-const audioContent = document.getElementById('audio-content');
+const audioMainContent = document.getElementById('audio-main-content');
+const audioSpecialContent = document.getElementById('audio-special-content');
 
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
@@ -189,7 +190,8 @@ function render() {
     renderPolygonsSvg();
     polygonList.innerHTML = '';
     imageList.innerHTML = '<p class="hint">nessuna location attiva — creane una qui sopra.</p>';
-    audioContent.innerHTML = '';
+    audioMainContent.innerHTML = '';
+    audioSpecialContent.innerHTML = '';
     compassDragHandle.hidden = true;
     updateZoomBox();
     return;
@@ -1017,51 +1019,60 @@ function renderImageList(location) {
     .join('');
 }
 
-// Stesso pattern arma-poi-conferma delle immagini, ma per un solo elemento
-// (non c'è un id per riga: la coppia location+file fa da chiave, così l'arm
-// non sopravvive a un cambio location o a una sostituzione traccia).
-let audioDeleteArmedFor = null;
-let audioDeleteTimer = null;
+// Stesso pattern arma-poi-conferma delle immagini, ma per le due tracce
+// audio (principale e speciale) indipendentemente: una coppia di stato per
+// ciascuno slot, così l'arm di uno non sopravvive a un cambio location o a
+// una sostituzione traccia, e non si mescola con l'arm dell'altro slot.
+const audioDeleteState = {
+  main: { armedFor: null, timer: null },
+  special: { armedFor: null, timer: null }
+};
 
-function getAudioDeleteKey(location) {
-  const audio = location && location.map.audio;
-  if (!audio || !audio.file) return null;
-  return `${location.id}:${audio.file}`;
+function getAudioDeleteKey(location, slot) {
+  const track = location && location.map.audio[slot];
+  if (!track || !track.file) return null;
+  return `${location.id}:${track.file}`;
 }
 
-function clearAudioDeleteArm() {
-  clearTimeout(audioDeleteTimer);
-  audioDeleteTimer = null;
-  audioDeleteArmedFor = null;
+function clearAudioDeleteArm(slot) {
+  clearTimeout(audioDeleteState[slot].timer);
+  audioDeleteState[slot].timer = null;
+  audioDeleteState[slot].armedFor = null;
 }
 
-function renderAudioPanel(location) {
-  const audio = location.map.audio;
-  if (!audio || !audio.file) {
-    clearAudioDeleteArm();
-    audioContent.innerHTML = `
-      <label class="file-btn">Carica traccia audio<input type="file" id="audio-upload" accept="audio/*"></label>
+function renderAudioSlot(location, slot, containerEl, uploadLabel) {
+  const track = location.map.audio[slot];
+  if (!track || !track.file) {
+    clearAudioDeleteArm(slot);
+    containerEl.innerHTML = `
+      <label class="file-btn">${uploadLabel}<input type="file" class="audio-upload" accept="audio/*"></label>
     `;
     return;
   }
-  const key = getAudioDeleteKey(location);
-  if (audioDeleteArmedFor !== null && audioDeleteArmedFor !== key) {
+  const key = getAudioDeleteKey(location, slot);
+  const s = audioDeleteState[slot];
+  if (s.armedFor !== null && s.armedFor !== key) {
     // Stato armato apparteneva a un'altra location/traccia: non riportarlo qui.
-    clearAudioDeleteArm();
+    clearAudioDeleteArm(slot);
   }
-  const armed = audioDeleteArmedFor === key;
-  audioContent.innerHTML = `
+  const armed = s.armedFor === key;
+  containerEl.innerHTML = `
     <div class="image-card">
       <div class="image-editor-row">
-        <input type="text" class="image-name-input" id="audio-name-input" value="${escapeHtml(audio.name)}" placeholder="etichetta">
-        <button class="icon-btn image-delete ${armed ? 'confirm' : ''}" id="audio-delete-btn"
+        <input type="text" class="image-name-input audio-name-input" value="${escapeHtml(track.name)}" placeholder="etichetta">
+        <button class="icon-btn image-delete ${armed ? 'confirm' : ''} audio-delete-btn"
                 title="${armed ? 'Click di nuovo per confermare' : 'Elimina traccia'}">
           <svg class="icon"><use href="#i-trash"></use></svg>
         </button>
       </div>
-      <label class="file-btn">Sostituisci traccia<input type="file" id="audio-upload" accept="audio/*"></label>
+      <label class="file-btn">Sostituisci traccia<input type="file" class="audio-upload" accept="audio/*"></label>
     </div>
   `;
+}
+
+function renderAudioPanel(location) {
+  renderAudioSlot(location, 'main', audioMainContent, 'Carica traccia principale');
+  renderAudioSlot(location, 'special', audioSpecialContent, 'Carica traccia speciale');
 }
 
 imageList.addEventListener('click', (e) => {
@@ -1529,54 +1540,63 @@ bindNumberCommit(compassRotationNum, 0, 359, (v) => {
   socket.emit('compass:update', { locationId: location.id, rotation: Math.round(v) });
 });
 
-// L'input file viene ricreato a ogni renderAudioPanel() (l'id è lo stesso,
-// "audio-upload", sia nello stato "nessuna traccia" che "sostituisci"), quindi
-// il listener va sul contenitore stabile `audioContent`, non sull'input.
-audioContent.addEventListener('change', async (e) => {
-  const fileInput = e.target.closest('#audio-upload');
-  if (fileInput) {
-    const file = fileInput.files[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('locationId', state.activeLocationId);
-    formData.append('name', file.name);
-    await fetch('/api/upload/audio', { method: 'POST', body: formData });
-    fileInput.value = '';
-    return;
-  }
+// L'input file viene ricreato a ogni renderAudioSlot() (la classe è la
+// stessa, "audio-upload", sia nello stato "nessuna traccia" che
+// "sostituisci"), quindi il listener va sul contenitore stabile di ogni
+// slot, non sull'input -- una coppia di listener per slot, con lo slot
+// fissato in chiusura invece che letto da un data-attribute.
+function setupAudioSlotListeners(containerEl, slot, uploadLabel) {
+  containerEl.addEventListener('change', async (e) => {
+    const fileInput = e.target.closest('.audio-upload');
+    if (fileInput) {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('locationId', state.activeLocationId);
+      formData.append('name', file.name);
+      formData.append('slot', slot);
+      await fetch('/api/upload/audio', { method: 'POST', body: formData });
+      fileInput.value = '';
+      return;
+    }
 
-  const nameInput = e.target.closest('#audio-name-input');
-  if (nameInput) {
-    socket.emit('audio:rename', { locationId: state.activeLocationId, name: nameInput.value });
-  }
-});
+    const nameInput = e.target.closest('.audio-name-input');
+    if (nameInput) {
+      socket.emit('audio:rename', { locationId: state.activeLocationId, slot, name: nameInput.value });
+    }
+  });
 
-audioContent.addEventListener('click', (e) => {
-  const deleteBtn = e.target.closest('#audio-delete-btn');
-  if (!deleteBtn) return;
+  containerEl.addEventListener('click', (e) => {
+    const deleteBtn = e.target.closest('.audio-delete-btn');
+    if (!deleteBtn) return;
 
-  const location = getActiveLocation();
-  const key = getAudioDeleteKey(location);
-  if (!key) return;
+    const location = getActiveLocation();
+    const key = getAudioDeleteKey(location, slot);
+    if (!key) return;
+    const s = audioDeleteState[slot];
 
-  if (audioDeleteArmedFor !== key) {
-    audioDeleteArmedFor = key;
-    renderAudioPanel(location);
-    clearTimeout(audioDeleteTimer);
-    audioDeleteTimer = setTimeout(() => {
-      // Si disarma solo se è ancora la stessa location+traccia per cui è
-      // scattato il timer: nel frattempo potrebbe essere già stato
-      // invalidato (e magari riarmato) da un cambio location o da render.
-      if (audioDeleteArmedFor !== key) return;
-      audioDeleteArmedFor = null;
-      audioDeleteTimer = null;
-      const loc = getActiveLocation();
-      if (loc) renderAudioPanel(loc);
-    }, 2500);
-    return;
-  }
+    if (s.armedFor !== key) {
+      s.armedFor = key;
+      renderAudioSlot(location, slot, containerEl, uploadLabel);
+      clearTimeout(s.timer);
+      s.timer = setTimeout(() => {
+        // Si disarma solo se è ancora la stessa location+traccia per cui è
+        // scattato il timer: nel frattempo potrebbe essere già stato
+        // invalidato (e magari riarmato) da un cambio location o da render.
+        if (s.armedFor !== key) return;
+        s.armedFor = null;
+        s.timer = null;
+        const loc = getActiveLocation();
+        if (loc) renderAudioSlot(loc, slot, containerEl, uploadLabel);
+      }, 2500);
+      return;
+    }
 
-  clearAudioDeleteArm();
-  socket.emit('audio:delete', { locationId: state.activeLocationId });
-});
+    clearAudioDeleteArm(slot);
+    socket.emit('audio:delete', { locationId: state.activeLocationId, slot });
+  });
+}
+
+setupAudioSlotListeners(audioMainContent, 'main', 'Carica traccia principale');
+setupAudioSlotListeners(audioSpecialContent, 'special', 'Carica traccia speciale');
