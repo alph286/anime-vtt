@@ -486,6 +486,10 @@ button:active:not(:disabled),
   margin-bottom: 10px;
   max-height: 46vh;
   overflow-y: auto;
+  /* Per la spec CSS, un overflow-y non-visible con l'asse x lasciato al
+     default lo tratta comunque come "auto" -- esplicitarlo evita del tutto
+     la possibilità di una barra orizzontale qui. */
+  overflow-x: hidden;
 }
 
 .polygon-row {
@@ -496,6 +500,10 @@ button:active:not(:disabled),
   border-radius: 8px;
   border: 1px solid var(--border-control);
   background: var(--bg-control);
+  /* Senza questo, un figlio flex (l'input sotto) si rifiuta di restringersi
+     oltre la sua larghezza intrinseca: con l'icona mostra/nascondi aggiunta
+     accanto, la riga finiva per eccedere la colonna invece di adattarsi. */
+  min-width: 0;
 }
 
 .polygon-row.selected {
@@ -510,6 +518,7 @@ button:active:not(:disabled),
 
 .polygon-row input[type="text"] {
   flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   font-size: 14px;
