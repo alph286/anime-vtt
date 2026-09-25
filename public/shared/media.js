@@ -219,3 +219,167 @@ function renderGridSvg(svgEl, grid, naturalW, naturalH) {
     addLine(0, y, 100, y);
   }
 }
+
+const AOE_METERS_PER_CELL = 1.5;
+
+// Ruota il vettore (x,y) di angleDeg, con la stessa convenzione di segno
+// della funzione CSS rotate() (verificato empiricamente: rotate(90deg) porta
+// (1,0) a (0,1), cioè orario in un sistema con Y verso il basso — lo stesso
+// usato da display.css). Usare DOMMatrix invece di una matrice scritta a
+// mano elimina il rischio di sbagliare il segno per le rotazioni 90/270.
+function rotateVector(x, y, angleDeg) {
+  // In browser: use DOMMatrix. In Node.js: use math.
+  if (typeof DOMMatrix !== 'undefined' && typeof DOMPoint !== 'undefined') {
+    const p = new DOMMatrix().rotate(angleDeg).transformPoint(new DOMPoint(x, y));
+    return [p.x, p.y];
+  } else {
+    // Fallback math implementation for Node.js: rotation matrix
+    const rad = (angleDeg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    return [x * cos - y * sin, x * sin + y * cos];
+  }
+}
+
+function aoePixelsPerMeter(grid) {
+  const cellSize = (grid && grid.cellSize) || 100;
+  return cellSize / AOE_METERS_PER_CELL;
+}
+
+// Punti della forma in pixel reali della mappa, centrati sull'origine locale
+// (0,0), PRIMA di ogni rotazione -- il chiamante ruota e trasla. Il cono ha
+// il vertice in (0,0) e si apre verso -Y (largo quanto la distanza
+// dall'origine, regola ufficiale D&D); la linea parte da (0,0) verso -Y; il
+// cubo è centrato sull'origine (mai ruotato: resta allineato agli assi); la
+// sfera è approssimata con un poligono a 32 lati (necessario per un contorno
+// disegnabile con clip-path/SVG, non distorce percettibilmente un cerchio).
+function aoeShapePointsPx(shape, sizeM, widthM, grid) {
+  const ppm = aoePixelsPerMeter(grid);
+  const size = sizeM * ppm;
+  switch (shape) {
+    case 'cone':
+      return [[0, 0], [-size / 2, -size], [size / 2, -size]];
+    case 'cube': {
+      const h = size / 2;
+      return [[-h, -h], [h, -h], [h, h], [-h, h]];
+    }
+    case 'line': {
+      const width = (widthM || AOE_METERS_PER_CELL) * ppm;
+      const w = width / 2;
+      return [[-w, 0], [w, 0], [w, -size], [-w, -size]];
+    }
+    case 'sphere': {
+      const r = size;
+      const SIDES = 32;
+      const points = [];
+      for (let i = 0; i < SIDES; i++) {
+        const a = (i / SIDES) * Math.PI * 2;
+        points.push([r * Math.sin(a), -r * Math.cos(a)]);
+      }
+      return points;
+    }
+    default:
+      return [];
+  }
+}
+
+// Punti del contorno in percentuale, spazio locale (pre-rotazione mappa) --
+// stesso sistema dei punti dei poligoni fog. La conversione pixel->percento
+// è fatta separatamente per asse X e Y (mai un unico fattore): un'immagine
+// non quadrata deformerebbe la forma se si usasse un solo rapporto.
+function aoeOutlinePoints(aoe, grid, naturalW, naturalH) {
+  const localPx = aoeShapePointsPx(aoe.shape, aoe.sizeM, aoe.widthM, grid);
+  return localPx.map(([lx, ly]) => {
+    const [rx, ry] = rotateVector(lx, ly, aoe.rotation || 0);
+    return [aoe.x + (rx / naturalW) * 100, aoe.y + (ry / naturalH) * 100];
+  });
+}
+
+// Test punto-in-poligono per ray casting (pari/dispari). `point` e `polygon`
+// devono essere nello stesso spazio a scala uniforme (pixel reali, mai
+// percentuale grezza su un'immagine non quadrata).
+function pointInPolygon([px, py], polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    const intersects = (yi > py) !== (yj > py) &&
+      px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+// Celle della griglia il cui CENTRO ricade dentro la forma -- regola
+// ufficiale D&D per il gioco su griglia. Tutta la matematica lavora in
+// pixel reali della mappa (isotropi), mai in percentuale, per evitare la
+// stessa distorsione descritta sopra per aoeOutlinePoints.
+function aoeAffectedCells(aoe, grid, naturalW, naturalH) {
+  const cellSize = Math.max(4, (grid && grid.cellSize) || 100);
+  const offsetX = (grid && grid.offsetX) || 0;
+  const offsetY = (grid && grid.offsetY) || 0;
+
+  const originPxX = (aoe.x / 100) * naturalW;
+  const originPxY = (aoe.y / 100) * naturalH;
+
+  const localPolygon = aoeShapePointsPx(aoe.shape, aoe.sizeM, aoe.widthM, grid)
+    .map(([lx, ly]) => rotateVector(lx, ly, aoe.rotation || 0));
+
+  const xs = localPolygon.map(([x]) => x);
+  const ys = localPolygon.map(([, y]) => y);
+  const minX = originPxX + Math.min(...xs);
+  const maxX = originPxX + Math.max(...xs);
+  const minY = originPxY + Math.min(...ys);
+  const maxY = originPxY + Math.max(...ys);
+
+  const firstCol = Math.floor((minX - offsetX) / cellSize) - 1;
+  const lastCol = Math.ceil((maxX - offsetX) / cellSize) + 1;
+  const firstRow = Math.floor((minY - offsetY) / cellSize) - 1;
+  const lastRow = Math.ceil((maxY - offsetY) / cellSize) + 1;
+
+  const worldPolygon = localPolygon.map(([lx, ly]) => [originPxX + lx, originPxY + ly]);
+
+  const cells = [];
+  for (let col = firstCol; col <= lastCol; col++) {
+    for (let row = firstRow; row <= lastRow; row++) {
+      const centerX = offsetX + (col + 0.5) * cellSize;
+      const centerY = offsetY + (row + 0.5) * cellSize;
+      if (pointInPolygon([centerX, centerY], worldPolygon)) {
+        cells.push({ col, row });
+      }
+    }
+  }
+  return cells;
+}
+
+// Rettangolo (in percentuale) di una singola cella della griglia -- stessa
+// conversione per-asse di aoeOutlinePoints, adatta a un <rect> SVG o a un
+// div posizionato in percentuale.
+function cellRectPercent(col, row, grid, naturalW, naturalH) {
+  const cellSize = Math.max(4, (grid && grid.cellSize) || 100);
+  const offsetX = (grid && grid.offsetX) || 0;
+  const offsetY = (grid && grid.offsetY) || 0;
+  const leftPx = offsetX + col * cellSize;
+  const topPx = offsetY + row * cellSize;
+  return {
+    leftPct: (leftPx / naturalW) * 100,
+    topPct: (topPx / naturalH) * 100,
+    widthPct: (cellSize / naturalW) * 100,
+    heightPct: (cellSize / naturalH) * 100
+  };
+}
+
+// Esporta per i test (`node --test`); non ha alcun effetto nel browser,
+// dove `module` non è definito e questo blocco non viene mai eseguito.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    AOE_METERS_PER_CELL,
+    rotateVector,
+    aoePixelsPerMeter,
+    aoeShapePointsPx,
+    aoeOutlinePoints,
+    pointInPolygon,
+    aoeAffectedCells,
+    cellRectPercent
+  };
+}

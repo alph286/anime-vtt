@@ -557,16 +557,6 @@ fowRevealAllBtn.addEventListener('click', () => {
   socket.emit('fow:setAll', { locationId: previewLocationId, revealed: true });
 });
 
-// Ruota il vettore (x,y) di angleDeg, con la stessa convenzione di segno
-// della funzione CSS rotate() (verificato empiricamente: rotate(90deg) porta
-// (1,0) a (0,1), cioè orario in un sistema con Y verso il basso — lo stesso
-// usato da display.css). Usare DOMMatrix invece di una matrice scritta a
-// mano elimina il rischio di sbagliare il segno per le rotazioni 90/270.
-function rotateVector(x, y, angleDeg) {
-  const p = new DOMMatrix().rotate(angleDeg).transformPoint(new DOMPoint(x, y));
-  return [p.x, p.y];
-}
-
 // Dallo spazio locale (pre-rotazione) di un wrap di dimensioni effW×effH,
 // centrato e ruotato di `rotation` gradi dentro un container contW×contH (poi
 // eventualmente pannato/scalato di offX,offY/S — S=1,offX=0,offY=0 per la
