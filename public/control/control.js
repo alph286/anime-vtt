@@ -233,6 +233,11 @@ function render() {
   pingModeToggle.disabled = isPreviewing || showingImage || !state.activeLocationId;
   if (pingModeToggle.disabled && currentMode === 'ping') setMode(null);
 
+  // Stessa regola del Ping: piazzare un'area ha senso solo sulla mappa che
+  // i giocatori vedono davvero ora.
+  aoeModeToggle.disabled = isPreviewing || showingImage || !state.activeLocationId;
+  if (aoeModeToggle.disabled && currentMode === 'aoe') setMode(null);
+
   previewBanner.hidden = !isPreviewing;
   if (isPreviewing && previewLocation) {
     previewBannerName.textContent = previewLocation.name;
@@ -259,6 +264,10 @@ function render() {
       .join('');
 
   renderMapPreview(previewLocation);
+  if (selectedAoeId && !((previewLocation && previewLocation.map.aoes) || []).some((a) => a.id === selectedAoeId)) {
+    selectedAoeId = null;
+  }
+  renderAoeChipList((previewLocation && previewLocation.map.aoes) || []);
 
   fowList.innerHTML = ((previewLocation && previewLocation.map.polygons) || [])
     .map(
@@ -380,6 +389,69 @@ function renderFogOverlays(polygons) {
   });
 }
 
+let selectedAoeId = null;
+
+function setSelectedAoeId(id) {
+  selectedAoeId = id;
+  render();
+}
+
+// Disegna, per ogni area piazzata, prima le celle colpite (sotto) poi il
+// contorno della forma (sopra) -- altrimenti il contorno sparirebbe sotto
+// il riempimento delle celle.
+function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
+  mapAoeSvg.innerHTML = '';
+  if (!naturalW || !naturalH) return;
+  aoes.forEach((aoe) => {
+    aoeAffectedCells(aoe, grid, naturalW, naturalH).forEach(({ col, row }) => {
+      const rect = cellRectPercent(col, row, grid, naturalW, naturalH);
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      el.setAttribute('x', rect.leftPct);
+      el.setAttribute('y', rect.topPct);
+      el.setAttribute('width', rect.widthPct);
+      el.setAttribute('height', rect.heightPct);
+      el.setAttribute('class', 'aoe-cell-highlight');
+      mapAoeSvg.appendChild(el);
+    });
+
+    const points = aoeOutlinePoints(aoe, grid, naturalW, naturalH);
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    poly.setAttribute('points', points.map(([x, y]) => `${x},${y}`).join(' '));
+    poly.setAttribute('class', `aoe-shape-overlay ${aoe.id === selectedAoeId ? 'selected' : ''}`);
+    poly.dataset.id = aoe.id;
+    mapAoeSvg.appendChild(poly);
+  });
+}
+
+function aoeShapeLabel(shape) {
+  return { cone: 'Cono', cube: 'Cubo', sphere: 'Sfera', line: 'Linea' }[shape] || shape;
+}
+
+function renderAoeChipList(aoes) {
+  aoeChipList.innerHTML = aoes
+    .map((aoe) => {
+      const sizeText = aoe.sizeM.toLocaleString('it-IT', { minimumFractionDigits: 1 });
+      const selected = aoe.id === selectedAoeId;
+      const rotatable = aoe.shape === 'cone' || aoe.shape === 'line';
+      const rotateButtons = selected && rotatable
+        ? `<button class="aoe-chip-rotate" data-dir="-1" title="Ruota a sinistra">↺</button>`
+        : '';
+      const rotateButtonsRight = selected && rotatable
+        ? `<button class="aoe-chip-rotate" data-dir="1" title="Ruota a destra">↻</button>`
+        : '';
+      const removeButton = selected ? `<button class="aoe-chip-remove" title="Rimuovi">✕</button>` : '';
+      return `
+        <div class="aoe-chip ${selected ? 'selected' : ''}" data-id="${aoe.id}">
+          ${rotateButtons}
+          <span class="aoe-chip-label">${escapeHtml(aoeShapeLabel(aoe.shape))} ${sizeText}m</span>
+          ${rotateButtonsRight}
+          ${removeButton}
+        </div>
+      `;
+    })
+    .join('');
+}
+
 function renderMapPreview(location) {
   const polygons = (location && location.map.polygons) || [];
 
@@ -402,6 +474,7 @@ function renderMapPreview(location) {
       positionFitBox(mapFitBox, rect);
       currentImageRect = rect;
       renderFogOverlays(polygons);
+      renderAoeOverlays((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
       updateViewportRect(location);
     });
   } else {
@@ -423,6 +496,7 @@ function renderMapPreview(location) {
     positionFitBox(mapFitBox, rect);
     currentImageRect = rect;
     renderFogOverlays(polygons);
+    renderAoeOverlays((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     updateViewportRect(location);
   }
 }
@@ -490,6 +564,73 @@ mapFitBox.addEventListener('pointerup', (e) => {
 
 mapFitBox.addEventListener('pointercancel', () => { pingTapStart = null; });
 
+// AoE: un tap su un'area vuota della mappa piazza una nuova area (forma/
+// taglia correnti); un trascinamento che parte da un'area già disegnata la
+// sposta invece di piazzarne una nuova. Stessa soglia di 8px del ping per
+// distinguere un tap da un trascinamento accidentale.
+let aoePlaceStart = null;
+let aoeDrag = null;
+
+mapFitBox.addEventListener('pointerdown', (e) => {
+  if (currentMode !== 'aoe' || aoeModeToggle.disabled) return;
+  const overlay = e.target.closest('.aoe-shape-overlay');
+  if (overlay) {
+    aoeDrag = { id: overlay.dataset.id, pointerId: e.pointerId };
+    setSelectedAoeId(overlay.dataset.id);
+  } else {
+    aoePlaceStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+  }
+});
+
+function localPointFromEvent(e) {
+  const previewLocation = getPreviewLocation();
+  if (!previewLocation) return null;
+  const rect = mapFitBox.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const rx = ((e.clientX - rect.left) / rect.width) * 100;
+  const ry = ((e.clientY - rect.top) / rect.height) * 100;
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  const rotation = computeTotalRotation(nw, nh, previewLocation.map.flip180, previewLocation.map.rotate90);
+  return rotatePointToBase([rx, ry], rotation);
+}
+
+mapFitBox.addEventListener('pointermove', (e) => {
+  if (!aoeDrag || e.pointerId !== aoeDrag.pointerId) return;
+  const point = localPointFromEvent(e);
+  if (!point) return;
+  const [x, y] = point;
+  socket.emit('aoe:move', { locationId: previewLocationId, aoeId: aoeDrag.id, x, y });
+});
+
+mapFitBox.addEventListener('pointerup', (e) => {
+  if (aoeDrag && e.pointerId === aoeDrag.pointerId) {
+    aoeDrag = null;
+    return;
+  }
+  if (!aoePlaceStart || e.pointerId !== aoePlaceStart.pointerId) return;
+  const { x: startX, y: startY } = aoePlaceStart;
+  aoePlaceStart = null;
+  if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) return;
+
+  const point = localPointFromEvent(e);
+  if (!point) return;
+  const [x, y] = point;
+  socket.emit('aoe:place', {
+    locationId: previewLocationId,
+    shape: aoeSelectedShape,
+    sizeM: aoeSelectedSize,
+    widthM: aoeSelectedShape === 'line' ? aoeSelectedWidth : undefined,
+    x,
+    y
+  });
+});
+
+mapFitBox.addEventListener('pointercancel', (e) => {
+  if (aoeDrag && e.pointerId === aoeDrag.pointerId) aoeDrag = null;
+  if (aoePlaceStart && e.pointerId === aoePlaceStart.pointerId) aoePlaceStart = null;
+});
+
 fogOpacityInput.addEventListener('input', () => {
   fogOpacity = Number(fogOpacityInput.value) / 100;
   if (state) renderMapPreview(getPreviewLocation());
@@ -498,6 +639,28 @@ fogOpacityInput.addEventListener('input', () => {
 fowList.addEventListener('click', (e) => {
   const btn = e.target.closest('.fow-row');
   if (btn) socket.emit('fow:toggle', { locationId: previewLocationId, polygonId: btn.dataset.id });
+});
+
+aoeChipList.addEventListener('click', (e) => {
+  const removeBtn = e.target.closest('.aoe-chip-remove');
+  if (removeBtn) {
+    const chip = removeBtn.closest('.aoe-chip');
+    socket.emit('aoe:remove', { locationId: previewLocationId, aoeId: chip.dataset.id });
+    return;
+  }
+  const rotateBtn = e.target.closest('.aoe-chip-rotate');
+  if (rotateBtn) {
+    const chip = rotateBtn.closest('.aoe-chip');
+    const previewLocation = getPreviewLocation();
+    const aoe = previewLocation && previewLocation.map.aoes.find((a) => a.id === chip.dataset.id);
+    if (!aoe) return;
+    const dir = Number(rotateBtn.dataset.dir);
+    const nextRotation = ((aoe.rotation + dir * 15) % 360 + 360) % 360;
+    socket.emit('aoe:rotate', { locationId: previewLocationId, aoeId: aoe.id, rotation: nextRotation });
+    return;
+  }
+  const chip = e.target.closest('.aoe-chip');
+  if (chip) setSelectedAoeId(selectedAoeId === chip.dataset.id ? null : chip.dataset.id);
 });
 
 imagesList.addEventListener('click', (e) => {

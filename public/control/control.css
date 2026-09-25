@@ -380,8 +380,8 @@ h2 {
 
 .aoe-chip-rotate,
 .aoe-chip-remove {
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   border-radius: 6px;
   border: 1px solid var(--border-control);
   background: var(--bg-panel);
