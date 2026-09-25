@@ -308,6 +308,85 @@ h2 {
   z-index: 5;
 }
 
+.aoe-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.aoe-shape-overlay {
+  fill: var(--accent-bg-subtle);
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+}
+
+.aoe-shape-overlay.selected {
+  stroke-width: 3;
+}
+
+.aoe-cell-highlight {
+  fill: var(--accent-bg-subtle);
+  stroke: var(--accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.aoe-shape-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.aoe-shape-bar .aoe-shape-btn {
+  flex: 1;
+}
+
+.aoe-shape-btn.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.aoe-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.aoe-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.aoe-chip.selected {
+  border-color: var(--accent);
+  background: var(--accent-bg-subtle);
+}
+
+.aoe-chip-rotate,
+.aoe-chip-remove {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-control);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  padding: 0;
+}
+
 .icon {
   width: 18px;
   height: 18px;
@@ -396,6 +475,10 @@ h2 {
   cursor: grabbing;
 }
 
+.map-preview.mode-aoe {
+  cursor: crosshair;
+}
+
 /* Senza questo, su touch il browser interpreta il trascinamento come uno
    scroll/pan nativo dopo pochi pixel: interrompe la pointer capture con un
    pointercancel e il rettangolo (o il pizzico) smette di seguire il dito.
@@ -408,7 +491,9 @@ h2 {
 .map-preview.mode-ping,
 .map-preview.mode-ping *,
 .map-preview.mode-zoom,
-.map-preview.mode-zoom * {
+.map-preview.mode-zoom *,
+.map-preview.mode-aoe,
+.map-preview.mode-aoe * {
   touch-action: none;
 }
 

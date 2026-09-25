@@ -20,6 +20,11 @@
   <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></symbol>
   <symbol id="i-ping" viewBox="0 0 24 24"><path d="M12 21s7-7.58 7-12A7 7 0 0 0 5 9c0 4.42 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/></symbol>
   <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5M8 10.5h5M10.5 8v5"/></symbol>
+  <symbol id="i-aoe" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-shape-cone" viewBox="0 0 24 24"><path d="M12 3 21 20H3Z"/></symbol>
+  <symbol id="i-shape-cube" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/></symbol>
+  <symbol id="i-shape-sphere" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></symbol>
+  <symbol id="i-shape-line" viewBox="0 0 24 24"><path d="M4 20 20 4"/></symbol>
 </svg>
 
 <div id="app">
@@ -40,6 +45,33 @@
   <div id="control-tabs" data-active-tab="mappa">
 
     <div class="tab-panel" data-tab="mappa">
+      <section id="aoe-panel" class="control-section" hidden>
+        <div class="aoe-shape-bar">
+          <button class="aoe-shape-btn" data-shape="cone" title="Cono">
+            <svg class="icon"><use href="#i-shape-cone"></use></svg>
+          </button>
+          <button class="aoe-shape-btn" data-shape="cube" title="Cubo">
+            <svg class="icon"><use href="#i-shape-cube"></use></svg>
+          </button>
+          <button class="aoe-shape-btn" data-shape="sphere" title="Sfera">
+            <svg class="icon"><use href="#i-shape-sphere"></use></svg>
+          </button>
+          <button class="aoe-shape-btn" data-shape="line" title="Linea">
+            <svg class="icon"><use href="#i-shape-line"></use></svg>
+          </button>
+        </div>
+        <div class="zoom">
+          <button id="aoe-size-out" title="Riduci taglia">−</button>
+          <span id="aoe-size-level">1,5 m</span>
+          <button id="aoe-size-in" title="Aumenta taglia">+</button>
+        </div>
+        <div id="aoe-width-row" class="zoom" hidden>
+          <button id="aoe-width-out" title="Riduci larghezza">−</button>
+          <span id="aoe-width-level">1,5 m</span>
+          <button id="aoe-width-in" title="Aumenta larghezza">+</button>
+        </div>
+        <div id="aoe-chip-list" class="aoe-chip-list"></div>
+      </section>
       <div id="map-column">
         <div id="map-preview" class="map-preview">
           <div id="map-local-zoom-wrap">
@@ -49,6 +81,7 @@
                 <video id="map-video" class="media-img" muted loop playsinline disablepictureinpicture hidden></video>
                 <div class="map-placeholder" id="map-placeholder" hidden></div>
                 <div class="fog-layer" id="map-fog-layer"></div>
+                <svg id="map-aoe-svg" class="aoe-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
               </div>
             </div>
           </div>
@@ -65,6 +98,9 @@
             </button>
             <button id="zoom-mode-toggle" class="icon-btn map-mode-btn" title="Zoom locale (solo per te, non visibile ai giocatori)">
               <svg class="icon"><use href="#i-zoom"></use></svg>
+            </button>
+            <button id="aoe-mode-toggle" class="icon-btn map-mode-btn" title="Area d'effetto">
+              <svg class="icon"><use href="#i-aoe"></use></svg>
             </button>
           </div>
         </div>

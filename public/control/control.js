@@ -65,6 +65,52 @@ const panModeToggle = document.getElementById('pan-mode-toggle');
 const fogModeToggle = document.getElementById('fog-mode-toggle');
 const pingModeToggle = document.getElementById('ping-mode-toggle');
 const zoomModeToggle = document.getElementById('zoom-mode-toggle');
+const aoeModeToggle = document.getElementById('aoe-mode-toggle');
+const aoePanel = document.getElementById('aoe-panel');
+const aoeShapeButtons = Array.from(document.querySelectorAll('.aoe-shape-btn'));
+const aoeSizeOutBtn = document.getElementById('aoe-size-out');
+const aoeSizeInBtn = document.getElementById('aoe-size-in');
+const aoeSizeLevel = document.getElementById('aoe-size-level');
+const aoeWidthRow = document.getElementById('aoe-width-row');
+const aoeWidthOutBtn = document.getElementById('aoe-width-out');
+const aoeWidthInBtn = document.getElementById('aoe-width-in');
+const aoeWidthLevel = document.getElementById('aoe-width-level');
+const aoeChipList = document.getElementById('aoe-chip-list');
+const mapAoeSvg = document.getElementById('map-aoe-svg');
+
+let aoeSelectedShape = 'cone';
+let aoeSelectedSize = AOE_METERS_PER_CELL;
+let aoeSelectedWidth = AOE_METERS_PER_CELL;
+
+function renderAoePanel() {
+  aoePanel.hidden = currentMode !== 'aoe';
+  aoeShapeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.shape === aoeSelectedShape));
+  aoeSizeLevel.textContent = `${aoeSelectedSize.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
+  aoeWidthRow.hidden = aoeSelectedShape !== 'line';
+  aoeWidthLevel.textContent = `${aoeSelectedWidth.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
+}
+
+aoeShapeButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    aoeSelectedShape = btn.dataset.shape;
+    renderAoePanel();
+  });
+});
+
+function stepAoeSize(delta) {
+  aoeSelectedSize = Math.max(AOE_METERS_PER_CELL, aoeSelectedSize + delta);
+  renderAoePanel();
+}
+aoeSizeOutBtn.addEventListener('click', () => stepAoeSize(-AOE_METERS_PER_CELL));
+aoeSizeInBtn.addEventListener('click', () => stepAoeSize(AOE_METERS_PER_CELL));
+
+function stepAoeWidth(delta) {
+  aoeSelectedWidth = Math.max(AOE_METERS_PER_CELL, aoeSelectedWidth + delta);
+  renderAoePanel();
+}
+aoeWidthOutBtn.addEventListener('click', () => stepAoeWidth(-AOE_METERS_PER_CELL));
+aoeWidthInBtn.addEventListener('click', () => stepAoeWidth(AOE_METERS_PER_CELL));
+
 const mapLocalZoomWrap = document.getElementById('map-local-zoom-wrap');
 const controlTabs = document.getElementById('control-tabs');
 const tabBar = document.getElementById('tab-bar');
@@ -655,7 +701,7 @@ function updateViewportRect(location) {
 let currentMode = null; // null | 'pan' | 'fog' | 'ping' | 'zoom'
 let panDrag = null;
 
-const MODE_BUTTONS = { pan: panModeToggle, fog: fogModeToggle, ping: pingModeToggle, zoom: zoomModeToggle };
+const MODE_BUTTONS = { pan: panModeToggle, fog: fogModeToggle, ping: pingModeToggle, zoom: zoomModeToggle, aoe: aoeModeToggle };
 
 // Le quattro modalità sono mutuamente esclusive: un tap sulla mappa ha un
 // solo significato alla volta. Riattivare la modalità già attiva la
@@ -668,6 +714,8 @@ function setMode(mode) {
   mapPreview.classList.toggle('mode-fog', currentMode === 'fog');
   mapPreview.classList.toggle('mode-ping', currentMode === 'ping');
   mapPreview.classList.toggle('mode-zoom', currentMode === 'zoom');
+  mapPreview.classList.toggle('mode-aoe', currentMode === 'aoe');
+  renderAoePanel();
 }
 
 Object.entries(MODE_BUTTONS).forEach(([mode, btn]) => {
