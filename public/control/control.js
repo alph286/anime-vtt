@@ -411,8 +411,24 @@ mapFogLayer.addEventListener('click', (e) => {
 // Il ping funziona ovunque sulla mappa, non solo dentro un poligono fog:
 // l'ascoltatore vive sul fit-box (l'antenato comune a immagine e fog-layer),
 // così il tap arriva anche dove non c'è nessuna zona di fog disegnata.
-mapFitBox.addEventListener('click', (e) => {
+// Usa pointerdown/pointerup invece di 'click': su touch, con touch-action:
+// none attivo sull'antenato, alcuni browser non sintetizzano mai il click
+// dopo un tap -- pointerup arriva sempre, sia da dito che da mouse.
+let pingTapStart = null;
+
+mapFitBox.addEventListener('pointerdown', (e) => {
   if (currentMode !== 'ping' || pingModeToggle.disabled) return;
+  pingTapStart = { x: e.clientX, y: e.clientY, id: e.pointerId };
+});
+
+mapFitBox.addEventListener('pointerup', (e) => {
+  if (currentMode !== 'ping' || pingModeToggle.disabled || !pingTapStart || e.pointerId !== pingTapStart.id) return;
+  const { x: startX, y: startY } = pingTapStart;
+  pingTapStart = null;
+  // Oltre pochi pixel di movimento non è più un tap ma un trascinamento
+  // accidentale (es. dito che scivola): non deve piazzare un ping.
+  if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) return;
+
   const previewLocation = getPreviewLocation();
   if (!previewLocation) return;
   const rect = mapFitBox.getBoundingClientRect();
@@ -425,6 +441,8 @@ mapFitBox.addEventListener('click', (e) => {
   const [x, y] = rotatePointToBase([rx, ry], rotation);
   socket.emit('ping:show', { locationId: previewLocationId, x, y });
 });
+
+mapFitBox.addEventListener('pointercancel', () => { pingTapStart = null; });
 
 fogOpacityInput.addEventListener('input', () => {
   fogOpacity = Number(fogOpacityInput.value) / 100;
@@ -660,7 +678,6 @@ function setMode(mode) {
   mapPreview.classList.toggle('mode-fog', currentMode === 'fog');
   mapPreview.classList.toggle('mode-ping', currentMode === 'ping');
   mapPreview.classList.toggle('mode-zoom', currentMode === 'zoom');
-  if (currentMode !== 'zoom') resetLocalZoom();
 }
 
 Object.entries(MODE_BUTTONS).forEach(([mode, btn]) => {
