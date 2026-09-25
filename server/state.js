@@ -34,7 +34,8 @@ const DEFAULT_STATE = {
         polygons: [
           { id: 'stanza-1', name: 'Stanza 1', points: [[5, 10], [40, 8], [42, 45], [8, 48]], revealed: false },
           { id: 'corridoio', name: 'Corridoio', points: [[55, 50], [92, 45], [94, 88], [58, 92]], revealed: false }
-        ]
+        ],
+        aoes: []
       },
       images: [],
       archived: false,
@@ -94,6 +95,7 @@ function migrate(state) {
     if (location.map.compass.x === undefined) location.map.compass.x = DEFAULT_COMPASS.x;
     if (location.map.compass.y === undefined) location.map.compass.y = DEFAULT_COMPASS.y;
     if (location.map.compass.rotation === undefined) location.map.compass.rotation = 0;
+    if (!Array.isArray(location.map.aoes)) location.map.aoes = [];
     if (!location.map.audio) {
       location.map.audio = { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } };
     } else if (!location.map.audio.main && !location.map.audio.special) {

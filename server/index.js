@@ -452,7 +452,8 @@ io.on('connection', (socket) => {
         grid: { ...DEFAULT_GRID },
         compass: { ...DEFAULT_COMPASS },
         audio: { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } },
-        polygons: []
+        polygons: [],
+        aoes: []
       },
       images: [],
       archived: false,
@@ -793,6 +794,58 @@ io.on('connection', (socket) => {
     if (x !== undefined) location.map.compass.x = Math.min(100, Math.max(0, x));
     if (y !== undefined) location.map.compass.y = Math.min(100, Math.max(0, y));
     if (rotation !== undefined) location.map.compass.rotation = ((Math.round(rotation) % 360) + 360) % 360;
+    saveState(state);
+    broadcastState();
+  });
+
+  // Gli AoE sono persistiti come poligoni/griglia/bussola -- a differenza
+  // del `ping:show` transitorio, restano finché il DM non li rimuove.
+  socket.on('aoe:place', ({ locationId, shape, sizeM, widthM, x, y }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    if (!['cone', 'cube', 'sphere', 'line'].includes(shape)) return;
+    if (typeof sizeM !== 'number' || !(sizeM > 0)) return;
+    if (typeof x !== 'number' || typeof y !== 'number') return;
+    if (!Array.isArray(location.map.aoes)) location.map.aoes = [];
+    location.map.aoes.push({
+      id: nanoid(),
+      shape,
+      sizeM,
+      widthM: shape === 'line' && typeof widthM === 'number' && widthM > 0 ? widthM : null,
+      x,
+      y,
+      rotation: 0
+    });
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('aoe:move', ({ locationId, aoeId, x, y }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
+    if (!aoe) return;
+    if (typeof x !== 'number' || typeof y !== 'number') return;
+    aoe.x = x;
+    aoe.y = y;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('aoe:rotate', ({ locationId, aoeId, rotation }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
+    if (!aoe) return;
+    if (aoe.shape === 'cube' || aoe.shape === 'sphere') return;
+    if (typeof rotation !== 'number') return;
+    aoe.rotation = ((Math.round(rotation) % 360) + 360) % 360;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('aoe:remove', ({ locationId, aoeId }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location || !Array.isArray(location.map.aoes)) return;
+    location.map.aoes = location.map.aoes.filter((a) => a.id !== aoeId);
     saveState(state);
     broadcastState();
   });
