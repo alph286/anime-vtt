@@ -56,6 +56,15 @@
         ],
         "createdAt": "2026-09-06T21:08:48.237Z",
         "reason": "map-canvas-placeholder empty-canvas grid pattern, unchanged verbatim from before this design pass -- a functional empty-state indicator, not decorative striping; same pattern already ignored for public/control/control.css"
+      },
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "public/display/index.html"
+        ],
+        "createdAt": "2026-09-25T17:43:23.727Z",
+        "reason": "Claude: .ping-marker pulse (public/display/display.css) fires only on a live 'ping:show' event from the DM's control page, a real transient occurrence, not a decorative fake-liveness indicator — matches the rule's own stated exception for genuinely live, changing data."
       }
     ]
   }

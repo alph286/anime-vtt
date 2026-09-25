@@ -13,6 +13,7 @@ const imageFitBox = document.getElementById('image-fit-box');
 const shownImageImg = document.getElementById('shown-image-img');
 const wifiDot = document.getElementById('wifi-dot');
 const compassEl = document.getElementById('compass');
+const pingMarker = document.getElementById('ping-marker');
 const sceneAudioEl = document.getElementById('scene-audio');
 
 // Scatta solo per la speciale (mai in loop): la principale, essendo sempre
@@ -131,6 +132,22 @@ socket.on('control:status', ({ connected }) => {
   updateWifi();
 });
 
+// Gesto momentaneo dal DM (/control, modalità "ping"): appare per un attimo
+// e sparisce da solo, non è mai parte dello state persistito.
+let pingHideTimeout = null;
+function hidePing() {
+  clearTimeout(pingHideTimeout);
+  pingMarker.hidden = true;
+}
+socket.on('ping:show', ({ x, y }) => {
+  if (typeof x !== 'number' || typeof y !== 'number') return;
+  pingMarker.style.left = `${x}%`;
+  pingMarker.style.top = `${y}%`;
+  pingMarker.hidden = false;
+  clearTimeout(pingHideTimeout);
+  pingHideTimeout = setTimeout(hidePing, 3000);
+});
+
 socket.on('state:update', (state) => {
   lastState = state;
   render(state);
@@ -145,9 +162,17 @@ function getActiveLocation(state) {
   return state.locations.find((l) => l.id === state.activeLocationId);
 }
 
+let lastPingLocationId = null;
+
 function render(state) {
   const location = getActiveLocation(state);
   const showingImage = Boolean(state.activeImageId && location && location.images.some((i) => i.id === state.activeImageId));
+
+  // Un ping puntava a una mappa: se al posto della mappa compare un'immagine,
+  // o si è passati a un'altra location, non ha più senso lasciarlo a schermo.
+  const locationId = location ? location.id : null;
+  if (showingImage || locationId !== lastPingLocationId) hidePing();
+  lastPingLocationId = locationId;
 
   mapLayer.style.display = showingImage ? 'none' : 'block';
   imageLayer.style.display = showingImage ? 'block' : 'none';

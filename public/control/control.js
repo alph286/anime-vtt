@@ -62,6 +62,10 @@ const fowHideAllBtn = document.getElementById('fow-hide-all');
 const fowRevealAllBtn = document.getElementById('fow-reveal-all');
 const viewportRect = document.getElementById('viewport-rect');
 const panModeToggle = document.getElementById('pan-mode-toggle');
+const fogModeToggle = document.getElementById('fog-mode-toggle');
+const pingModeToggle = document.getElementById('ping-mode-toggle');
+const zoomModeToggle = document.getElementById('zoom-mode-toggle');
+const mapLocalZoomWrap = document.getElementById('map-local-zoom-wrap');
 const controlTabs = document.getElementById('control-tabs');
 const tabBar = document.getElementById('tab-bar');
 const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
@@ -176,6 +180,12 @@ function render() {
   const previewLocation = getPreviewLocation();
   const showingImage = Boolean(state.activeImageId);
   const isPreviewing = previewLocationId !== state.activeLocationId;
+
+  // Il ping arriva ai giocatori solo se punta alla mappa che stanno
+  // davvero guardando in questo momento: niente anteprima di un'altra
+  // location, niente mentre è mostrata un'immagine al posto della mappa.
+  pingModeToggle.disabled = isPreviewing || showingImage || !state.activeLocationId;
+  if (pingModeToggle.disabled && currentMode === 'ping') setMode(null);
 
   previewBanner.hidden = !isPreviewing;
   if (isPreviewing && previewLocation) {
@@ -378,6 +388,7 @@ locationSelect.addEventListener('change', () => {
     return;
   }
   previewLocationId = targetId;
+  resetLocalZoom();
   render();
 });
 
@@ -392,9 +403,27 @@ previewCancelBtn.addEventListener('click', () => {
 });
 
 mapFogLayer.addEventListener('click', (e) => {
-  if (panModeActive) return;
+  if (currentMode !== 'fog') return;
   const overlay = e.target.closest('.fog-overlay');
   if (overlay) socket.emit('fow:toggle', { locationId: previewLocationId, polygonId: overlay.dataset.id });
+});
+
+// Il ping funziona ovunque sulla mappa, non solo dentro un poligono fog:
+// l'ascoltatore vive sul fit-box (l'antenato comune a immagine e fog-layer),
+// così il tap arriva anche dove non c'è nessuna zona di fog disegnata.
+mapFitBox.addEventListener('click', (e) => {
+  if (currentMode !== 'ping' || pingModeToggle.disabled) return;
+  const previewLocation = getPreviewLocation();
+  if (!previewLocation) return;
+  const rect = mapFitBox.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const rx = ((e.clientX - rect.left) / rect.width) * 100;
+  const ry = ((e.clientY - rect.top) / rect.height) * 100;
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  const rotation = computeTotalRotation(nw, nh, previewLocation.map.flip180, previewLocation.map.rotate90);
+  const [x, y] = rotatePointToBase([rx, ry], rotation);
+  socket.emit('ping:show', { locationId: previewLocationId, x, y });
 });
 
 fogOpacityInput.addEventListener('input', () => {
@@ -558,7 +587,7 @@ function updateViewportRect(location) {
   if (!location || !state.displayViewport || !mediaW(activeMapEl) || !currentImageRect) {
     viewportRect.hidden = true;
     panModeToggle.disabled = true;
-    if (panModeActive) setPanModeActive(false);
+    if (currentMode === 'pan') setMode(null);
     return;
   }
 
@@ -615,17 +644,27 @@ function updateViewportRect(location) {
   panModeToggle.disabled = false;
 }
 
-let panModeActive = false;
+let currentMode = null; // null | 'pan' | 'fog' | 'ping' | 'zoom'
 let panDrag = null;
 
-function setPanModeActive(active) {
-  panModeActive = active;
-  panModeToggle.classList.toggle('active', panModeActive);
-  mapPreview.classList.toggle('pan-mode-active', panModeActive);
+const MODE_BUTTONS = { pan: panModeToggle, fog: fogModeToggle, ping: pingModeToggle, zoom: zoomModeToggle };
+
+// Le quattro modalità sono mutuamente esclusive: un tap sulla mappa ha un
+// solo significato alla volta. Riattivare la modalità già attiva la
+// disattiva (torna a "nessuna modalità" = il tap non fa nulla).
+function setMode(mode) {
+  if (mode && MODE_BUTTONS[mode].disabled) mode = null;
+  currentMode = currentMode === mode ? null : mode;
+  Object.entries(MODE_BUTTONS).forEach(([m, btn]) => btn.classList.toggle('active', currentMode === m));
+  mapPreview.classList.toggle('mode-pan', currentMode === 'pan');
+  mapPreview.classList.toggle('mode-fog', currentMode === 'fog');
+  mapPreview.classList.toggle('mode-ping', currentMode === 'ping');
+  mapPreview.classList.toggle('mode-zoom', currentMode === 'zoom');
+  if (currentMode !== 'zoom') resetLocalZoom();
 }
 
-panModeToggle.addEventListener('click', () => {
-  setPanModeActive(!panModeActive);
+Object.entries(MODE_BUTTONS).forEach(([mode, btn]) => {
+  btn.addEventListener('click', () => setMode(mode));
 });
 
 // In modalità sposta, il tocco sul fog viene sospeso del tutto: nessuna
@@ -636,7 +675,7 @@ mapPreview.addEventListener('pointerdown', (e) => {
   // capture: altrimenti il click risultante verrebbe rediretto a
   // mapPreview invece che al pulsante, e spegnere la modalità con un tocco
   // reale diventerebbe impossibile (setPointerCapture ridirige il click).
-  if (!panModeActive || e.target.closest('#pan-mode-toggle')) return;
+  if (currentMode !== 'pan' || e.target.closest('#map-mode-toggles')) return;
   panDrag = { lastX: e.clientX, lastY: e.clientY };
   mapPreview.setPointerCapture(e.pointerId);
 });
@@ -681,6 +720,104 @@ mapPreview.addEventListener('pointermove', (e) => {
 
 mapPreview.addEventListener('pointerup', () => { panDrag = null; });
 mapPreview.addEventListener('pointercancel', () => { panDrag = null; });
+
+// Zoom locale: solo visivo, sul dispositivo del DM. Trasforma
+// #map-local-zoom-wrap (mai #map-media-wrap, che porta già la rotazione
+// della mappa e viene riscritto ad ogni renderMapPreview) — così non tocca
+// né la vista condivisa (location.map.liveView) né la matematica di
+// viewport-rect/pan-mode, che restano nello spazio "non zoomato".
+const ZOOM_LOCAL_MIN = 1;
+const ZOOM_LOCAL_MAX = 5;
+let localZoom = { scale: 1, x: 0, y: 0 };
+const localZoomPointers = new Map();
+let localZoomPinchStartDist = null;
+let localZoomPinchStartScale = 1;
+let localZoomDragLast = null;
+
+function applyLocalZoom() {
+  mapLocalZoomWrap.style.transform =
+    localZoom.scale === 1 && !localZoom.x && !localZoom.y
+      ? ''
+      : `translate(${localZoom.x}px, ${localZoom.y}px) scale(${localZoom.scale})`;
+}
+
+// Non lascia che il contenuto ingrandito scivoli così lontano da uscire
+// del tutto dal riquadro visibile.
+function clampLocalZoomPan() {
+  const maxX = (mapPreview.clientWidth * (localZoom.scale - 1)) / 2;
+  const maxY = (mapPreview.clientHeight * (localZoom.scale - 1)) / 2;
+  localZoom.x = Math.min(maxX, Math.max(-maxX, localZoom.x));
+  localZoom.y = Math.min(maxY, Math.max(-maxY, localZoom.y));
+}
+
+function resetLocalZoom() {
+  localZoom = { scale: 1, x: 0, y: 0 };
+  localZoomPointers.clear();
+  localZoomPinchStartDist = null;
+  localZoomDragLast = null;
+  mapPreview.classList.remove('zoom-dragging');
+  applyLocalZoom();
+}
+
+function pointerDist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+mapPreview.addEventListener('pointerdown', (e) => {
+  if (currentMode !== 'zoom' || e.target.closest('#map-mode-toggles')) return;
+  localZoomPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  mapPreview.setPointerCapture(e.pointerId);
+  if (localZoomPointers.size === 1) {
+    localZoomDragLast = { x: e.clientX, y: e.clientY };
+    mapPreview.classList.add('zoom-dragging');
+  } else if (localZoomPointers.size === 2) {
+    localZoomDragLast = null;
+    const [p1, p2] = [...localZoomPointers.values()];
+    localZoomPinchStartDist = pointerDist(p1, p2);
+    localZoomPinchStartScale = localZoom.scale;
+  }
+});
+
+mapPreview.addEventListener('pointermove', (e) => {
+  if (currentMode !== 'zoom' || !localZoomPointers.has(e.pointerId)) return;
+  localZoomPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (localZoomPointers.size >= 2) {
+    const [p1, p2] = [...localZoomPointers.values()];
+    const dist = pointerDist(p1, p2);
+    if (localZoomPinchStartDist) {
+      localZoom.scale = Math.min(ZOOM_LOCAL_MAX, Math.max(ZOOM_LOCAL_MIN, localZoomPinchStartScale * (dist / localZoomPinchStartDist)));
+      clampLocalZoomPan();
+      applyLocalZoom();
+    }
+    return;
+  }
+
+  if (localZoomDragLast && localZoom.scale > 1) {
+    localZoom.x += e.clientX - localZoomDragLast.x;
+    localZoom.y += e.clientY - localZoomDragLast.y;
+    localZoomDragLast = { x: e.clientX, y: e.clientY };
+    clampLocalZoomPan();
+    applyLocalZoom();
+  } else {
+    localZoomDragLast = { x: e.clientX, y: e.clientY };
+  }
+});
+
+function endLocalZoomPointer(e) {
+  if (!localZoomPointers.has(e.pointerId)) return;
+  localZoomPointers.delete(e.pointerId);
+  if (localZoomPointers.size < 2) localZoomPinchStartDist = null;
+  if (localZoomPointers.size === 1) {
+    localZoomDragLast = { ...[...localZoomPointers.values()][0] };
+  } else if (localZoomPointers.size === 0) {
+    localZoomDragLast = null;
+    mapPreview.classList.remove('zoom-dragging');
+  }
+}
+
+mapPreview.addEventListener('pointerup', endLocalZoomPointer);
+mapPreview.addEventListener('pointercancel', endLocalZoomPointer);
 
 compassToggle.addEventListener('click', () => {
   const previewLocation = getPreviewLocation();

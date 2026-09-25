@@ -797,6 +797,16 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  // Gesto momentaneo, non una proprietà della mappa: niente saveState/
+  // broadcastState, solo un rilancio a chi è connesso ora. Ignorato se non
+  // punta alla location davvero attiva -- altrimenti un ping in preview
+  // (mai mostrata ai giocatori) apparirebbe comunque sullo schermo sbagliato.
+  socket.on('ping:show', ({ locationId, x, y }) => {
+    if (locationId !== state.activeLocationId) return;
+    if (typeof x !== 'number' || typeof y !== 'number') return;
+    io.emit('ping:show', { x, y });
+  });
+
   // A differenza di griglia/fog/rosa dei venti, questi comandi agiscono
   // sempre sulla location attiva -- non esiste un'anteprima silenziosa per
   // l'audio (suonerebbe comunque subito ai giocatori), quindi niente

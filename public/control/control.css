@@ -245,6 +245,11 @@ h2 {
   border: 1px solid var(--border-control);
 }
 
+#map-local-zoom-wrap {
+  position: absolute;
+  inset: 0;
+}
+
 .map-preview .media-wrap {
   position: absolute;
 }
@@ -332,16 +337,22 @@ h2 {
   cursor: default;
 }
 
-#pan-mode-toggle {
+#map-mode-toggles {
   position: absolute;
   top: 8px;
   left: 8px;
   z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.map-mode-btn {
   background: rgba(38, 43, 52, 0.85);
   backdrop-filter: blur(4px);
 }
 
-#pan-mode-toggle.active {
+.map-mode-btn.active {
   background: var(--accent);
   color: var(--accent-text);
   border-color: var(--accent);
@@ -369,18 +380,35 @@ h2 {
   margin-bottom: 10px;
 }
 
-.map-preview.pan-mode-active {
+.map-preview.mode-pan {
   cursor: move;
+}
+
+.map-preview.mode-ping {
+  cursor: crosshair;
+}
+
+.map-preview.mode-zoom {
+  cursor: grab;
+}
+
+.map-preview.mode-zoom.zoom-dragging {
+  cursor: grabbing;
 }
 
 /* Senza questo, su touch il browser interpreta il trascinamento come uno
    scroll/pan nativo dopo pochi pixel: interrompe la pointer capture con un
-   pointercancel e il rettangolo smette di seguire il dito. touch-action:
-   manipulation sui figli (.fog-overlay, ecc. - regola più sotto) permette
-   comunque il pan nativo per l'antenato; va annullato esplicitamente su
-   tutta la sottoalbero mentre la modalità sposta è attiva. */
-.map-preview.pan-mode-active,
-.map-preview.pan-mode-active * {
+   pointercancel e il rettangolo (o il pizzico) smette di seguire il dito.
+   touch-action: manipulation sui figli (.fog-overlay, ecc. - regola più
+   sotto) permette comunque il pan nativo per l'antenato; va annullato
+   esplicitamente su tutta la sottoalbero mentre una di queste modalità è
+   attiva. */
+.map-preview.mode-pan,
+.map-preview.mode-pan *,
+.map-preview.mode-ping,
+.map-preview.mode-ping *,
+.map-preview.mode-zoom,
+.map-preview.mode-zoom * {
   touch-action: none;
 }
 

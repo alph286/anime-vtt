@@ -18,6 +18,8 @@
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 4v16M16 4v16"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></symbol>
   <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></symbol>
+  <symbol id="i-ping" viewBox="0 0 24 24"><path d="M12 21s7-7.58 7-12A7 7 0 0 0 5 9c0 4.42 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/></symbol>
+  <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5M8 10.5h5M10.5 8v5"/></symbol>
 </svg>
 
 <div id="app">
@@ -40,18 +42,31 @@
     <div class="tab-panel" data-tab="mappa">
       <div id="map-column">
         <div id="map-preview" class="map-preview">
-          <div class="media-wrap" id="map-media-wrap">
-            <div class="fit-box" id="map-fit-box">
-              <img id="map-img" class="media-img" draggable="false" hidden>
-              <video id="map-video" class="media-img" muted loop playsinline disablepictureinpicture hidden></video>
-              <div class="map-placeholder" id="map-placeholder" hidden></div>
-              <div class="fog-layer" id="map-fog-layer"></div>
+          <div id="map-local-zoom-wrap">
+            <div class="media-wrap" id="map-media-wrap">
+              <div class="fit-box" id="map-fit-box">
+                <img id="map-img" class="media-img" draggable="false" hidden>
+                <video id="map-video" class="media-img" muted loop playsinline disablepictureinpicture hidden></video>
+                <div class="map-placeholder" id="map-placeholder" hidden></div>
+                <div class="fog-layer" id="map-fog-layer"></div>
+              </div>
             </div>
           </div>
           <div id="viewport-rect" hidden></div>
-          <button id="pan-mode-toggle" class="icon-btn" title="Sposta inquadratura trascinando" disabled>
-            <svg class="icon"><use href="#i-move"></use></svg>
-          </button>
+          <div id="map-mode-toggles">
+            <button id="pan-mode-toggle" class="icon-btn map-mode-btn" title="Sposta inquadratura trascinando" disabled>
+              <svg class="icon"><use href="#i-move"></use></svg>
+            </button>
+            <button id="fog-mode-toggle" class="icon-btn map-mode-btn" title="Rivela/nascondi fog toccando la mappa">
+              <svg class="icon"><use href="#i-fog"></use></svg>
+            </button>
+            <button id="ping-mode-toggle" class="icon-btn map-mode-btn" title="Indica un punto ai giocatori toccando la mappa">
+              <svg class="icon"><use href="#i-ping"></use></svg>
+            </button>
+            <button id="zoom-mode-toggle" class="icon-btn map-mode-btn" title="Zoom locale (solo per te, non visibile ai giocatori)">
+              <svg class="icon"><use href="#i-zoom"></use></svg>
+            </button>
+          </div>
         </div>
       </div>
 
