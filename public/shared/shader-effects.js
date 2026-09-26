@@ -13,15 +13,11 @@ void main() {
 }
 `;
 
-// Registro shader: aggiungere un nuovo stile (es. "luci", "area
-// d'effetto") significa aggiungere qui una voce -- quando servirà un
-// selettore in UI basterà un dropdown nella sidebar di /editor, nessuna
-// modifica strutturale a ShaderLayer.
-const SHADER_EFFECTS = {
-  portal: {
-    label: 'Portale',
-    usesNoiseTexture: true,
-    fragmentSrc: `#version 300 es
+// Corpo GLSL condiviso dalle varianti colore del Portale -- l'unica
+// differenza tra le varianti e' la palette in `col`, parametrizzata qui
+// per non duplicare ~100 righe di shader identiche.
+function portalFragmentSrc(colorGlsl) {
+  return `#version 300 es
 precision highp float;
 
 uniform float u_time;
@@ -82,7 +78,10 @@ return abs(mod(r*2.,tau)-4.54)*3.+.5;
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
 vec2 p = fragCoord.xy / u_resolution.xy-0.5;
-p.x *= u_resolution.x/u_resolution.y;
+// Niente correzione di aspect-ratio qui: la decorazione e' un
+// rettangolo che il DM ridimensiona liberamente in larghezza/altezza
+// indipendenti, quindi l'effetto deve adattarsi/allungarsi seguendo
+// quella forma invece di restare sempre proporzionato "fisicamente".
 p*=4.;
 
 float rz = dualfbm(p);
@@ -90,7 +89,7 @@ rz *= abs((-circ(vec2(p.x / 4.2, p.y / 7.0))));
 rz *= abs((-circ(vec2(p.x / 4.2, p.y / 7.0))));
 rz *= abs((-circ(vec2(p.x / 4.2, p.y / 7.0))));
 
-vec3 col = vec3(.1,0.1,0.4)/rz;
+vec3 col = ${colorGlsl}/rz;
 col=pow(abs(col),vec3(.99));
 fragColor = vec4(col,1.);
 }
@@ -118,7 +117,19 @@ void main() {
   // risultano piu' chiari del dovuto durante la composizione.
   fragColor = vec4(col.rgb * alpha, alpha);
 }
-`
+`;
+}
+
+const SHADER_EFFECTS = {
+  portal: {
+    label: 'Portale',
+    usesNoiseTexture: true,
+    fragmentSrc: portalFragmentSrc('vec3(.1,0.1,0.4)')
+  },
+  portal_red: {
+    label: 'Portale (rosso)',
+    usesNoiseTexture: true,
+    fragmentSrc: portalFragmentSrc('vec3(.4,0.1,0.1)')
   }
 };
 
