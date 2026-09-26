@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
+const { AOE_COLORS } = require('../public/shared/media.js');
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -23,6 +24,7 @@ const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 // Limite di sicurezza per gli AoE: una taglia enorme (o Infinity) farebbe
 // iterare aoeAffectedCells su un numero di celle spropositato lato client.
 const MAX_AOE_SIZE_M = 300;
+const AOE_COLOR_NAMES = Object.keys(AOE_COLORS);
 
 for (const dir of [MAPS_DIR, IMAGES_DIR, AUDIO_DIR, IMPORTS_DIR, BACKUPS_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
@@ -803,7 +805,7 @@ io.on('connection', (socket) => {
 
   // Gli AoE sono persistiti come poligoni/griglia/bussola -- a differenza
   // del `ping:show` transitorio, restano finché il DM non li rimuove.
-  socket.on('aoe:place', ({ locationId, shape, sizeM, widthM, x, y }) => {
+  socket.on('aoe:place', ({ locationId, shape, sizeM, widthM, x, y, color }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     if (!['cone', 'cube', 'sphere', 'line'].includes(shape)) return;
@@ -817,7 +819,9 @@ io.on('connection', (socket) => {
       widthM: shape === 'line' && Number.isFinite(widthM) && widthM > 0 && widthM <= MAX_AOE_SIZE_M ? widthM : null,
       x,
       y,
-      rotation: 0
+      rotation: 0,
+      color: AOE_COLOR_NAMES.includes(color) ? color : 'red',
+      shapeVisible: true
     });
     saveState(state);
     broadcastState();
@@ -841,6 +845,15 @@ io.on('connection', (socket) => {
     if (aoe.shape === 'cube' || aoe.shape === 'sphere') return;
     if (!Number.isFinite(rotation)) return;
     aoe.rotation = ((Math.round(rotation) % 360) + 360) % 360;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('aoe:setShapeVisible', ({ locationId, aoeId, visible }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
+    if (!aoe) return;
+    aoe.shapeVisible = Boolean(visible);
     saveState(state);
     broadcastState();
   });

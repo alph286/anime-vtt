@@ -185,16 +185,21 @@ html, body {
   pointer-events: none;
 }
 
+/* Il colore di riempimento/contorno è quello dell'area (aoe.color),
+   impostato inline da JS -- stessa palette e stesso pulse di /control. */
+@keyframes aoe-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 .aoe-shape-overlay {
-  fill: var(--accent-bg-subtle);
-  stroke: var(--accent);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
+  animation: aoe-pulse 2.4s ease-in-out infinite;
 }
 
 .aoe-cell-highlight {
-  fill: var(--accent-bg-subtle);
-  stroke: var(--accent);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
+  animation: aoe-pulse 2.4s ease-in-out infinite;
 }

@@ -19,7 +19,10 @@ const mapVideo = document.getElementById('map-video');
 let activeMapEl = mapImg;
 const mapPlaceholder = document.getElementById('map-placeholder');
 const mapFogLayer = document.getElementById('map-fog-layer');
-const fogOpacityInput = document.getElementById('fog-opacity');
+const fogOpacityOutBtn = document.getElementById('fog-opacity-out');
+const fogOpacityInBtn = document.getElementById('fog-opacity-in');
+const fogOpacityLevel = document.getElementById('fog-opacity-level');
+const FOG_OPACITY_STEP = 0.1;
 const fowList = document.getElementById('fow-list');
 const imagesList = document.getElementById('images-list');
 const imageDetail = document.getElementById('image-detail');
@@ -31,9 +34,15 @@ const imageSendBtn = document.getElementById('image-send-btn');
 const imageHideBtn = document.getElementById('image-hide-btn');
 const imageSendFeedback = document.getElementById('image-send-feedback');
 const panZoomSection = document.getElementById('pan-zoom-section');
-const gridOpacitySection = document.getElementById('grid-opacity-section');
+const gridOpacityRow = document.getElementById('grid-opacity-row');
 const compassSection = document.getElementById('compass-section');
 const compassToggle = document.getElementById('compass-toggle');
+const compassNudgeUp = document.getElementById('compass-nudge-up');
+const compassNudgeDown = document.getElementById('compass-nudge-down');
+const compassNudgeLeft = document.getElementById('compass-nudge-left');
+const compassNudgeRight = document.getElementById('compass-nudge-right');
+const compassRotateBtn = document.getElementById('compass-rotate');
+const COMPASS_NUDGE_STEP = 2;
 const gridOpacityOutBtn = document.getElementById('grid-opacity-out');
 const gridOpacityInBtn = document.getElementById('grid-opacity-in');
 const gridOpacityLevel = document.getElementById('grid-opacity-level');
@@ -68,6 +77,7 @@ const zoomModeToggle = document.getElementById('zoom-mode-toggle');
 const aoeModeToggle = document.getElementById('aoe-mode-toggle');
 const aoePanel = document.getElementById('aoe-panel');
 const aoeShapeButtons = Array.from(document.querySelectorAll('.aoe-shape-btn'));
+const aoeColorButtons = Array.from(document.querySelectorAll('.aoe-color-btn'));
 const aoeSizeOutBtn = document.getElementById('aoe-size-out');
 const aoeSizeInBtn = document.getElementById('aoe-size-in');
 const aoeSizeLevel = document.getElementById('aoe-size-level');
@@ -77,14 +87,23 @@ const aoeWidthInBtn = document.getElementById('aoe-width-in');
 const aoeWidthLevel = document.getElementById('aoe-width-level');
 const aoeChipList = document.getElementById('aoe-chip-list');
 const mapAoeSvg = document.getElementById('map-aoe-svg');
+const mapGridSvg = document.getElementById('map-grid-svg');
 
 let aoeSelectedShape = 'cone';
+let aoeSelectedColor = 'red';
 let aoeSelectedSize = AOE_METERS_PER_CELL;
 let aoeSelectedWidth = AOE_METERS_PER_CELL;
+
+// Ogni swatch mostra sempre il proprio colore (fisso, non dipende dalla
+// selezione corrente) -- va impostato una sola volta, non a ogni render.
+aoeColorButtons.forEach((btn) => {
+  btn.style.setProperty('--aoe-color', aoeColorHex(btn.dataset.color));
+});
 
 function renderAoePanel() {
   aoePanel.hidden = currentMode !== 'aoe';
   aoeShapeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.shape === aoeSelectedShape));
+  aoeColorButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.color === aoeSelectedColor));
   aoeSizeLevel.textContent = `${aoeSelectedSize.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
   aoeWidthRow.hidden = aoeSelectedShape !== 'line';
   aoeWidthLevel.textContent = `${aoeSelectedWidth.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
@@ -93,6 +112,13 @@ function renderAoePanel() {
 aoeShapeButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     aoeSelectedShape = btn.dataset.shape;
+    renderAoePanel();
+  });
+});
+
+aoeColorButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    aoeSelectedColor = btn.dataset.color;
     renderAoePanel();
   });
 });
@@ -300,7 +326,7 @@ function render() {
   panZoomSection.style.display = hidePanZoomForImage ? 'none' : 'block';
 
   const gridEnabled = Boolean(previewLocation && previewLocation.map.grid && previewLocation.map.grid.enabled) && !hidePanZoomForImage;
-  gridOpacitySection.style.display = gridEnabled ? 'block' : 'none';
+  gridOpacityRow.hidden = !gridEnabled;
   if (gridEnabled) {
     gridOpacityLevel.textContent = `${Math.round((previewLocation.map.grid.opacity === undefined ? 1 : previewLocation.map.grid.opacity) * 100)}%`;
   }
@@ -393,18 +419,34 @@ function renderFogOverlays(polygons) {
 
 let selectedAoeId = null;
 
+// Arma-poi-conferma per la cancellazione, stesso pattern di armedImageDeletes
+// in editor.js: le chip vengono ricostruite a ogni render, quindi lo stato
+// "armato" vive fuori dal DOM. Il tasto rimuovi compare solo per l'area
+// selezionata, quindi un solo id armato alla volta basta.
+let armedRemoveAoeId = null;
+let armedRemoveTimeout = null;
+
+function disarmRemove() {
+  clearTimeout(armedRemoveTimeout);
+  armedRemoveAoeId = null;
+}
+
 function setSelectedAoeId(id) {
+  if (id !== selectedAoeId) disarmRemove();
   selectedAoeId = id;
   render();
 }
 
 // Disegna, per ogni area piazzata, prima le celle colpite (sotto) poi il
 // contorno della forma (sopra) -- altrimenti il contorno sparirebbe sotto
-// il riempimento delle celle.
+// il riempimento delle celle. Riempimento e contorno condividono lo stesso
+// colore scelto per quell'area (aoe.color), impostato inline: la palette è
+// fissa a 5 nomi, non un valore CSS statico.
 function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
   mapAoeSvg.innerHTML = '';
   if (!naturalW || !naturalH) return;
   aoes.forEach((aoe) => {
+    const color = aoeColorHex(aoe.color);
     aoeAffectedCells(aoe, grid, naturalW, naturalH).forEach(({ col, row }) => {
       const rect = cellRectPercent(col, row, grid, naturalW, naturalH);
       const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -413,13 +455,23 @@ function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
       el.setAttribute('width', rect.widthPct);
       el.setAttribute('height', rect.heightPct);
       el.setAttribute('class', 'aoe-cell-highlight');
+      el.setAttribute('fill', color);
+      el.setAttribute('stroke', color);
       mapAoeSvg.appendChild(el);
     });
 
+    // shapeVisible:false nasconde solo l'aspetto del contorno (fill/stroke
+    // "none"): il poligono resta nel DOM con la sua geometria e i suoi
+    // pointer-events invariati, altrimenti trascinare l'area diventerebbe
+    // impossibile una volta nascosta. Non si usa opacity:0 -- l'animazione
+    // aoe-pulse anima proprio l'opacity e vincerebbe sul valore impostato qui.
     const points = aoeOutlinePoints(aoe, grid, naturalW, naturalH);
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     poly.setAttribute('points', points.map(([x, y]) => `${x},${y}`).join(' '));
     poly.setAttribute('class', `aoe-shape-overlay ${aoe.id === selectedAoeId ? 'selected' : ''}`);
+    const shapeVisible = aoe.shapeVisible !== false;
+    poly.setAttribute('fill', shapeVisible ? color : 'none');
+    poly.setAttribute('stroke', shapeVisible ? color : 'none');
     poly.dataset.id = aoe.id;
     mapAoeSvg.appendChild(poly);
   });
@@ -435,23 +487,50 @@ function renderAoeChipList(aoes) {
       const sizeText = aoe.sizeM.toLocaleString('it-IT', { minimumFractionDigits: 1 });
       const selected = aoe.id === selectedAoeId;
       const rotatable = aoe.shape === 'cone' || aoe.shape === 'line';
-      const rotateButtons = selected && rotatable
-        ? `<button class="aoe-chip-rotate" data-dir="-1" title="Ruota a sinistra">↺</button>`
+      const armed = armedRemoveAoeId === aoe.id;
+      const actions = selected
+        ? `
+          <div class="aoe-chip-actions">
+            ${rotatable ? `<button class="aoe-chip-rotate" data-dir="-1" title="Ruota a sinistra">↺</button>` : ''}
+            ${rotatable ? `<button class="aoe-chip-rotate" data-dir="1" title="Ruota a destra">↻</button>` : ''}
+            <button class="aoe-chip-remove ${armed ? 'confirm' : ''}" title="${armed ? 'Tocca di nuovo per confermare' : 'Rimuovi'}">✕</button>
+          </div>
+        `
         : '';
-      const rotateButtonsRight = selected && rotatable
-        ? `<button class="aoe-chip-rotate" data-dir="1" title="Ruota a destra">↻</button>`
-        : '';
-      const removeButton = selected ? `<button class="aoe-chip-remove" title="Rimuovi">✕</button>` : '';
+      const shapeVisible = aoe.shapeVisible !== false;
       return `
         <div class="aoe-chip ${selected ? 'selected' : ''}" data-id="${aoe.id}">
-          ${rotateButtons}
-          <span class="aoe-chip-label">${escapeHtml(aoeShapeLabel(aoe.shape))} ${sizeText}m</span>
-          ${rotateButtonsRight}
-          ${removeButton}
+          <div class="aoe-chip-pill">
+            <span class="aoe-chip-label">${escapeHtml(aoeShapeLabel(aoe.shape))} ${sizeText}m</span>
+            <button class="aoe-chip-shape-toggle" title="${shapeVisible ? 'Nascondi il contorno trascinabile' : 'Mostra il contorno trascinabile'}">
+              <svg class="icon"><use href="#${shapeVisible ? 'i-eye' : 'i-eye-off'}"></use></svg>
+            </button>
+          </div>
+          ${actions}
         </div>
       `;
     })
     .join('');
+}
+
+// Su /control la mappa vive dentro #map-local-zoom-wrap, che riceve un
+// transform:scale() per lo zoom locale del DM (vedi applyLocalZoom): senza
+// dividere lineWidth per quella scala, la griglia si ingrosserebbe mentre si
+// zooma -- stessa correzione già applicata da renderMap() in display.js per
+// il proprio transform di pan/zoom condiviso.
+let currentGrid = null;
+let currentGridNW = 0;
+let currentGridNH = 0;
+
+function renderGrid(grid, naturalW, naturalH) {
+  currentGrid = grid;
+  currentGridNW = naturalW;
+  currentGridNH = naturalH;
+  if (!grid) {
+    mapGridSvg.innerHTML = '';
+    return;
+  }
+  renderGridSvg(mapGridSvg, { ...grid, lineWidth: (grid.lineWidth || 0.3) / Math.max(localZoom.scale, 0.01) }, naturalW, naturalH);
 }
 
 function renderMapPreview(location) {
@@ -476,6 +555,7 @@ function renderMapPreview(location) {
       positionFitBox(mapFitBox, rect);
       currentImageRect = rect;
       renderFogOverlays(polygons);
+      renderGrid(location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
       renderAoeOverlays((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
       updateViewportRect(location);
     });
@@ -498,6 +578,7 @@ function renderMapPreview(location) {
     positionFitBox(mapFitBox, rect);
     currentImageRect = rect;
     renderFogOverlays(polygons);
+    renderGrid(location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     renderAoeOverlays((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     updateViewportRect(location);
   }
@@ -631,6 +712,7 @@ mapFitBox.addEventListener('pointerup', (e) => {
   socket.emit('aoe:place', {
     locationId: previewLocationId,
     shape: aoeSelectedShape,
+    color: aoeSelectedColor,
     sizeM: aoeSelectedSize,
     widthM: aoeSelectedShape === 'line' ? aoeSelectedWidth : undefined,
     x,
@@ -643,10 +725,13 @@ mapFitBox.addEventListener('pointercancel', (e) => {
   if (aoePlaceStart && e.pointerId === aoePlaceStart.pointerId) aoePlaceStart = null;
 });
 
-fogOpacityInput.addEventListener('input', () => {
-  fogOpacity = Number(fogOpacityInput.value) / 100;
+function stepFogOpacity(delta) {
+  fogOpacity = Math.min(1, Math.max(0, Math.round((fogOpacity + delta) * 10) / 10));
+  fogOpacityLevel.textContent = `${Math.round(fogOpacity * 100)}%`;
   if (state) renderMapPreview(getPreviewLocation());
-});
+}
+fogOpacityOutBtn.addEventListener('click', () => stepFogOpacity(-FOG_OPACITY_STEP));
+fogOpacityInBtn.addEventListener('click', () => stepFogOpacity(FOG_OPACITY_STEP));
 
 fowList.addEventListener('click', (e) => {
   const btn = e.target.closest('.fow-row');
@@ -657,7 +742,19 @@ aoeChipList.addEventListener('click', (e) => {
   const removeBtn = e.target.closest('.aoe-chip-remove');
   if (removeBtn) {
     const chip = removeBtn.closest('.aoe-chip');
-    socket.emit('aoe:remove', { locationId: previewLocationId, aoeId: chip.dataset.id });
+    const aoeId = chip.dataset.id;
+    if (armedRemoveAoeId !== aoeId) {
+      armedRemoveAoeId = aoeId;
+      clearTimeout(armedRemoveTimeout);
+      armedRemoveTimeout = setTimeout(() => {
+        armedRemoveAoeId = null;
+        render();
+      }, 2500);
+      render();
+      return;
+    }
+    disarmRemove();
+    socket.emit('aoe:remove', { locationId: previewLocationId, aoeId });
     return;
   }
   const rotateBtn = e.target.closest('.aoe-chip-rotate');
@@ -671,8 +768,20 @@ aoeChipList.addEventListener('click', (e) => {
     socket.emit('aoe:rotate', { locationId: previewLocationId, aoeId: aoe.id, rotation: nextRotation });
     return;
   }
-  const chip = e.target.closest('.aoe-chip');
-  if (chip) setSelectedAoeId(selectedAoeId === chip.dataset.id ? null : chip.dataset.id);
+  const shapeToggleBtn = e.target.closest('.aoe-chip-shape-toggle');
+  if (shapeToggleBtn) {
+    const chip = shapeToggleBtn.closest('.aoe-chip');
+    const previewLocation = getPreviewLocation();
+    const aoe = previewLocation && previewLocation.map.aoes.find((a) => a.id === chip.dataset.id);
+    if (!aoe) return;
+    socket.emit('aoe:setShapeVisible', { locationId: previewLocationId, aoeId: aoe.id, visible: aoe.shapeVisible === false });
+    return;
+  }
+  const pill = e.target.closest('.aoe-chip-pill');
+  if (pill) {
+    const chip = pill.closest('.aoe-chip');
+    setSelectedAoeId(selectedAoeId === chip.dataset.id ? null : chip.dataset.id);
+  }
 });
 
 imagesList.addEventListener('click', (e) => {
@@ -970,6 +1079,10 @@ function applyLocalZoom() {
     localZoom.scale === 1 && !localZoom.x && !localZoom.y
       ? ''
       : `translate(${localZoom.x}px, ${localZoom.y}px) scale(${localZoom.scale})`;
+  // Il transform sopra scala anche lo spessore della griglia: ridisegnarla
+  // con lineWidth ricompensato mantiene lo spessore scelto costante mentre
+  // si zooma, non solo al render successivo dello stato.
+  if (currentGrid) renderGrid(currentGrid, currentGridNW, currentGridNH);
 }
 
 // Non lascia che il contenuto ingrandito scivoli così lontano da uscire
@@ -1054,6 +1167,27 @@ compassToggle.addEventListener('click', () => {
   const previewLocation = getPreviewLocation();
   if (!previewLocation || !previewLocation.map.compass) return;
   socket.emit('compass:update', { locationId: previewLocationId, visible: !previewLocation.map.compass.visible });
+});
+
+function nudgeCompass(dx, dy) {
+  const previewLocation = getPreviewLocation();
+  const compass = previewLocation && previewLocation.map.compass;
+  if (!compass) return;
+  const x = Math.min(100, Math.max(0, compass.x + dx * COMPASS_NUDGE_STEP));
+  const y = Math.min(100, Math.max(0, compass.y + dy * COMPASS_NUDGE_STEP));
+  socket.emit('compass:update', { locationId: previewLocationId, x, y });
+}
+compassNudgeUp.addEventListener('click', () => nudgeCompass(0, -1));
+compassNudgeDown.addEventListener('click', () => nudgeCompass(0, 1));
+compassNudgeLeft.addEventListener('click', () => nudgeCompass(-1, 0));
+compassNudgeRight.addEventListener('click', () => nudgeCompass(1, 0));
+
+compassRotateBtn.addEventListener('click', () => {
+  const previewLocation = getPreviewLocation();
+  const compass = previewLocation && previewLocation.map.compass;
+  if (!compass) return;
+  const rotation = ((compass.rotation + 90) % 360 + 360) % 360;
+  socket.emit('compass:update', { locationId: previewLocationId, rotation });
 });
 
 audioPlayPauseBtn.addEventListener('click', () => {

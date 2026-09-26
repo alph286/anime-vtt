@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   AOE_METERS_PER_CELL,
+  AOE_COLORS,
+  aoeColorHex,
   aoePixelsPerMeter,
   aoeShapePointsPx,
   aoeOutlinePoints,
@@ -12,6 +14,15 @@ const {
 
 test('AOE_METERS_PER_CELL è 1.5', () => {
   assert.equal(AOE_METERS_PER_CELL, 1.5);
+});
+
+test('aoeColorHex risolve un colore noto della palette', () => {
+  assert.equal(aoeColorHex('blue'), AOE_COLORS.blue);
+});
+
+test('aoeColorHex usa il rosso come fallback per un nome sconosciuto o mancante', () => {
+  assert.equal(aoeColorHex('mai-esistito'), AOE_COLORS.red);
+  assert.equal(aoeColorHex(undefined), AOE_COLORS.red);
 });
 
 test('aoePixelsPerMeter converte cellSize in pixel-per-metro', () => {

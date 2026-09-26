@@ -1,8 +1,10 @@
 const fs = require('fs');
 const path = require('path');
+const { AOE_COLORS } = require('../public/shared/media.js');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
+const AOE_COLOR_NAMES = Object.keys(AOE_COLORS);
 
 // `baseCellSize`/`divisions` sono la "cella grezza" tracciata sulla mappa e
 // il numero di suddivisioni applicate: `cellSize` resta sempre il loro
@@ -96,6 +98,13 @@ function migrate(state) {
     if (location.map.compass.y === undefined) location.map.compass.y = DEFAULT_COMPASS.y;
     if (location.map.compass.rotation === undefined) location.map.compass.rotation = 0;
     if (!Array.isArray(location.map.aoes)) location.map.aoes = [];
+    // Aree piazzate prima dell'introduzione del colore (o con un valore ormai
+    // fuori dalla palette) prendono il rosso come default -- stesso fallback
+    // usato da aoeColorHex() lato client.
+    location.map.aoes.forEach((aoe) => {
+      if (!AOE_COLOR_NAMES.includes(aoe.color)) aoe.color = 'red';
+      if (aoe.shapeVisible === undefined) aoe.shapeVisible = true;
+    });
     if (!location.map.audio) {
       location.map.audio = { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } };
     } else if (!location.map.audio.main && !location.map.audio.special) {

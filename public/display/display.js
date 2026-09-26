@@ -297,6 +297,7 @@ function renderAoe(aoes, grid, naturalW, naturalH) {
   mapAoeSvg.innerHTML = '';
   if (!naturalW || !naturalH) return;
   aoes.forEach((aoe) => {
+    const color = aoeColorHex(aoe.color);
     aoeAffectedCells(aoe, grid, naturalW, naturalH).forEach(({ col, row }) => {
       const rect = cellRectPercent(col, row, grid, naturalW, naturalH);
       const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -305,13 +306,21 @@ function renderAoe(aoes, grid, naturalW, naturalH) {
       el.setAttribute('width', rect.widthPct);
       el.setAttribute('height', rect.heightPct);
       el.setAttribute('class', 'aoe-cell-highlight');
+      el.setAttribute('fill', color);
+      el.setAttribute('stroke', color);
       mapAoeSvg.appendChild(el);
     });
 
+    // shapeVisible:false: a differenza di /control, qui il contorno non serve
+    // mai a trascinare nulla -- si può saltarne il disegno del tutto invece di
+    // renderlo solo invisibile.
+    if (aoe.shapeVisible === false) return;
     const points = aoeOutlinePoints(aoe, grid, naturalW, naturalH);
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     poly.setAttribute('points', points.map(([x, y]) => `${x},${y}`).join(' '));
     poly.setAttribute('class', 'aoe-shape-overlay');
+    poly.setAttribute('fill', color);
+    poly.setAttribute('stroke', color);
     mapAoeSvg.appendChild(poly);
   });
 }

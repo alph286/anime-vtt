@@ -222,6 +222,23 @@ function renderGridSvg(svgEl, grid, naturalW, naturalH) {
 
 const AOE_METERS_PER_CELL = 1.5;
 
+// Palette fissa a 5 colori nominati (mai un color-picker libero): stesso
+// valore usato per riempimento cella e contorno di una stessa area, così
+// che scelga un solo colore e lo veda coerente ovunque. `red` è anche il
+// fallback per un nome sconosciuto o mancante (aree salvate prima
+// dell'introduzione del colore).
+const AOE_COLORS = {
+  red: '#d64545',
+  green: '#3fa76a',
+  blue: '#3f7fd6',
+  purple: '#8b5fd6',
+  yellow: '#d6b83f'
+};
+
+function aoeColorHex(name) {
+  return AOE_COLORS[name] || AOE_COLORS.red;
+}
+
 // Ruota il vettore (x,y) di angleDeg, con la stessa convenzione di segno
 // della funzione CSS rotate() (verificato empiricamente: rotate(90deg) porta
 // (1,0) a (0,1), cioè orario in un sistema con Y verso il basso — lo stesso
@@ -374,6 +391,8 @@ function cellRectPercent(col, row, grid, naturalW, naturalH) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     AOE_METERS_PER_CELL,
+    AOE_COLORS,
+    aoeColorHex,
     rotateVector,
     aoePixelsPerMeter,
     aoeShapePointsPx,

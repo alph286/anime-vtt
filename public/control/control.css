@@ -308,6 +308,14 @@ h2 {
   z-index: 5;
 }
 
+.grid-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 .aoe-svg {
   position: absolute;
   inset: 0;
@@ -316,12 +324,19 @@ h2 {
   pointer-events: none;
 }
 
+/* Il colore di riempimento/contorno è quello dell'area (aoe.color), impostato
+   inline da JS su ciascun elemento -- qui restano solo le proprietà comuni.
+   Il leggero fade in/out serve a far risaltare di più le aree sulla mappa. */
+@keyframes aoe-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 .aoe-shape-overlay {
-  fill: var(--accent-bg-subtle);
-  stroke: var(--accent);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
   cursor: grab;
+  animation: aoe-pulse 2.4s ease-in-out infinite;
 }
 
 .map-preview.mode-aoe .aoe-shape-overlay {
@@ -333,11 +348,10 @@ h2 {
 }
 
 .aoe-cell-highlight {
-  fill: var(--accent-bg-subtle);
-  stroke: var(--accent);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
+  animation: aoe-pulse 2.4s ease-in-out infinite;
 }
 
 .aoe-shape-bar {
@@ -356,19 +370,51 @@ h2 {
   border-color: var(--accent);
 }
 
+.aoe-color-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.aoe-color-btn {
+  flex: 1;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid var(--border-control);
+  background: var(--aoe-color);
+  cursor: pointer;
+}
+
+.aoe-color-btn.active {
+  border-color: var(--text-primary);
+}
+
+.aoe-size-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
 .aoe-chip-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   margin-top: 10px;
 }
 
 .aoe-chip {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.aoe-chip-pill {
+  display: flex;
+  align-items: center;
   gap: 6px;
   height: 44px;
-  padding: 0 12px;
+  padding: 0 8px 0 12px;
   border-radius: 8px;
   border: 1px solid var(--border-control);
   background: var(--bg-control);
@@ -376,9 +422,27 @@ h2 {
   cursor: pointer;
 }
 
-.aoe-chip.selected {
+.aoe-chip-shape-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-secondary);
+}
+
+.aoe-chip.selected .aoe-chip-pill {
   border-color: var(--accent);
   background: var(--accent-bg-subtle);
+}
+
+.aoe-chip-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .aoe-chip-rotate,
@@ -390,6 +454,12 @@ h2 {
   background: var(--bg-panel);
   color: var(--text-primary);
   padding: 0;
+}
+
+.aoe-chip-remove.confirm {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
 }
 
 .icon {
@@ -421,19 +491,16 @@ h2 {
   cursor: default;
 }
 
+/* Riga fuori dalla mappa, sempre visibile: così la mappa resta ben visibile
+   anche su schermi piccoli invece di essere in parte coperta dai pulsanti. */
 #map-mode-toggles {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 6;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.map-mode-btn {
-  background: rgba(38, 43, 52, 0.85);
-  backdrop-filter: blur(4px);
+#map-mode-toggles .map-mode-btn {
+  flex: 1;
 }
 
 .map-mode-btn.active {
@@ -549,6 +616,14 @@ h2 {
   height: 44px;
   padding: 0;
   min-height: 0;
+}
+
+.compass-pad {
+  margin-top: 12px;
+}
+
+#opacity-section .opacity-row + .opacity-row {
+  margin-top: 10px;
 }
 
 #view-reset {
