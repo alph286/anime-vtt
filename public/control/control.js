@@ -234,8 +234,10 @@ function render() {
   if (pingModeToggle.disabled && currentMode === 'ping') setMode(null);
 
   // Stessa regola del Ping: piazzare un'area ha senso solo sulla mappa che
-  // i giocatori vedono davvero ora.
-  aoeModeToggle.disabled = isPreviewing || showingImage || !state.activeLocationId;
+  // i giocatori vedono davvero ora. In più, senza un file mappa caricato non
+  // c'è nulla su cui disegnare (mediaW/mediaH sarebbero 0): niente vicolo
+  // cieco confuso per il DM.
+  aoeModeToggle.disabled = isPreviewing || showingImage || !state.activeLocationId || !previewLocation?.map.file;
   if (aoeModeToggle.disabled && currentMode === 'aoe') setMode(null);
 
   previewBanner.hidden = !isPreviewing;
@@ -577,6 +579,7 @@ mapFitBox.addEventListener('pointerdown', (e) => {
   if (overlay) {
     aoeDrag = { id: overlay.dataset.id, pointerId: e.pointerId };
     setSelectedAoeId(overlay.dataset.id);
+    mapFitBox.setPointerCapture(e.pointerId);
   } else {
     aoePlaceStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
   }
@@ -870,14 +873,15 @@ function updateViewportRect(location) {
   panModeToggle.disabled = false;
 }
 
-let currentMode = null; // null | 'pan' | 'fog' | 'ping' | 'zoom'
+let currentMode = null; // null | 'pan' | 'fog' | 'ping' | 'zoom' | 'aoe'
 let panDrag = null;
 
 const MODE_BUTTONS = { pan: panModeToggle, fog: fogModeToggle, ping: pingModeToggle, zoom: zoomModeToggle, aoe: aoeModeToggle };
 
-// Le quattro modalità sono mutuamente esclusive: un tap sulla mappa ha un
-// solo significato alla volta. Riattivare la modalità già attiva la
-// disattiva (torna a "nessuna modalità" = il tap non fa nulla).
+// Le cinque modalità (pan, fog, ping, zoom, aoe) sono mutuamente esclusive:
+// un tap sulla mappa ha un solo significato alla volta. Riattivare la
+// modalità già attiva la disattiva (torna a "nessuna modalità" = il tap non
+// fa nulla).
 function setMode(mode) {
   if (mode && MODE_BUTTONS[mode].disabled) mode = null;
   currentMode = currentMode === mode ? null : mode;

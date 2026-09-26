@@ -20,6 +20,9 @@ const IMAGES_DIR = path.join(STORAGE_DIR, 'images');
 const AUDIO_DIR = path.join(STORAGE_DIR, 'audio');
 const IMPORTS_DIR = path.join(DATA_DIR, 'imports');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
+// Limite di sicurezza per gli AoE: una taglia enorme (o Infinity) farebbe
+// iterare aoeAffectedCells su un numero di celle spropositato lato client.
+const MAX_AOE_SIZE_M = 300;
 
 for (const dir of [MAPS_DIR, IMAGES_DIR, AUDIO_DIR, IMPORTS_DIR, BACKUPS_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
@@ -804,14 +807,14 @@ io.on('connection', (socket) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     if (!['cone', 'cube', 'sphere', 'line'].includes(shape)) return;
-    if (typeof sizeM !== 'number' || !(sizeM > 0)) return;
-    if (typeof x !== 'number' || typeof y !== 'number') return;
+    if (!Number.isFinite(sizeM) || !(sizeM > 0) || sizeM > MAX_AOE_SIZE_M) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     if (!Array.isArray(location.map.aoes)) location.map.aoes = [];
     location.map.aoes.push({
       id: nanoid(),
       shape,
       sizeM,
-      widthM: shape === 'line' && typeof widthM === 'number' && widthM > 0 ? widthM : null,
+      widthM: shape === 'line' && Number.isFinite(widthM) && widthM > 0 && widthM <= MAX_AOE_SIZE_M ? widthM : null,
       x,
       y,
       rotation: 0
@@ -824,7 +827,7 @@ io.on('connection', (socket) => {
     const location = state.locations.find((l) => l.id === locationId);
     const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
     if (!aoe) return;
-    if (typeof x !== 'number' || typeof y !== 'number') return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     aoe.x = x;
     aoe.y = y;
     saveState(state);
@@ -836,7 +839,7 @@ io.on('connection', (socket) => {
     const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
     if (!aoe) return;
     if (aoe.shape === 'cube' || aoe.shape === 'sphere') return;
-    if (typeof rotation !== 'number') return;
+    if (!Number.isFinite(rotation)) return;
     aoe.rotation = ((Math.round(rotation) % 360) + 360) % 360;
     saveState(state);
     broadcastState();
