@@ -26,6 +26,7 @@ precision highp float;
 
 uniform float u_time;
 uniform vec2 u_resolution;
+uniform vec2 u_viewportOrigin;
 uniform sampler2D u_noise;
 
 out vec4 fragColor;
@@ -95,7 +96,27 @@ fragColor = vec4(col,1.);
 }
 
 void main() {
-  mainImage(fragColor, gl_FragCoord.xy);
+  // gl_FragCoord e' relativo all'intero framebuffer/canvas, non al
+  // rettangolo passato a gl.viewport() per questa decorazione -- va
+  // riportato a coordinate locali sottraendo l'origine del viewport,
+  // altrimenti l'effetto (centrato vicino a p=0) non cade mai dentro
+  // decorazioni piccole o non allineate all'origine del canvas.
+  vec2 fragCoord = gl_FragCoord.xy - u_viewportOrigin;
+  vec4 col;
+  mainImage(col, fragCoord);
+
+  // Lo sfondo scuro dell'effetto diventa trasparente (si vede la mappa
+  // sotto) invece di nero opaco; la luminosita' stessa del colore guida
+  // l'alpha. Vicino al bordo del rettangolo l'effetto si spegne
+  // gradualmente (fade), cosi' non si vede tagliato netto sul confine
+  // della decorazione.
+  vec2 uv = fragCoord / u_resolution - 0.5;
+  float edgeFade = 1.0 - smoothstep(0.32, 0.5, max(abs(uv.x), abs(uv.y)));
+  float alpha = clamp(max(col.r, max(col.g, col.b)), 0.0, 1.0) * edgeFade;
+  // Il canvas usa alpha premoltiplicato (default WebGL): rgb va scalato
+  // per l'alpha finale, non solo per il fade, altrimenti i bordi
+  // risultano piu' chiari del dovuto durante la composizione.
+  fragColor = vec4(col.rgb * alpha, alpha);
 }
 `
   }
@@ -224,10 +245,12 @@ class ShaderLayer {
       // è in alto a sinistra (come il DOM/CSS): l'asse Y va invertito.
       const yPx = Math.round(this.canvas.height - topPx - hPx);
 
-      gl.viewport(Math.round(xPx), yPx, wPx, hPx);
+      const originXPx = Math.round(xPx);
+      gl.viewport(originXPx, yPx, wPx, hPx);
       gl.useProgram(program);
       gl.uniform1f(gl.getUniformLocation(program, 'u_time'), time);
       gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), wPx, hPx);
+      gl.uniform2f(gl.getUniformLocation(program, 'u_viewportOrigin'), originXPx, yPx);
       if (def.usesNoiseTexture) {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.ensureNoiseTexture());
