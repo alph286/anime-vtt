@@ -10,6 +10,11 @@ let currentMapScale = 1;
 let draggingIndex = null;
 let draggingPolygon = null;
 let gridAlignDrag = null;
+let shaderPlaceDrag = null;
+let selectedShaderId = null;
+let draggingShader = null;
+let selectedShaderBoxEl = null;
+const SHADER_MIN_M = 0.5;
 let compassDragging = false;
 let compassDragPos = null;
 let currentImageRect = null;
@@ -58,6 +63,11 @@ const redoBtn = document.getElementById('redo-btn');
 const gridToggleBtn = document.getElementById('grid-toggle');
 const gridAlignToolBtn = document.getElementById('grid-align-tool');
 const gridAlignSquareBtn = document.getElementById('grid-align-square');
+const toolShaderBtn = document.getElementById('tool-shader');
+const mapShaderCanvas = document.getElementById('map-shader-canvas');
+const shaderList = document.getElementById('shader-list');
+const deleteShaderBtn = document.getElementById('delete-shader');
+const shaderLayer = new ShaderLayer(mapShaderCanvas);
 const gridDivisionsNum = document.getElementById('grid-divisions-num');
 let gridSquareConstrain = false;
 const gridSizeNum = document.getElementById('grid-size-num');
@@ -218,6 +228,7 @@ const lightboxCloseBtn = document.getElementById('lightbox-close');
 const LOCATION_DEPENDENT_CONTROLS = [
   mapUpload, removeMapBtn, flip180Btn, rotate90Btn, mapScaleNum,
   toolSelectBtn, toolDrawBtn, drawFinishBtn, drawCancelBtn, deletePolygonBtn, polygonSortAzBtn, fogOpacityNum,
+  toolShaderBtn, deleteShaderBtn,
   gridToggleBtn, gridAlignToolBtn, gridAlignSquareBtn, gridDivisionsNum, gridColorInput, gridWidthNum, gridOpacityNum,
   gridSizeNum, gridOffsetXNum, gridOffsetYNum, gridSavePresetBtn, gridApplyPresetBtn,
   imageUpload
@@ -383,6 +394,7 @@ function render() {
   }
 
   renderPolygonList(location);
+  renderShaderList(location);
   renderImageList(location);
   renderAudioPanel(location);
   updateZoomBox();
@@ -419,6 +431,7 @@ function updateOverlayBox() {
   positionFitBox(overlayBox, currentImageRect);
   renderGrid(location);
   renderPolygonsSvg();
+  syncSelectedShaderBox();
 }
 
 mapCanvas.addEventListener(
@@ -578,6 +591,16 @@ overlayBox.addEventListener('click', (e) => {
 overlayBox.addEventListener('pointerdown', (e) => {
   if (e.button === 2) return;
 
+  if (mode === 'shader-place') {
+    const start = basePointFromClientXY(e.clientX, e.clientY);
+    const box = document.createElement('div');
+    box.className = 'shader-box';
+    overlayBox.appendChild(box);
+    shaderPlaceDrag = { start, box };
+    updateShaderPlaceBox(start, start);
+    return;
+  }
+
   if (mode === 'grid-align') {
     const start = basePointFromClientXY(e.clientX, e.clientY);
     const box = document.createElement('div');
@@ -594,13 +617,38 @@ overlayBox.addEventListener('pointerdown', (e) => {
   const point = basePointFromClientXY(e.clientX, e.clientY);
   const hit = (location.map.polygons || []).find((poly) => pointInPolygon(point, poly.points));
 
-  selectedPolygonId = hit ? hit.id : null;
-  draggingPolygon = hit
-    ? { locationId: location.id, polygonId: hit.id, startBase: point, originalPoints: hit.points.map((p) => [...p]) }
-    : null;
+  if (hit) {
+    selectedShaderId = null;
+    selectedPolygonId = hit.id;
+    draggingPolygon = { locationId: location.id, polygonId: hit.id, startBase: point, originalPoints: hit.points.map((p) => [...p]) };
+    renderPolygonsSvg();
+    renderPolygonList(location);
+    renderShaderList(location);
+    return;
+  }
 
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  const shaderHit = (location.map.shaders || []).find((deco) => {
+    const rect = shaderDecorationRectPercent(deco, location.map.grid, nw, nh);
+    const corners = [
+      [rect.leftPct, rect.topPct],
+      [rect.leftPct + rect.widthPct, rect.topPct],
+      [rect.leftPct + rect.widthPct, rect.topPct + rect.heightPct],
+      [rect.leftPct, rect.topPct + rect.heightPct]
+    ];
+    return pointInPolygon(point, corners);
+  });
+
+  selectedPolygonId = null;
+  draggingPolygon = null;
+  selectedShaderId = shaderHit ? shaderHit.id : null;
+  draggingShader = shaderHit
+    ? { locationId: location.id, id: shaderHit.id, startBase: point, originalX: shaderHit.x, originalY: shaderHit.y }
+    : null;
   renderPolygonsSvg();
   renderPolygonList(location);
+  renderShaderList(location);
 });
 
 function updateGridAlignBox(start, end) {
@@ -626,6 +674,18 @@ function updateGridAlignBox(start, end) {
   box.style.height = `${(height / 100) * currentImageRect.height}px`;
 }
 
+function updateShaderPlaceBox(start, end) {
+  const left = Math.min(start[0], end[0]);
+  const top = Math.min(start[1], end[1]);
+  const width = Math.abs(end[0] - start[0]);
+  const height = Math.abs(end[1] - start[1]);
+  const box = shaderPlaceDrag.box;
+  box.style.left = `${(left / 100) * currentImageRect.width}px`;
+  box.style.top = `${(top / 100) * currentImageRect.height}px`;
+  box.style.width = `${(width / 100) * currentImageRect.width}px`;
+  box.style.height = `${(height / 100) * currentImageRect.height}px`;
+}
+
 document.addEventListener('pointermove', (e) => {
   if (compassDragging) {
     const [x, y] = canvasPointFromClientXY(e.clientX, e.clientY);
@@ -639,6 +699,13 @@ document.addEventListener('pointermove', (e) => {
     const current = basePointFromClientXY(e.clientX, e.clientY);
     updateGridAlignBox(gridAlignDrag.start, current);
     gridAlignDrag.end = current;
+    return;
+  }
+
+  if (shaderPlaceDrag) {
+    const current = basePointFromClientXY(e.clientX, e.clientY);
+    updateShaderPlaceBox(shaderPlaceDrag.start, current);
+    shaderPlaceDrag.end = current;
     return;
   }
 
@@ -667,6 +734,19 @@ document.addEventListener('pointermove', (e) => {
     ]);
     renderPolygonsSvg();
   }
+
+  if (draggingShader) {
+    const location = getActiveLocation();
+    if (!location) return;
+    const deco = location.map.shaders.find((s) => s.id === draggingShader.id);
+    if (!deco) return;
+    const current = basePointFromClientXY(e.clientX, e.clientY);
+    const dx = current[0] - draggingShader.startBase[0];
+    const dy = current[1] - draggingShader.startBase[1];
+    deco.x = Math.min(100, Math.max(0, draggingShader.originalX + dx));
+    deco.y = Math.min(100, Math.max(0, draggingShader.originalY + dy));
+    syncSelectedShaderBox();
+  }
 });
 
 document.addEventListener('pointerup', () => {
@@ -690,6 +770,17 @@ document.addEventListener('pointerup', () => {
     mode = 'select';
     toolSelectBtn.classList.add('active');
     gridAlignToolBtn.classList.remove('active');
+    return;
+  }
+
+  if (shaderPlaceDrag) {
+    const { start, end, box } = shaderPlaceDrag;
+    box.remove();
+    shaderPlaceDrag = null;
+    if (end) applyShaderPlacement(start, end);
+    mode = 'select';
+    toolSelectBtn.classList.add('active');
+    toolShaderBtn.classList.remove('active');
     return;
   }
 
@@ -737,6 +828,15 @@ document.addEventListener('pointerup', () => {
       }
     }
     draggingPolygon = null;
+  }
+
+  if (draggingShader) {
+    const location = getActiveLocation();
+    const deco = location?.map.shaders.find((s) => s.id === draggingShader.id);
+    draggingShader = null;
+    if (deco) {
+      socket.emit('shader:move', { locationId: location.id, id: deco.id, x: deco.x, y: deco.y });
+    }
   }
 });
 
@@ -795,6 +895,32 @@ function applyGridAlignment(start, end) {
   });
 }
 
+function applyShaderPlacement(start, end) {
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  if (!nw || !nh) return;
+  const leftPct = Math.min(start[0], end[0]);
+  const topPct = Math.min(start[1], end[1]);
+  const widthPct = Math.abs(end[0] - start[0]);
+  const heightPct = Math.abs(end[1] - start[1]);
+  const location = getActiveLocation();
+  if (!location) return;
+  const grid = location.map.grid;
+  const ppm = aoePixelsPerMeter(grid);
+  const widthM = Math.max(SHADER_MIN_M, ((widthPct / 100) * nw) / ppm);
+  const heightM = Math.max(SHADER_MIN_M, ((heightPct / 100) * nh) / ppm);
+  const centerXPct = leftPct + widthPct / 2;
+  const centerYPct = topPct + heightPct / 2;
+  socket.emit('shader:place', {
+    locationId: location.id,
+    shaderId: 'portal',
+    x: centerXPct,
+    y: centerYPct,
+    widthM,
+    heightM
+  });
+}
+
 toolSelectBtn.addEventListener('click', () => {
   mode = 'select';
   resetDrawingPoints();
@@ -824,6 +950,15 @@ gridAlignToolBtn.addEventListener('click', () => {
   gridAlignToolBtn.classList.add('active');
   toolSelectBtn.classList.remove('active');
   toolDrawBtn.classList.remove('active');
+});
+
+toolShaderBtn.addEventListener('click', () => {
+  mode = 'shader-place';
+  resetDrawingPoints();
+  toolSelectBtn.classList.remove('active');
+  toolDrawBtn.classList.remove('active');
+  gridAlignToolBtn.classList.remove('active');
+  toolShaderBtn.classList.add('active');
 });
 
 drawFinishBtn.addEventListener('click', () => {
@@ -880,6 +1015,132 @@ deletePolygonBtn.addEventListener('click', () => {
     pushHistory(`poligono "${polygon.name}" eliminato`,
       () => socket.emit('polygon:restore', { locationId, index, polygon: snapshot }),
       () => socket.emit('polygon:delete', { locationId, polygonId: snapshot.id })
+    );
+  }
+});
+
+// Nota per il reviewer: il brief documenta in editor.css il doppio uso di
+// .shader-box (rettangolo di trascinamento + evidenziazione della
+// decorazione selezionata), ma non fornisce codice che disegni questa
+// seconda evidenziazione sulla mappa -- senza di essa la selezione sarebbe
+// visibile solo nella lista laterale, in contraddizione con la verifica
+// manuale del brief ("si evidenzia (bordo tratteggiato)"). Aggiunta minima,
+// stessa conversione percentuale->pixel di updateShaderPlaceBox.
+function syncSelectedShaderBox() {
+  const location = getActiveLocation();
+  const deco = location && selectedShaderId ? (location.map.shaders || []).find((s) => s.id === selectedShaderId) : null;
+  if (!deco || !currentImageRect) {
+    if (selectedShaderBoxEl) {
+      selectedShaderBoxEl.remove();
+      selectedShaderBoxEl = null;
+    }
+    return;
+  }
+  if (!selectedShaderBoxEl) {
+    selectedShaderBoxEl = document.createElement('div');
+    selectedShaderBoxEl.className = 'shader-box';
+    overlayBox.appendChild(selectedShaderBoxEl);
+  }
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  const rect = shaderDecorationRectPercent(deco, location.map.grid, nw, nh);
+  selectedShaderBoxEl.style.left = `${(rect.leftPct / 100) * currentImageRect.width}px`;
+  selectedShaderBoxEl.style.top = `${(rect.topPct / 100) * currentImageRect.height}px`;
+  selectedShaderBoxEl.style.width = `${(rect.widthPct / 100) * currentImageRect.width}px`;
+  selectedShaderBoxEl.style.height = `${(rect.heightPct / 100) * currentImageRect.height}px`;
+}
+
+function renderShaderList(location) {
+  const shaders = (location && location.map.shaders) || [];
+  deleteShaderBtn.disabled = !selectedShaderId;
+  syncSelectedShaderBox();
+  shaderList.innerHTML = shaders
+    .map((deco) => {
+      const selected = deco.id === selectedShaderId;
+      const label = (typeof SHADER_EFFECTS !== 'undefined' && SHADER_EFFECTS[deco.shaderId]?.label) || deco.shaderId;
+      const steppers = selected
+        ? `
+          <div class="shader-stepper">
+            <button data-w-out="${deco.id}" title="Riduci larghezza">−</button>
+            <span>${deco.widthM.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m</span>
+            <button data-w-in="${deco.id}" title="Aumenta larghezza">+</button>
+          </div>
+          <div class="shader-stepper">
+            <button data-h-out="${deco.id}" title="Riduci altezza">−</button>
+            <span>${deco.heightM.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m</span>
+            <button data-h-in="${deco.id}" title="Aumenta altezza">+</button>
+          </div>
+        `
+        : '';
+      return `
+        <div class="shader-row ${selected ? 'selected' : ''}" data-id="${deco.id}">
+          <span class="shader-row-label">${escapeHtml(label)}</span>
+          ${steppers}
+        </div>
+      `;
+    })
+    .join('');
+}
+
+shaderList.addEventListener('click', (e) => {
+  const stepBtn = e.target.closest('[data-w-out], [data-w-in], [data-h-out], [data-h-in]');
+  if (stepBtn) {
+    const location = getActiveLocation();
+    const id = stepBtn.dataset.wOut || stepBtn.dataset.wIn || stepBtn.dataset.hOut || stepBtn.dataset.hIn;
+    const deco = location?.map.shaders.find((s) => s.id === id);
+    if (!deco) return;
+    let widthM = deco.widthM;
+    let heightM = deco.heightM;
+    if (stepBtn.dataset.wOut !== undefined) widthM = Math.max(SHADER_MIN_M, widthM - SHADER_MIN_M);
+    if (stepBtn.dataset.wIn !== undefined) widthM = widthM + SHADER_MIN_M;
+    if (stepBtn.dataset.hOut !== undefined) heightM = Math.max(SHADER_MIN_M, heightM - SHADER_MIN_M);
+    if (stepBtn.dataset.hIn !== undefined) heightM = heightM + SHADER_MIN_M;
+    socket.emit('shader:resize', { locationId: location.id, id, widthM, heightM });
+    return;
+  }
+  const row = e.target.closest('.shader-row');
+  if (!row) return;
+  selectedPolygonId = null;
+  draggingPolygon = null;
+  selectedShaderId = selectedShaderId === row.dataset.id ? null : row.dataset.id;
+  renderPolygonsSvg();
+  renderPolygonList(getActiveLocation());
+  renderShaderList(getActiveLocation());
+});
+
+let shaderDeleteArmed = false;
+let shaderDeleteArmTimeout = null;
+
+function resetShaderDeleteArm() {
+  shaderDeleteArmed = false;
+  clearTimeout(shaderDeleteArmTimeout);
+  deleteShaderBtn.classList.remove('confirm');
+  deleteShaderBtn.title = 'Elimina selezionato';
+}
+
+deleteShaderBtn.addEventListener('click', () => {
+  if (!selectedShaderId) return;
+  if (!shaderDeleteArmed) {
+    shaderDeleteArmed = true;
+    deleteShaderBtn.classList.add('confirm');
+    deleteShaderBtn.title = 'Click di nuovo per confermare';
+    clearTimeout(shaderDeleteArmTimeout);
+    shaderDeleteArmTimeout = setTimeout(resetShaderDeleteArm, 2500);
+    return;
+  }
+  const id = selectedShaderId;
+  const locationId = state.activeLocationId;
+  const location = getActiveLocation();
+  const index = location.map.shaders.findIndex((s) => s.id === id);
+  const shader = location.map.shaders[index];
+  resetShaderDeleteArm();
+  socket.emit('shader:remove', { locationId, id });
+  selectedShaderId = null;
+  if (shader) {
+    const snapshot = { ...shader };
+    pushHistory(`decorazione "${SHADER_EFFECTS[shader.shaderId]?.label || shader.shaderId}" eliminata`,
+      () => socket.emit('shader:restore', { locationId, index, shader: snapshot }),
+      () => socket.emit('shader:remove', { locationId, id: snapshot.id })
     );
   }
 });
@@ -1929,3 +2190,12 @@ function setupAudioSlotListeners(containerEl, slot, uploadLabel) {
 
 setupAudioSlotListeners(audioMainContent, 'main', 'Carica traccia principale');
 setupAudioSlotListeners(audioSpecialContent, 'special', 'Carica traccia speciale');
+
+function stepShaderLayer() {
+  const location = getActiveLocation();
+  if (location && location.map.file) {
+    shaderLayer.render(location.map.shaders || [], location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+  }
+  requestAnimationFrame(stepShaderLayer);
+}
+requestAnimationFrame(stepShaderLayer);

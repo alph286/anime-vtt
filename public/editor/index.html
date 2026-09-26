@@ -38,6 +38,7 @@
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7c1.6 0 3 .3 4.2.8M22 12s-1.6 2.8-4.2 4.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1M18.5 18.5l-2.1-2.1M7.6 7.6 5.5 5.5"/></symbol>
+  <symbol id="i-shader" viewBox="0 0 24 24"><path d="M12 3l2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4z"/></symbol>
 </svg>
 
 <header class="topbar">
@@ -165,6 +166,14 @@
       <div class="toolbar-sep"></div>
 
       <div class="toolbar-group">
+        <button id="tool-shader" class="icon-btn tool" title="Piazza decorazione shader">
+          <svg class="icon"><use href="#i-shader"></use></svg>
+        </button>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <div class="toolbar-group">
         <button id="compass-toggle" class="icon-btn tool" title="Mostra/nascondi rosa dei venti">
           <svg class="icon"><use href="#i-compass"></use></svg>
         </button>
@@ -206,6 +215,7 @@
               <img id="map-preview-img" class="map-canvas-img" draggable="false" hidden>
               <video id="map-preview-video" class="map-canvas-img" draggable="false" muted loop playsinline disablepictureinpicture hidden></video>
               <div id="map-canvas-placeholder" class="map-canvas-placeholder"></div>
+              <canvas id="map-shader-canvas"></canvas>
               <svg id="grid-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
               <svg id="polygon-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
             </div>
@@ -235,6 +245,9 @@
       </button>
       <button class="icon-btn tool" data-tab-target="fog" title="Fog of war">
         <svg class="icon"><use href="#i-fog"></use></svg>
+      </button>
+      <button class="icon-btn tool" data-tab-target="shader" title="Shader">
+        <svg class="icon"><use href="#i-shader"></use></svg>
       </button>
       <button class="icon-btn tool" data-tab-target="audio" title="Audio">
         <svg class="icon"><use href="#i-speaker"></use></svg>
@@ -268,6 +281,16 @@
           </button>
         </div>
         <div id="polygon-list" class="list"></div>
+      </section>
+
+      <section class="tab-panel panel" data-tab="shader">
+        <div class="section-header">
+          <h2>Shader</h2>
+          <button id="delete-shader" class="icon-btn" disabled title="Elimina selezionato">
+            <svg class="icon"><use href="#i-trash"></use></svg>
+          </button>
+        </div>
+        <div id="shader-list" class="list"></div>
       </section>
 
       <div class="tab-panel" data-tab="audio">
@@ -326,6 +349,7 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/shared/media.js"></script>
+<script src="/shared/shader-effects.js"></script>
 <script src="editor.js"></script>
 </body>
 </html>

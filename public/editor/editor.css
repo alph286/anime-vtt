@@ -111,6 +111,7 @@ section {
 #sidebar-panels[data-active-tab="location"] .tab-panel[data-tab="location"],
 #sidebar-panels[data-active-tab="immagini"] .tab-panel[data-tab="immagini"],
 #sidebar-panels[data-active-tab="fog"] .tab-panel[data-tab="fog"],
+#sidebar-panels[data-active-tab="shader"] .tab-panel[data-tab="shader"],
 #sidebar-panels[data-active-tab="audio"] .tab-panel[data-tab="audio"],
 #sidebar-panels[data-active-tab="grid"] .tab-panel[data-tab="grid"] {
   display: flex;
@@ -955,4 +956,64 @@ button.confirm {
   stroke: var(--text-primary);
   stroke-width: 2;
   stroke-dasharray: 4 3;
+}
+
+#map-shader-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Stesso trattamento visivo di .grid-align-box (tratteggio ambra), sia per
+   il rettangolo mentre lo si disegna sia per marcare quale decorazione
+   piazzata è attualmente selezionata. */
+.shader-box {
+  position: absolute;
+  border: 1.5px dashed var(--accent);
+  background: var(--accent-bg-subtle);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.shader-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  cursor: pointer;
+}
+
+.shader-row.selected {
+  border-color: var(--accent);
+  background: var(--accent-bg-subtle);
+}
+
+.shader-row-label {
+  font-size: 14px;
+}
+
+/* L'editor stringe i controlli a 36px (mouse, non tocco) invece dei 44px
+   usati su /control -- stesso principio già in DESIGN.md per gli altri
+   controlli equivalenti tra le due superfici. */
+.shader-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shader-stepper button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.shader-stepper span {
+  min-width: 48px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
