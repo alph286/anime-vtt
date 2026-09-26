@@ -596,6 +596,10 @@ function localPointFromEvent(e) {
 }
 
 mapFitBox.addEventListener('pointermove', (e) => {
+  if (currentMode !== 'aoe' || aoeModeToggle.disabled) {
+    aoeDrag = null;
+    return;
+  }
   if (!aoeDrag || e.pointerId !== aoeDrag.pointerId) return;
   const point = localPointFromEvent(e);
   if (!point) return;
@@ -604,6 +608,11 @@ mapFitBox.addEventListener('pointermove', (e) => {
 });
 
 mapFitBox.addEventListener('pointerup', (e) => {
+  if (currentMode !== 'aoe' || aoeModeToggle.disabled) {
+    aoeDrag = null;
+    aoePlaceStart = null;
+    return;
+  }
   if (aoeDrag && e.pointerId === aoeDrag.pointerId) {
     aoeDrag = null;
     return;

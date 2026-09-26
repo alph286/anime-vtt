@@ -322,6 +322,9 @@ h2 {
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
   cursor: grab;
+}
+
+.map-preview.mode-aoe .aoe-shape-overlay {
   pointer-events: auto;
 }
 
