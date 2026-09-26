@@ -300,6 +300,69 @@ function aoeShapePointsPx(shape, sizeM, widthM, grid) {
   }
 }
 
+// Agganciato punto più vicino sull'asse, o al vertice di griglia (multiplo
+// di cellSize da offset) o al centro-cella (vertice + mezza cella) a seconda
+// di `alignToCenter`.
+function snapToGridAxis(px, offset, cellSize, alignToCenter) {
+  const rel = px - offset;
+  if (alignToCenter) {
+    const k = Math.round(rel / cellSize - 0.5);
+    return offset + (k + 0.5) * cellSize;
+  }
+  const k = Math.round(rel / cellSize);
+  return offset + k * cellSize;
+}
+
+// Con la regola Xanathar (qualunque sovrapposizione conta), un'origine non
+// agganciata alla griglia farebbe "sbordare" un cubo N×N su una cella in più
+// per lato invece di formare un blocco netto di N×N celle. Taglia e
+// larghezza scattano sempre a multipli interi di AOE_METERS_PER_CELL, quindi
+// il lato di un cubo (o la larghezza di una linea) è sempre un numero intero
+// di celle -- ma il punto che allinea i bordi alla griglia dipende dalla sua
+// PARITÀ: un numero pari di celle si allinea su un incrocio di griglia, un
+// numero dispari sul centro di una cella (altrimenti i bordi cadrebbero a
+// metà cella anche da agganciati). Cono e sfera non hanno mai bordi dritti
+// allineabili alla griglia: restano a posizionamento libero. Una linea
+// ruotata fuori dagli assi cardinali (0/90/180/270) non può comunque avere
+// tutti i bordi allineati: anche lei resta libera in quel caso.
+function snapAoeOrigin(shape, sizeM, widthM, rotation, grid, xPct, yPct, naturalW, naturalH) {
+  if (!grid || !grid.enabled || !naturalW || !naturalH) return [xPct, yPct];
+  const cellSize = Math.max(4, grid.cellSize || 100);
+  const offsetX = grid.offsetX || 0;
+  const offsetY = grid.offsetY || 0;
+  const pxX = (xPct / 100) * naturalW;
+  const pxY = (yPct / 100) * naturalH;
+
+  let alignXToCenter;
+  let alignYToCenter;
+  if (shape === 'cube') {
+    const n = Math.round(sizeM / AOE_METERS_PER_CELL);
+    alignXToCenter = alignYToCenter = n % 2 !== 0;
+  } else if (shape === 'line') {
+    const rot = ((Math.round(rotation || 0) % 360) + 360) % 360;
+    if (rot !== 0 && rot !== 90 && rot !== 180 && rot !== 270) return [xPct, yPct];
+    const widthN = Math.round((widthM || AOE_METERS_PER_CELL) / AOE_METERS_PER_CELL);
+    const widthCentered = widthN % 2 !== 0;
+    if (rot === 0 || rot === 180) {
+      // Asse X = larghezza (dipende dalla parità), asse Y = lunghezza --
+      // l'origine sta a un ESTREMO della lunghezza, non al centro: basta che
+      // sia su un incrocio perché, essendo la lunghezza un numero intero di
+      // celle, anche l'estremo opposto ci cada sopra, qualunque sia la parità.
+      alignXToCenter = widthCentered;
+      alignYToCenter = false;
+    } else {
+      alignXToCenter = false;
+      alignYToCenter = widthCentered;
+    }
+  } else {
+    return [xPct, yPct];
+  }
+
+  const snappedPxX = snapToGridAxis(pxX, offsetX, cellSize, alignXToCenter);
+  const snappedPxY = snapToGridAxis(pxY, offsetY, cellSize, alignYToCenter);
+  return [(snappedPxX / naturalW) * 100, (snappedPxY / naturalH) * 100];
+}
+
 // Punti del contorno in percentuale, spazio locale (pre-rotazione mappa) --
 // stesso sistema dei punti dei poligoni fog. La conversione pixel->percento
 // è fatta separatamente per asse X e Y (mai un unico fattore): un'immagine
@@ -327,10 +390,75 @@ function pointInPolygon([px, py], polygon) {
   return inside;
 }
 
-// Celle della griglia il cui CENTRO ricade dentro la forma -- regola
-// ufficiale D&D per il gioco su griglia. Tutta la matematica lavora in
-// pixel reali della mappa (isotropi), mai in percentuale, per evitare la
-// stessa distorsione descritta sopra per aoeOutlinePoints.
+// Un lato di clip Sutherland-Hodgman: tiene i punti che soddisfano `inside`,
+// inserendo il punto d'incrocio esatto dove il poligono entra o esce dal
+// semipiano. Il confronto di `inside` è inclusivo (>=/<=) di proposito: un
+// bordo esattamente sul taglio produce comunque, dopo tutti e 4 i tagli, un
+// poligono degenere (area zero) -- è l'area finale a decidere se conta come
+// sovrapposizione, non il singolo confronto.
+function clipPolygonToHalfPlane(polygon, inside, intersect) {
+  const output = [];
+  for (let i = 0; i < polygon.length; i++) {
+    const curr = polygon[i];
+    const prev = polygon[(i + polygon.length - 1) % polygon.length];
+    const currIn = inside(curr);
+    const prevIn = inside(prev);
+    if (currIn) {
+      if (!prevIn) output.push(intersect(prev, curr));
+      output.push(curr);
+    } else if (prevIn) {
+      output.push(intersect(prev, curr));
+    }
+  }
+  return output;
+}
+
+function polygonArea(polygon) {
+  let area = 0;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    area += polygon[j][0] * polygon[i][1] - polygon[i][0] * polygon[j][1];
+  }
+  return Math.abs(area) / 2;
+}
+
+// Un tocco di misura nulla (un bordo della forma esattamente coincidente col
+// bordo della cella -- il caso comune per un cubo agganciato alla griglia,
+// vedi snapAoeOrigin) non deve contare come "sotto la sagoma": solo una
+// sovrapposizione di area REALE conta. Si ritaglia il poligono contro i 4
+// semipiani del rettangolo (Sutherland-Hodgman, esatto per qualunque
+// poligono semplice contro una finestra di clip convessa) e si controlla
+// l'area di ciò che resta, invece di un test punto/vertice/incrocio che
+// tratterebbe un contatto di sola linea come sovrapposizione.
+const AOE_OVERLAP_AREA_EPSILON = 1e-6;
+
+function rectIntersectsPolygon(minX, minY, maxX, maxY, polygon) {
+  let clipped = polygon;
+  clipped = clipPolygonToHalfPlane(clipped, ([x]) => x >= minX, (a, b) => {
+    const t = (minX - a[0]) / (b[0] - a[0]);
+    return [minX, a[1] + t * (b[1] - a[1])];
+  });
+  clipped = clipPolygonToHalfPlane(clipped, ([x]) => x <= maxX, (a, b) => {
+    const t = (maxX - a[0]) / (b[0] - a[0]);
+    return [maxX, a[1] + t * (b[1] - a[1])];
+  });
+  clipped = clipPolygonToHalfPlane(clipped, ([, y]) => y >= minY, (a, b) => {
+    const t = (minY - a[1]) / (b[1] - a[1]);
+    return [a[0] + t * (b[0] - a[0]), minY];
+  });
+  clipped = clipPolygonToHalfPlane(clipped, ([, y]) => y <= maxY, (a, b) => {
+    const t = (maxY - a[1]) / (b[1] - a[1]);
+    return [a[0] + t * (b[0] - a[0]), maxY];
+  });
+  return clipped.length >= 3 && polygonArea(clipped) > AOE_OVERLAP_AREA_EPSILON;
+}
+
+// Celle della griglia toccate anche solo in parte dalla sagoma -- regola
+// Xanathar (più permissiva della regola PHB "centro cella dentro la forma").
+// Tutta la matematica lavora in pixel reali della mappa (isotropi), mai in
+// percentuale, per evitare la stessa distorsione descritta sopra per
+// aoeOutlinePoints. Il margine di 1 cella sul bounding box basta anche per
+// questa regola: una cella può sporgere al più di se stessa oltre il
+// bounding box stretto della forma per avere ancora una sovrapposizione.
 function aoeAffectedCells(aoe, grid, naturalW, naturalH) {
   const cellSize = Math.max(4, (grid && grid.cellSize) || 100);
   const offsetX = (grid && grid.offsetX) || 0;
@@ -359,9 +487,9 @@ function aoeAffectedCells(aoe, grid, naturalW, naturalH) {
   const cells = [];
   for (let col = firstCol; col <= lastCol; col++) {
     for (let row = firstRow; row <= lastRow; row++) {
-      const centerX = offsetX + (col + 0.5) * cellSize;
-      const centerY = offsetY + (row + 0.5) * cellSize;
-      if (pointInPolygon([centerX, centerY], worldPolygon)) {
+      const cellMinX = offsetX + col * cellSize;
+      const cellMinY = offsetY + row * cellSize;
+      if (rectIntersectsPolygon(cellMinX, cellMinY, cellMinX + cellSize, cellMinY + cellSize, worldPolygon)) {
         cells.push({ col, row });
       }
     }
@@ -396,8 +524,11 @@ if (typeof module !== 'undefined' && module.exports) {
     rotateVector,
     aoePixelsPerMeter,
     aoeShapePointsPx,
+    snapToGridAxis,
+    snapAoeOrigin,
     aoeOutlinePoints,
     pointInPolygon,
+    rectIntersectsPolygon,
     aoeAffectedCells,
     cellRectPercent
   };

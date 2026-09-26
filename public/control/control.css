@@ -339,8 +339,12 @@ h2 {
   animation: aoe-pulse 2.4s ease-in-out infinite;
 }
 
+/* "all", non "auto": con shapeVisible:false fill e stroke sono "none", e
+   pointer-events:auto su un fill "none" non intercetta i click sull'interno
+   della forma -- resterebbe trascinabile solo sfiorando il bordo esatto.
+   "all" ignora fill/stroke e usa sempre la sola geometria per l'hit-test. */
 .map-preview.mode-aoe .aoe-shape-overlay {
-  pointer-events: auto;
+  pointer-events: all;
 }
 
 .aoe-shape-overlay.selected {
@@ -579,6 +583,7 @@ h2 {
 .opacity-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   font-size: 12px;
   color: var(--text-secondary);
@@ -586,6 +591,19 @@ h2 {
 
 .opacity-row input {
   flex: 1;
+}
+
+/* Dentro una riga etichetta+controllo il controllo non deve più
+   allargarsi/centrarsi nello spazio restante (comportamento di .zoom
+   altrove): resta alla sua larghezza naturale, ancorato a destra da
+   justify-content sulla riga. */
+.opacity-row .zoom {
+  flex: none;
+}
+
+.audio-transport {
+  display: flex;
+  gap: 8px;
 }
 
 .pan-zoom {
@@ -608,7 +626,9 @@ h2 {
   display: grid;
   grid-template-columns: repeat(3, 44px);
   grid-template-rows: repeat(3, 44px);
-  gap: 4px;
+  /* Stesso gap di .zoom-controls: le due colonne di "Controlli" (pad e
+     +/-/reset) restano allineate riga per riga invece di sfalsarsi. */
+  gap: 8px;
 }
 
 .pad button, .pad span {
@@ -618,8 +638,13 @@ h2 {
   min-height: 0;
 }
 
+/* width: fit-content è necessario perché margin:auto centri qualcosa --
+   un grid a livello blocco si allargherebbe altrimenti a riempire la
+   sezione, vanificando l'auto. Il pad di pan/zoom in "Controlli" non ne ha
+   bisogno: lì è già centrato dal flex .pan-zoom che lo contiene. */
 .compass-pad {
-  margin-top: 12px;
+  width: fit-content;
+  margin: 12px auto 0;
 }
 
 #opacity-section .opacity-row + .opacity-row {
@@ -647,6 +672,21 @@ h2 {
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+.zoom button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  min-height: 0;
+}
+
+/* Larghezza fissa e cifre monospaziate: "90%" e "100%" non devono spostare
+   i pulsanti accanto avanti e indietro. */
+.zoom span {
+  min-width: 48px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- fog of war (scheda) ---------- */

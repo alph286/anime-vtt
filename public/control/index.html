@@ -161,8 +161,9 @@
       </section>
 
       <section id="compass-section" class="control-section">
+        <h2>Rosa dei venti</h2>
         <div class="opacity-row">
-          <span>Rosa dei venti</span>
+          <span>Visibile</span>
           <button id="compass-toggle" class="icon-btn" title="Mostra/nascondi rosa dei venti">
             <svg class="icon"><use href="#i-compass"></use></svg>
           </button>
@@ -191,12 +192,14 @@
         <div id="audio-playback-group" hidden>
           <p id="audio-track-label" class="hint"></p>
           <div class="opacity-row">
-            <button id="audio-play-pause" class="icon-btn" title="Play/Pausa">
-              <svg class="icon"><use id="audio-play-pause-icon" href="#i-play"></use></svg>
-            </button>
-            <button id="audio-stop" class="icon-btn" title="Stop">
-              <svg class="icon"><use href="#i-stop"></use></svg>
-            </button>
+            <div class="audio-transport">
+              <button id="audio-play-pause" class="icon-btn" title="Play/Pausa">
+                <svg class="icon"><use id="audio-play-pause-icon" href="#i-play"></use></svg>
+              </button>
+              <button id="audio-stop" class="icon-btn" title="Stop">
+                <svg class="icon"><use href="#i-stop"></use></svg>
+              </button>
+            </div>
             <div class="zoom">
               <button id="audio-volume-out" title="Riduci volume">−</button>
               <span id="audio-volume-level">70%</span>

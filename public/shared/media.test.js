@@ -6,8 +6,10 @@ const {
   aoeColorHex,
   aoePixelsPerMeter,
   aoeShapePointsPx,
+  snapAoeOrigin,
   aoeOutlinePoints,
   pointInPolygon,
+  rectIntersectsPolygon,
   aoeAffectedCells,
   cellRectPercent
 } = require('./media.js');
@@ -85,28 +87,115 @@ test('aoeOutlinePoints converte in percentuale rispettando assi X/Y separati', (
   ]);
 });
 
-test('aoeAffectedCells: sfera colpisce esattamente il blocco 3x3 attorno alla cella di origine', () => {
-  const grid = { cellSize: 150, offsetX: 0, offsetY: 0 };
-  // Origine = centro esatto della cella (3,3): (3.5*150, 3.5*150)... usiamo (3,3)
-  // così il centro è (3+0.5)*150 = 525 su entrambi gli assi.
-  const naturalW = 900, naturalH = 900;
-  const originPx = 525;
+test('rectIntersectsPolygon: un vertice del poligono dentro il rettangolo', () => {
+  const rect = [0, 0, 10, 10];
+  const triangle = [[5, 5], [50, 5], [50, 50]];
+  assert.equal(rectIntersectsPolygon(...rect, triangle), true);
+});
+
+test('rectIntersectsPolygon: un angolo del rettangolo dentro il poligono (poligono molto più grande)', () => {
+  const rect = [0, 0, 10, 10];
+  const bigSquare = [[-5, -5], [100, -5], [100, 100], [-5, 100]];
+  assert.equal(rectIntersectsPolygon(...rect, bigSquare), true);
+});
+
+test('rectIntersectsPolygon: solo un lato attraversa, nessun vertice dentro l\'altra forma', () => {
+  const rect = [0, 0, 10, 10];
+  // Triangolo largo e sottile che passa in orizzontale attraverso il
+  // rettangolo: nessun suo vertice cade dentro il rettangolo (sono tutti a
+  // x=-5 o x=15) e nessun angolo del rettangolo cade dentro il triangolo
+  // (i suoi angoli sono tutti a y=0 o y=10, il triangolo passa per y=4..6).
+  const thinTriangle = [[-5, 5], [15, 4], [15, 6]];
+  assert.equal(rectIntersectsPolygon(...rect, thinTriangle), true);
+});
+
+test('rectIntersectsPolygon: nessuna sovrapposizione', () => {
+  const rect = [0, 0, 10, 10];
+  const farAway = [[100, 100], [110, 100], [110, 110], [100, 110]];
+  assert.equal(rectIntersectsPolygon(...rect, farAway), false);
+});
+
+test('rectIntersectsPolygon: un lato del poligono esattamente sul bordo del rettangolo non conta (tocco di area zero)', () => {
+  // Caso reale dopo l'aggancio alla griglia: il quadrato è adiacente al
+  // rettangolo, bordo condiviso a x=10, nessuna area in comune -- non deve
+  // contare come sovrapposizione (altrimenti un cubo agganciato alla
+  // griglia includerebbe anche la colonna di celle subito accanto).
+  const rect = [0, 0, 10, 10];
+  const adjacentSquare = [[10, 0], [20, 0], [20, 10], [10, 10]];
+  assert.equal(rectIntersectsPolygon(...rect, adjacentSquare), false);
+});
+
+test('rectIntersectsPolygon: poligono e rettangolo identici si sovrappongono per intero', () => {
+  const rect = [0, 0, 10, 10];
+  const sameSquare = [[0, 0], [10, 0], [10, 10], [0, 10]];
+  assert.equal(rectIntersectsPolygon(...rect, sameSquare), true);
+});
+
+test('aoeAffectedCells (regola Xanathar): un cubo il cui bordo taglia 4 celle le include tutte, non solo quella del centro', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  const naturalW = 1000, naturalH = 1000;
   const aoe = {
-    shape: 'sphere',
-    sizeM: 2.25, // raggio = 2.25 * (150/1.5) = 225px
-    x: (originPx / naturalW) * 100,
-    y: (originPx / naturalH) * 100,
+    shape: 'cube',
+    sizeM: AOE_METERS_PER_CELL, // lato = 1 cella = 100px con cellSize 100
+    // Origine a pixel (130,130): il quadrato 100x100 copre [80,180]x[80,180],
+    // a cavallo delle celle (0,0)-(1,1). Sotto la vecchia regola (centro
+    // cella) solo (1,1) sarebbe incluso -- il suo centro (150,150) è l'unico
+    // dentro il quadrato.
+    x: 13,
+    y: 13,
     rotation: 0
   };
   const cells = aoeAffectedCells(aoe, grid, naturalW, naturalH);
   const key = (c) => `${c.col},${c.row}`;
   const got = new Set(cells.map(key));
-  const expected = new Set();
-  for (let col = 2; col <= 4; col++) {
-    for (let row = 2; row <= 4; row++) expected.add(`${col},${row}`);
-  }
-  assert.equal(got.size, 9);
-  expected.forEach((k) => assert.ok(got.has(k), `manca la cella ${k}`));
+  assert.equal(got.size, 4);
+  ['0,0', '1,0', '0,1', '1,1'].forEach((k) => assert.ok(got.has(k), `manca la cella ${k}`));
+});
+
+test('snapAoeOrigin: cubo con lato pari (N=4) si aggancia all\'incrocio più vicino', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  const [x, y] = snapAoeOrigin('cube', 4 * AOE_METERS_PER_CELL, undefined, 0, grid, 32, 28, 1000, 1000);
+  assert.equal(x, 30); // 320px -> incrocio più vicino 300px
+  assert.equal(y, 30); // 280px -> incrocio più vicino 300px
+});
+
+test('snapAoeOrigin: cubo con lato dispari (N=3) si aggancia al centro-cella più vicino', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  const [x, y] = snapAoeOrigin('cube', 3 * AOE_METERS_PER_CELL, undefined, 0, grid, 32, 28, 1000, 1000);
+  assert.equal(x, 35); // 320px -> centro-cella più vicino 350px
+  assert.equal(y, 25); // 280px -> centro-cella più vicino 250px
+});
+
+test('snapAoeOrigin: linea a 0°, larghezza dispari -- larghezza al centro-cella, lunghezza all\'incrocio', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  const [x, y] = snapAoeOrigin('line', 3 * AOE_METERS_PER_CELL, 3 * AOE_METERS_PER_CELL, 0, grid, 32, 28, 1000, 1000);
+  assert.equal(x, 35); // larghezza (asse X): centro-cella più vicino
+  assert.equal(y, 30); // lunghezza (asse Y): incrocio più vicino
+});
+
+test('snapAoeOrigin: linea a 90°, gli assi larghezza/lunghezza si scambiano', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  const [x, y] = snapAoeOrigin('line', 3 * AOE_METERS_PER_CELL, 3 * AOE_METERS_PER_CELL, 90, grid, 32, 28, 1000, 1000);
+  assert.equal(x, 30); // lunghezza (asse X ora): incrocio più vicino
+  assert.equal(y, 25); // larghezza (asse Y ora): centro-cella più vicino
+});
+
+test('snapAoeOrigin: linea fuori dagli assi cardinali resta libera', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  const [x, y] = snapAoeOrigin('line', 3 * AOE_METERS_PER_CELL, 3 * AOE_METERS_PER_CELL, 45, grid, 32.4, 28.1, 1000, 1000);
+  assert.equal(x, 32.4);
+  assert.equal(y, 28.1);
+});
+
+test('snapAoeOrigin: cono e sfera restano sempre a posizionamento libero', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  assert.deepEqual(snapAoeOrigin('cone', 6, undefined, 0, grid, 32.4, 28.1, 1000, 1000), [32.4, 28.1]);
+  assert.deepEqual(snapAoeOrigin('sphere', 6, undefined, 0, grid, 32.4, 28.1, 1000, 1000), [32.4, 28.1]);
+});
+
+test('snapAoeOrigin: griglia disattivata non aggancia nulla', () => {
+  const grid = { enabled: false, cellSize: 100, offsetX: 0, offsetY: 0 };
+  assert.deepEqual(snapAoeOrigin('cube', 4 * AOE_METERS_PER_CELL, undefined, 0, grid, 32, 28, 1000, 1000), [32, 28]);
 });
 
 test('cellRectPercent converte una cella in un rettangolo percentuale', () => {

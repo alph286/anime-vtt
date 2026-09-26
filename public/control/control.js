@@ -679,6 +679,16 @@ function localPointFromEvent(e) {
   return rotatePointToBase([rx, ry], rotation);
 }
 
+// Aggancia alla griglia (vedi snapAoeOrigin in media.js) quando la mappa ha
+// una griglia attiva; senza griglia il posizionamento resta libero come oggi.
+function snapAoePlacement(shape, sizeM, widthM, rotation, xPct, yPct) {
+  const previewLocation = getPreviewLocation();
+  const grid = previewLocation && previewLocation.map.grid;
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  return snapAoeOrigin(shape, sizeM, widthM, rotation, grid, xPct, yPct, nw, nh);
+}
+
 mapFitBox.addEventListener('pointermove', (e) => {
   if (currentMode !== 'aoe' || aoeModeToggle.disabled) {
     aoeDrag = null;
@@ -687,7 +697,10 @@ mapFitBox.addEventListener('pointermove', (e) => {
   if (!aoeDrag || e.pointerId !== aoeDrag.pointerId) return;
   const point = localPointFromEvent(e);
   if (!point) return;
-  const [x, y] = point;
+  const previewLocation = getPreviewLocation();
+  const aoe = previewLocation && previewLocation.map.aoes.find((a) => a.id === aoeDrag.id);
+  if (!aoe) return;
+  const [x, y] = snapAoePlacement(aoe.shape, aoe.sizeM, aoe.widthM, aoe.rotation, point[0], point[1]);
   socket.emit('aoe:move', { locationId: previewLocationId, aoeId: aoeDrag.id, x, y });
 });
 
@@ -708,13 +721,14 @@ mapFitBox.addEventListener('pointerup', (e) => {
 
   const point = localPointFromEvent(e);
   if (!point) return;
-  const [x, y] = point;
+  const widthM = aoeSelectedShape === 'line' ? aoeSelectedWidth : undefined;
+  const [x, y] = snapAoePlacement(aoeSelectedShape, aoeSelectedSize, widthM, 0, point[0], point[1]);
   socket.emit('aoe:place', {
     locationId: previewLocationId,
     shape: aoeSelectedShape,
     color: aoeSelectedColor,
     sizeM: aoeSelectedSize,
-    widthM: aoeSelectedShape === 'line' ? aoeSelectedWidth : undefined,
+    widthM,
     x,
     y
   });
@@ -1162,6 +1176,22 @@ function endLocalZoomPointer(e) {
 
 mapPreview.addEventListener('pointerup', endLocalZoomPointer);
 mapPreview.addEventListener('pointercancel', endLocalZoomPointer);
+
+const ZOOM_WHEEL_STEP = 0.1;
+
+// Da mouse non esiste un pinch: la rotellina è l'unico modo per superare
+// scale 1 e sbloccare così anche il trascinamento (già gestito sopra, si
+// attiva da solo appena scale > 1). { passive: false } è necessario perché
+// preventDefault funzioni -- di default i listener 'wheel' sono passive e lo
+// ignorerebbero silenziosamente, lasciando scrollare la pagina sotto.
+mapPreview.addEventListener('wheel', (e) => {
+  if (currentMode !== 'zoom') return;
+  e.preventDefault();
+  const delta = e.deltaY < 0 ? ZOOM_WHEEL_STEP : -ZOOM_WHEEL_STEP;
+  localZoom.scale = Math.min(ZOOM_LOCAL_MAX, Math.max(ZOOM_LOCAL_MIN, Math.round((localZoom.scale + delta) * 10) / 10));
+  clampLocalZoomPan();
+  applyLocalZoom();
+}, { passive: false });
 
 compassToggle.addEventListener('click', () => {
   const previewLocation = getPreviewLocation();
