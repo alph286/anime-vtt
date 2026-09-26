@@ -569,17 +569,6 @@ function basePointFromClientXY(clientX, clientY) {
   return rotatePointToBase(pointFromClientXY(clientX, clientY), currentRotation);
 }
 
-function pointInPolygon([x, y], points) {
-  let inside = false;
-  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-    const [xi, yi] = points[i];
-    const [xj, yj] = points[j];
-    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
 overlayBox.addEventListener('click', (e) => {
   if (mode !== 'draw') return;
   const point = basePointFromClientXY(e.clientX, e.clientY);
