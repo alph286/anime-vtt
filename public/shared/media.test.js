@@ -13,7 +13,8 @@ const {
   pointInPolygon,
   rectIntersectsPolygon,
   aoeAffectedCells,
-  cellRectPercent
+  cellRectPercent,
+  shaderDecorationRectPercent
 } = require('./media.js');
 
 test('AOE_METERS_PER_CELL è 1.5', () => {
@@ -217,5 +218,30 @@ test('cellRectPercent converte una cella in un rettangolo percentuale', () => {
     topPct: (450 / 900) * 100,
     widthPct: (150 / 900) * 100,
     heightPct: (150 / 900) * 100
+  });
+});
+
+test('shaderDecorationRectPercent converte centro+dimensioni in un rettangolo percentuale', () => {
+  const grid = { cellSize: 150 }; // ppm = 150/1.5 = 100 px/metro
+  const deco = { x: 50, y: 50, widthM: 2, heightM: 1 }; // 200x100 px
+  const rect = shaderDecorationRectPercent(deco, grid, 1000, 1000);
+  // centro a (500,500)px, metà larghezza 100px, metà altezza 50px
+  assert.deepEqual(rect, {
+    leftPct: (400 / 1000) * 100,
+    topPct: (450 / 1000) * 100,
+    widthPct: (200 / 1000) * 100,
+    heightPct: (100 / 1000) * 100
+  });
+});
+
+test('shaderDecorationRectPercent rispetta assi X/Y separati su un\'immagine non quadrata', () => {
+  const grid = { cellSize: 100 }; // ppm = 100/1.5
+  const deco = { x: 50, y: 50, widthM: 1.5, heightM: 1.5 }; // 100x100 px
+  const rect = shaderDecorationRectPercent(deco, grid, 1000, 500);
+  assert.deepEqual(rect, {
+    leftPct: (450 / 1000) * 100,
+    topPct: (200 / 500) * 100,
+    widthPct: (100 / 1000) * 100,
+    heightPct: (100 / 500) * 100
   });
 });

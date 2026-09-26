@@ -530,6 +530,27 @@ function cellRectPercent(col, row, grid, naturalW, naturalH) {
   };
 }
 
+// Rettangolo (in percentuale) di una decorazione shader piazzata da
+// /editor -- stessa conversione per-asse di cellRectPercent/
+// aoeOutlinePoints: mai un unico fattore, altrimenti un'immagine non
+// quadrata deformerebbe il rettangolo scelto dal DM. `deco.x`/`deco.y`
+// sono il CENTRO del rettangolo (percentuale 0-100), come bussola e AoE.
+function shaderDecorationRectPercent(deco, grid, naturalW, naturalH) {
+  const ppm = aoePixelsPerMeter(grid);
+  const widthPx = deco.widthM * ppm;
+  const heightPx = deco.heightM * ppm;
+  const centerPxX = (deco.x / 100) * naturalW;
+  const centerPxY = (deco.y / 100) * naturalH;
+  const leftPx = centerPxX - widthPx / 2;
+  const topPx = centerPxY - heightPx / 2;
+  return {
+    leftPct: (leftPx / naturalW) * 100,
+    topPct: (topPx / naturalH) * 100,
+    widthPct: (widthPx / naturalW) * 100,
+    heightPct: (heightPx / naturalH) * 100
+  };
+}
+
 // Esporta per i test (`node --test`); non ha alcun effetto nel browser,
 // dove `module` non è definito e questo blocco non viene mai eseguito.
 if (typeof module !== 'undefined' && module.exports) {
@@ -548,6 +569,7 @@ if (typeof module !== 'undefined' && module.exports) {
     pointInPolygon,
     rectIntersectsPolygon,
     aoeAffectedCells,
-    cellRectPercent
+    cellRectPercent,
+    shaderDecorationRectPercent
   };
 }
