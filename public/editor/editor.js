@@ -848,8 +848,19 @@ document.addEventListener('pointercancel', () => {
     toolSelectBtn.classList.add('active');
     gridAlignToolBtn.classList.remove('active');
   }
+  if (shaderPlaceDrag) {
+    shaderPlaceDrag.box.remove();
+    shaderPlaceDrag = null;
+    mode = 'select';
+    toolSelectBtn.classList.add('active');
+    toolShaderBtn.classList.remove('active');
+  }
   draggingIndex = null;
   draggingPolygon = null;
+  // Un pointercancel durante lo spostamento di una decorazione shader
+  // significa "abbandona", non "conferma": nessun socket.emit, si azzera solo
+  // lo stato -- stesso trattamento di draggingPolygon qui sopra.
+  draggingShader = null;
   // Senza questo reset un pointercancel durante il trascinamento della rosa
   // dei venti lascerebbe compassDragging a true per sempre: essendo il primo
   // ramo di pointermove/pointerup, bloccherebbe ogni altro drag dell'editor.
