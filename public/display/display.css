@@ -175,3 +175,26 @@ html, body {
   0% { width: 14px; height: 14px; opacity: 1; }
   100% { width: 90px; height: 90px; opacity: 0; }
 }
+
+/* Sola lettura sul display: i giocatori vedono, non toccano mai l'area. */
+.aoe-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.aoe-shape-overlay {
+  fill: var(--accent-bg-subtle);
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.aoe-cell-highlight {
+  fill: var(--accent-bg-subtle);
+  stroke: var(--accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}

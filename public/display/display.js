@@ -9,6 +9,7 @@ let activeMapEl = mapImg;
 const mapPlaceholder = document.getElementById('map-placeholder');
 const mapFogLayer = document.getElementById('map-fog-layer');
 const mapGridSvg = document.getElementById('map-grid-svg');
+const mapAoeSvg = document.getElementById('map-aoe-svg');
 const imageFitBox = document.getElementById('image-fit-box');
 const shownImageImg = document.getElementById('shown-image-img');
 const wifiDot = document.getElementById('wifi-dot');
@@ -171,7 +172,10 @@ function render(state) {
   // Un ping puntava a una mappa: se al posto della mappa compare un'immagine,
   // o si è passati a un'altra location, non ha più senso lasciarlo a schermo.
   const locationId = location ? location.id : null;
-  if (showingImage || locationId !== lastPingLocationId) hidePing();
+  if (showingImage || locationId !== lastPingLocationId) {
+    hidePing();
+    mapAoeSvg.innerHTML = '';
+  }
   lastPingLocationId = locationId;
 
   mapLayer.style.display = showingImage ? 'none' : 'block';
@@ -287,6 +291,31 @@ function renderFog(polygons) {
   });
 }
 
+// Stessa logica di renderAoeOverlays in control.js, sola lettura: nessun
+// listener di interazione, i giocatori vedono soltanto.
+function renderAoe(aoes, grid, naturalW, naturalH) {
+  mapAoeSvg.innerHTML = '';
+  if (!naturalW || !naturalH) return;
+  aoes.forEach((aoe) => {
+    aoeAffectedCells(aoe, grid, naturalW, naturalH).forEach(({ col, row }) => {
+      const rect = cellRectPercent(col, row, grid, naturalW, naturalH);
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      el.setAttribute('x', rect.leftPct);
+      el.setAttribute('y', rect.topPct);
+      el.setAttribute('width', rect.widthPct);
+      el.setAttribute('height', rect.heightPct);
+      el.setAttribute('class', 'aoe-cell-highlight');
+      mapAoeSvg.appendChild(el);
+    });
+
+    const points = aoeOutlinePoints(aoe, grid, naturalW, naturalH);
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    poly.setAttribute('points', points.map(([x, y]) => `${x},${y}`).join(' '));
+    poly.setAttribute('class', 'aoe-shape-overlay');
+    mapAoeSvg.appendChild(poly);
+  });
+}
+
 function renderMap(state, location, returningFromImage) {
   const live = (location && location.map.liveView) || { scale: 1, offsetX: 0, offsetY: 0 };
   const mapScale = (location && location.map.scale) || 1;
@@ -320,6 +349,7 @@ function renderMap(state, location, returningFromImage) {
       const rect = fitRect(effective.width, effective.height, nw, nh);
       positionFitBox(mapFitBox, rect);
       renderFog(polygons);
+      renderAoe((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
       // The whole map layer is scaled by a CSS transform, which multiplies the
       // rendered stroke thickness; divide it out so the on-screen line weight
       // stays exactly what was chosen in the editor at any zoom level.
@@ -338,6 +368,7 @@ function renderMap(state, location, returningFromImage) {
     const effective = layoutMapWrap(mapLayer, mapMediaWrap, 0);
     positionFitBox(mapFitBox, { left: 0, top: 0, width: effective.width, height: effective.height });
     renderFog(polygons);
+    renderAoe((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     mapGridSvg.innerHTML = '';
   }
 }
