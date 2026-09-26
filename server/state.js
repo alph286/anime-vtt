@@ -37,7 +37,8 @@ const DEFAULT_STATE = {
           { id: 'stanza-1', name: 'Stanza 1', points: [[5, 10], [40, 8], [42, 45], [8, 48]], revealed: false },
           { id: 'corridoio', name: 'Corridoio', points: [[55, 50], [92, 45], [94, 88], [58, 92]], revealed: false }
         ],
-        aoes: []
+        aoes: [],
+        shaders: []
       },
       images: [],
       archived: false,
@@ -98,6 +99,7 @@ function migrate(state) {
     if (location.map.compass.y === undefined) location.map.compass.y = DEFAULT_COMPASS.y;
     if (location.map.compass.rotation === undefined) location.map.compass.rotation = 0;
     if (!Array.isArray(location.map.aoes)) location.map.aoes = [];
+    if (!Array.isArray(location.map.shaders)) location.map.shaders = [];
     // Aree piazzate prima dell'introduzione del colore (o con un valore ormai
     // fuori dalla palette) prendono il rosso come default -- stesso fallback
     // usato da aoeColorHex() lato client.
