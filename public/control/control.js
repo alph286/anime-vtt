@@ -94,6 +94,8 @@ const aoeSelectedRotateRight = document.getElementById('aoe-selected-rotate-righ
 const aoeSelectedRemoveBtn = document.getElementById('aoe-selected-remove');
 const mapAoeSvg = document.getElementById('map-aoe-svg');
 const mapGridSvg = document.getElementById('map-grid-svg');
+const mapShaderCanvas = document.getElementById('map-shader-canvas');
+const shaderLayer = new ShaderLayer(mapShaderCanvas);
 
 let aoeSelectedShape = 'cone';
 let aoeSelectedColor = 'red';
@@ -666,6 +668,7 @@ function renderMapPreview(location) {
       renderFogOverlays(polygons);
       renderGrid(location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
       renderAoeOverlays((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+      shaderLayer.render((location && location.map.shaders) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
       updateViewportRect(location);
     });
   } else {
@@ -689,6 +692,7 @@ function renderMapPreview(location) {
     renderFogOverlays(polygons);
     renderGrid(location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     renderAoeOverlays((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+    shaderLayer.render((location && location.map.shaders) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     updateViewportRect(location);
   }
 }
@@ -1323,3 +1327,14 @@ audioVolumeInBtn.addEventListener('click', () => stepAudioVolume(AUDIO_VOLUME_ST
 audioSpecialBtn.addEventListener('click', () => {
   socket.emit('audio:playSpecial', {});
 });
+
+function stepShaderLayer() {
+  if (state) {
+    const previewLocation = getPreviewLocation();
+    if (previewLocation && previewLocation.map.file) {
+      shaderLayer.render(previewLocation.map.shaders || [], previewLocation.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+    }
+  }
+  requestAnimationFrame(stepShaderLayer);
+}
+requestAnimationFrame(stepShaderLayer);

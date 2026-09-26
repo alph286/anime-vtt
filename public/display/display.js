@@ -10,6 +10,8 @@ const mapPlaceholder = document.getElementById('map-placeholder');
 const mapFogLayer = document.getElementById('map-fog-layer');
 const mapGridSvg = document.getElementById('map-grid-svg');
 const mapAoeSvg = document.getElementById('map-aoe-svg');
+const mapShaderCanvas = document.getElementById('map-shader-canvas');
+const shaderLayer = new ShaderLayer(mapShaderCanvas);
 const imageFitBox = document.getElementById('image-fit-box');
 const shownImageImg = document.getElementById('shown-image-img');
 const wifiDot = document.getElementById('wifi-dot');
@@ -362,6 +364,7 @@ function renderMap(state, location, returningFromImage) {
       positionFitBox(mapFitBox, rect);
       renderFog(polygons);
       renderAoe((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+      shaderLayer.render((location && location.map.shaders) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
       // The whole map layer is scaled by a CSS transform, which multiplies the
       // rendered stroke thickness; divide it out so the on-screen line weight
       // stays exactly what was chosen in the editor at any zoom level.
@@ -381,6 +384,19 @@ function renderMap(state, location, returningFromImage) {
     positionFitBox(mapFitBox, { left: 0, top: 0, width: effective.width, height: effective.height });
     renderFog(polygons);
     renderAoe((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+    shaderLayer.render((location && location.map.shaders) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     mapGridSvg.innerHTML = '';
   }
 }
+
+function stepShaderLayer() {
+  if (lastState) {
+    const location = getActiveLocation(lastState);
+    const showingImage = Boolean(lastState.activeImageId && location && location.images.some((i) => i.id === lastState.activeImageId));
+    if (location && location.map.file && !showingImage) {
+      shaderLayer.render(location.map.shaders || [], location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+    }
+  }
+  requestAnimationFrame(stepShaderLayer);
+}
+requestAnimationFrame(stepShaderLayer);

@@ -324,6 +324,14 @@ h2 {
   pointer-events: none;
 }
 
+.shader-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 /* Il colore dell'area (aoe.color) è impostato inline da JS su ciascun
    elemento -- qui restano solo le proprietà comuni. Il contorno mostra la
    sagoma esatta con lo stesso colore ma più scuro (fill:none, solo stroke);
