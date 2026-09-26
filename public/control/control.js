@@ -76,6 +76,8 @@ const pingModeToggle = document.getElementById('ping-mode-toggle');
 const zoomModeToggle = document.getElementById('zoom-mode-toggle');
 const aoeModeToggle = document.getElementById('aoe-mode-toggle');
 const aoePanel = document.getElementById('aoe-panel');
+const aoeEditingLabel = document.getElementById('aoe-editing-label');
+const aoeShapeBar = document.getElementById('aoe-shape-bar');
 const aoeShapeButtons = Array.from(document.querySelectorAll('.aoe-shape-btn'));
 const aoeColorButtons = Array.from(document.querySelectorAll('.aoe-color-btn'));
 const aoeSizeOutBtn = document.getElementById('aoe-size-out');
@@ -86,6 +88,10 @@ const aoeWidthOutBtn = document.getElementById('aoe-width-out');
 const aoeWidthInBtn = document.getElementById('aoe-width-in');
 const aoeWidthLevel = document.getElementById('aoe-width-level');
 const aoeChipList = document.getElementById('aoe-chip-list');
+const aoeSelectedActions = document.getElementById('aoe-selected-actions');
+const aoeSelectedRotateLeft = document.getElementById('aoe-selected-rotate-left');
+const aoeSelectedRotateRight = document.getElementById('aoe-selected-rotate-right');
+const aoeSelectedRemoveBtn = document.getElementById('aoe-selected-remove');
 const mapAoeSvg = document.getElementById('map-aoe-svg');
 const mapGridSvg = document.getElementById('map-grid-svg');
 
@@ -100,13 +106,47 @@ aoeColorButtons.forEach((btn) => {
   btn.style.setProperty('--aoe-color', aoeColorHex(btn.dataset.color));
 });
 
+// Con una chip selezionata il pannello passa da "prossima area" a
+// "modifica quest'area": la forma resta fissa (cambiarla vorrebbe dire
+// un'altra area, non la stessa ridimensionata), ma colore e taglia/
+// larghezza diventano live sull'area selezionata invece che sui default
+// per il prossimo piazzamento.
+function getSelectedAoe() {
+  const previewLocation = getPreviewLocation();
+  return previewLocation && previewLocation.map.aoes.find((a) => a.id === selectedAoeId);
+}
+
 function renderAoePanel() {
   aoePanel.hidden = currentMode !== 'aoe';
-  aoeShapeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.shape === aoeSelectedShape));
-  aoeColorButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.color === aoeSelectedColor));
-  aoeSizeLevel.textContent = `${aoeSelectedSize.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
-  aoeWidthRow.hidden = aoeSelectedShape !== 'line';
-  aoeWidthLevel.textContent = `${aoeSelectedWidth.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
+  const editingAoe = getSelectedAoe();
+
+  aoeShapeBar.hidden = Boolean(editingAoe);
+  aoeEditingLabel.hidden = !editingAoe;
+  if (editingAoe) {
+    const sizeText = editingAoe.sizeM.toLocaleString('it-IT', { minimumFractionDigits: 1 });
+    aoeEditingLabel.textContent = `Modifica: ${aoeShapeLabel(editingAoe.shape)} ${sizeText}m`;
+  }
+
+  const displayShape = editingAoe ? editingAoe.shape : aoeSelectedShape;
+  const displayColor = editingAoe ? editingAoe.color : aoeSelectedColor;
+  const displaySize = editingAoe ? editingAoe.sizeM : aoeSelectedSize;
+  const displayWidth = editingAoe ? (editingAoe.widthM || AOE_METERS_PER_CELL) : aoeSelectedWidth;
+
+  aoeShapeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.shape === displayShape));
+  aoeColorButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.color === displayColor));
+  aoeSizeLevel.textContent = `${displaySize.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
+  aoeWidthRow.hidden = displayShape !== 'line';
+  aoeWidthLevel.textContent = `${displayWidth.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
+
+  const rotatable = Boolean(editingAoe) && (editingAoe.shape === 'cone' || editingAoe.shape === 'line');
+  aoeSelectedActions.hidden = !editingAoe;
+  aoeSelectedRotateLeft.hidden = !rotatable;
+  aoeSelectedRotateRight.hidden = !rotatable;
+  if (editingAoe) {
+    const armed = armedRemoveAoeId === editingAoe.id;
+    aoeSelectedRemoveBtn.classList.toggle('confirm', armed);
+    aoeSelectedRemoveBtn.title = armed ? 'Tocca di nuovo per confermare' : 'Rimuovi';
+  }
 }
 
 aoeShapeButtons.forEach((btn) => {
@@ -118,12 +158,47 @@ aoeShapeButtons.forEach((btn) => {
 
 aoeColorButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
+    const editingAoe = getSelectedAoe();
+    if (editingAoe) {
+      socket.emit('aoe:setColor', { locationId: previewLocationId, aoeId: editingAoe.id, color: btn.dataset.color });
+      return;
+    }
     aoeSelectedColor = btn.dataset.color;
     renderAoePanel();
   });
 });
 
+// Ridimensionare un'area già piazzata può romperne l'aggancio alla griglia
+// se la nuova taglia cambia parità (es. da pari a dispari): ricalcolare
+// l'origine con snapAoeOrigin, a partire dalla posizione attuale, la
+// riallinea automaticamente invece di lasciarla a metà cella.
+function resizeSelectedAoe(deltaSize, deltaWidth) {
+  const editingAoe = getSelectedAoe();
+  if (!editingAoe) return;
+  const previewLocation = getPreviewLocation();
+  const grid = previewLocation && previewLocation.map.grid;
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  const newSizeM = Math.max(AOE_METERS_PER_CELL, editingAoe.sizeM + deltaSize);
+  const newWidthM = editingAoe.shape === 'line'
+    ? Math.max(AOE_METERS_PER_CELL, (editingAoe.widthM || AOE_METERS_PER_CELL) + deltaWidth)
+    : editingAoe.widthM;
+  const [x, y] = snapAoeOrigin(editingAoe.shape, newSizeM, newWidthM, editingAoe.rotation, grid, editingAoe.x, editingAoe.y, nw, nh);
+  socket.emit('aoe:resize', {
+    locationId: previewLocationId,
+    aoeId: editingAoe.id,
+    sizeM: newSizeM,
+    widthM: newWidthM,
+    x,
+    y
+  });
+}
+
 function stepAoeSize(delta) {
+  if (getSelectedAoe()) {
+    resizeSelectedAoe(delta, 0);
+    return;
+  }
   aoeSelectedSize = Math.max(AOE_METERS_PER_CELL, aoeSelectedSize + delta);
   renderAoePanel();
 }
@@ -131,11 +206,47 @@ aoeSizeOutBtn.addEventListener('click', () => stepAoeSize(-AOE_METERS_PER_CELL))
 aoeSizeInBtn.addEventListener('click', () => stepAoeSize(AOE_METERS_PER_CELL));
 
 function stepAoeWidth(delta) {
+  if (getSelectedAoe()) {
+    resizeSelectedAoe(0, delta);
+    return;
+  }
   aoeSelectedWidth = Math.max(AOE_METERS_PER_CELL, aoeSelectedWidth + delta);
   renderAoePanel();
 }
 aoeWidthOutBtn.addEventListener('click', () => stepAoeWidth(-AOE_METERS_PER_CELL));
 aoeWidthInBtn.addEventListener('click', () => stepAoeWidth(AOE_METERS_PER_CELL));
+
+aoeSelectedRotateLeft.addEventListener('click', () => {
+  const editingAoe = getSelectedAoe();
+  if (!editingAoe) return;
+  const nextRotation = ((editingAoe.rotation - 15) % 360 + 360) % 360;
+  socket.emit('aoe:rotate', { locationId: previewLocationId, aoeId: editingAoe.id, rotation: nextRotation });
+});
+
+aoeSelectedRotateRight.addEventListener('click', () => {
+  const editingAoe = getSelectedAoe();
+  if (!editingAoe) return;
+  const nextRotation = ((editingAoe.rotation + 15) % 360 + 360) % 360;
+  socket.emit('aoe:rotate', { locationId: previewLocationId, aoeId: editingAoe.id, rotation: nextRotation });
+});
+
+aoeSelectedRemoveBtn.addEventListener('click', () => {
+  const editingAoe = getSelectedAoe();
+  if (!editingAoe) return;
+  const aoeId = editingAoe.id;
+  if (armedRemoveAoeId !== aoeId) {
+    armedRemoveAoeId = aoeId;
+    clearTimeout(armedRemoveTimeout);
+    armedRemoveTimeout = setTimeout(() => {
+      armedRemoveAoeId = null;
+      render();
+    }, 2500);
+    render();
+    return;
+  }
+  disarmRemove();
+  socket.emit('aoe:remove', { locationId: previewLocationId, aoeId });
+});
 
 const mapLocalZoomWrap = document.getElementById('map-local-zoom-wrap');
 const controlTabs = document.getElementById('control-tabs');
@@ -296,6 +407,7 @@ function render() {
     selectedAoeId = null;
   }
   renderAoeChipList((previewLocation && previewLocation.map.aoes) || []);
+  renderAoePanel();
 
   fowList.innerHTML = ((previewLocation && previewLocation.map.polygons) || [])
     .map(
@@ -481,22 +593,16 @@ function aoeShapeLabel(shape) {
   return { cone: 'Cono', cube: 'Cubo', sphere: 'Sfera', line: 'Linea' }[shape] || shape;
 }
 
+// Ruota/rimuovi vivono in #aoe-selected-actions, una riga fissa sotto la
+// lista (vedi renderAoePanel) e non più in coda a ogni chip: prima, la chip
+// selezionata si allargava e andava a capo, spingendo giù le successive a
+// ogni cambio di selezione. Ogni chip qui è quindi sempre della stessa
+// larghezza, e la lista non si muove più sotto il dito.
 function renderAoeChipList(aoes) {
   aoeChipList.innerHTML = aoes
     .map((aoe) => {
       const sizeText = aoe.sizeM.toLocaleString('it-IT', { minimumFractionDigits: 1 });
       const selected = aoe.id === selectedAoeId;
-      const rotatable = aoe.shape === 'cone' || aoe.shape === 'line';
-      const armed = armedRemoveAoeId === aoe.id;
-      const actions = selected
-        ? `
-          <div class="aoe-chip-actions">
-            ${rotatable ? `<button class="aoe-chip-rotate" data-dir="-1" title="Ruota a sinistra">↺</button>` : ''}
-            ${rotatable ? `<button class="aoe-chip-rotate" data-dir="1" title="Ruota a destra">↻</button>` : ''}
-            <button class="aoe-chip-remove ${armed ? 'confirm' : ''}" title="${armed ? 'Tocca di nuovo per confermare' : 'Rimuovi'}">✕</button>
-          </div>
-        `
-        : '';
       const shapeVisible = aoe.shapeVisible !== false;
       return `
         <div class="aoe-chip ${selected ? 'selected' : ''}" data-id="${aoe.id}">
@@ -506,7 +612,6 @@ function renderAoeChipList(aoes) {
               <svg class="icon"><use href="#${shapeVisible ? 'i-eye' : 'i-eye-off'}"></use></svg>
             </button>
           </div>
-          ${actions}
         </div>
       `;
     })
@@ -753,35 +858,6 @@ fowList.addEventListener('click', (e) => {
 });
 
 aoeChipList.addEventListener('click', (e) => {
-  const removeBtn = e.target.closest('.aoe-chip-remove');
-  if (removeBtn) {
-    const chip = removeBtn.closest('.aoe-chip');
-    const aoeId = chip.dataset.id;
-    if (armedRemoveAoeId !== aoeId) {
-      armedRemoveAoeId = aoeId;
-      clearTimeout(armedRemoveTimeout);
-      armedRemoveTimeout = setTimeout(() => {
-        armedRemoveAoeId = null;
-        render();
-      }, 2500);
-      render();
-      return;
-    }
-    disarmRemove();
-    socket.emit('aoe:remove', { locationId: previewLocationId, aoeId });
-    return;
-  }
-  const rotateBtn = e.target.closest('.aoe-chip-rotate');
-  if (rotateBtn) {
-    const chip = rotateBtn.closest('.aoe-chip');
-    const previewLocation = getPreviewLocation();
-    const aoe = previewLocation && previewLocation.map.aoes.find((a) => a.id === chip.dataset.id);
-    if (!aoe) return;
-    const dir = Number(rotateBtn.dataset.dir);
-    const nextRotation = ((aoe.rotation + dir * 15) % 360 + 360) % 360;
-    socket.emit('aoe:rotate', { locationId: previewLocationId, aoeId: aoe.id, rotation: nextRotation });
-    return;
-  }
   const shapeToggleBtn = e.target.closest('.aoe-chip-shape-toggle');
   if (shapeToggleBtn) {
     const chip = shapeToggleBtn.closest('.aoe-chip');

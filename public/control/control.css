@@ -358,6 +358,10 @@ h2 {
   animation: aoe-pulse 2.4s ease-in-out infinite;
 }
 
+#aoe-editing-label {
+  margin-bottom: 10px;
+}
+
 .aoe-shape-bar {
   display: flex;
   gap: 8px;
@@ -444,9 +448,10 @@ h2 {
   background: var(--accent-bg-subtle);
 }
 
-.aoe-chip-actions {
+.aoe-selected-actions {
   display: flex;
   gap: 6px;
+  margin-top: 10px;
 }
 
 .aoe-chip-rotate,

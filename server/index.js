@@ -849,6 +849,38 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  // Ridimensiona un'area già piazzata (taglia/larghezza) invece di crearne
+  // una nuova. x/y arrivano già ricalcolati dal client (stessa logica di
+  // snapAoeOrigin usata al piazzamento): una taglia che cambia parità (es.
+  // da pari a dispari) può richiedere uno spostamento di mezza cella per
+  // restare agganciata alla griglia, e quel calcolo vive lato client dove
+  // vive già tutta la geometria condivisa.
+  socket.on('aoe:resize', ({ locationId, aoeId, sizeM, widthM, x, y }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
+    if (!aoe) return;
+    if (!Number.isFinite(sizeM) || !(sizeM > 0) || sizeM > MAX_AOE_SIZE_M) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    aoe.sizeM = sizeM;
+    if (aoe.shape === 'line') {
+      if (Number.isFinite(widthM) && widthM > 0 && widthM <= MAX_AOE_SIZE_M) aoe.widthM = widthM;
+    }
+    aoe.x = x;
+    aoe.y = y;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('aoe:setColor', ({ locationId, aoeId, color }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
+    if (!aoe) return;
+    if (!AOE_COLOR_NAMES.includes(color)) return;
+    aoe.color = color;
+    saveState(state);
+    broadcastState();
+  });
+
   socket.on('aoe:setShapeVisible', ({ locationId, aoeId, visible }) => {
     const location = state.locations.find((l) => l.id === locationId);
     const aoe = location?.map.aoes?.find((a) => a.id === aoeId);

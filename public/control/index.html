@@ -65,7 +65,8 @@
         </button>
       </div>
       <section id="aoe-panel" class="control-section" hidden>
-        <div class="aoe-shape-bar">
+        <p id="aoe-editing-label" class="hint" hidden></p>
+        <div id="aoe-shape-bar" class="aoe-shape-bar">
           <button class="aoe-shape-btn" data-shape="cone" title="Cono">
             <svg class="icon"><use href="#i-shape-cone"></use></svg>
           </button>
@@ -99,6 +100,11 @@
           </div>
         </div>
         <div id="aoe-chip-list" class="aoe-chip-list"></div>
+        <div id="aoe-selected-actions" class="aoe-selected-actions" hidden>
+          <button id="aoe-selected-rotate-left" class="aoe-chip-rotate" title="Ruota a sinistra">↺</button>
+          <button id="aoe-selected-rotate-right" class="aoe-chip-rotate" title="Ruota a destra">↻</button>
+          <button id="aoe-selected-remove" class="aoe-chip-remove" title="Rimuovi">✕</button>
+        </div>
       </section>
       <div id="map-column">
         <div id="map-preview" class="map-preview">
