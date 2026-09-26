@@ -291,6 +291,8 @@ function renderFog(polygons) {
   });
 }
 
+const AOE_CELL_FILL_OPACITY = 0.35;
+
 // Stessa logica di renderAoeOverlays in control.js, sola lettura: nessun
 // listener di interazione, i giocatori vedono soltanto.
 function renderAoe(aoes, grid, naturalW, naturalH) {
@@ -307,7 +309,8 @@ function renderAoe(aoes, grid, naturalW, naturalH) {
       el.setAttribute('height', rect.heightPct);
       el.setAttribute('class', 'aoe-cell-highlight');
       el.setAttribute('fill', color);
-      el.setAttribute('stroke', color);
+      el.setAttribute('fill-opacity', AOE_CELL_FILL_OPACITY);
+      el.setAttribute('stroke', 'none');
       mapAoeSvg.appendChild(el);
     });
 
@@ -319,8 +322,8 @@ function renderAoe(aoes, grid, naturalW, naturalH) {
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     poly.setAttribute('points', points.map(([x, y]) => `${x},${y}`).join(' '));
     poly.setAttribute('class', 'aoe-shape-overlay');
-    poly.setAttribute('fill', color);
-    poly.setAttribute('stroke', color);
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', aoeColorDarkHex(aoe.color));
     mapAoeSvg.appendChild(poly);
   });
 }

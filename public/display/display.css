@@ -185,21 +185,11 @@ html, body {
   pointer-events: none;
 }
 
-/* Il colore di riempimento/contorno è quello dell'area (aoe.color),
-   impostato inline da JS -- stessa palette e stesso pulse di /control. */
-@keyframes aoe-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
-}
-
+/* Il colore dell'area (aoe.color) è impostato inline da JS -- stessa
+   palette di /control. Il contorno mostra la sagoma con lo stesso colore ma
+   più scuro (fill:none, solo stroke); le celle colpite mostrano il colore
+   base in trasparenza (fill-opacity). */
 .aoe-shape-overlay {
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
-  animation: aoe-pulse 2.4s ease-in-out infinite;
-}
-
-.aoe-cell-highlight {
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-  animation: aoe-pulse 2.4s ease-in-out infinite;
 }

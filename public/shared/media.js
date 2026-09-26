@@ -235,8 +235,24 @@ const AOE_COLORS = {
   yellow: '#d6b83f'
 };
 
+// Versione scura della stessa palette (~65% di luminosità), usata per il
+// contorno della forma -- le celle colpite usano il colore base in
+// trasparenza (fill-opacity), il contorno lo stesso colore ma più scuro e
+// pieno, cosà i due restano distinguibili senza bisogno di animazione.
+const AOE_COLORS_DARK = {
+  red: '#8b2d2d',
+  green: '#296d45',
+  blue: '#29538b',
+  purple: '#5a3e8b',
+  yellow: '#8b7829'
+};
+
 function aoeColorHex(name) {
   return AOE_COLORS[name] || AOE_COLORS.red;
+}
+
+function aoeColorDarkHex(name) {
+  return AOE_COLORS_DARK[name] || AOE_COLORS_DARK.red;
 }
 
 // Ruota il vettore (x,y) di angleDeg, con la stessa convenzione di segno
@@ -520,7 +536,9 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     AOE_METERS_PER_CELL,
     AOE_COLORS,
+    AOE_COLORS_DARK,
     aoeColorHex,
+    aoeColorDarkHex,
     rotateVector,
     aoePixelsPerMeter,
     aoeShapePointsPx,

@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const {
   AOE_METERS_PER_CELL,
   AOE_COLORS,
+  AOE_COLORS_DARK,
   aoeColorHex,
+  aoeColorDarkHex,
   aoePixelsPerMeter,
   aoeShapePointsPx,
   snapAoeOrigin,
@@ -25,6 +27,16 @@ test('aoeColorHex risolve un colore noto della palette', () => {
 test('aoeColorHex usa il rosso come fallback per un nome sconosciuto o mancante', () => {
   assert.equal(aoeColorHex('mai-esistito'), AOE_COLORS.red);
   assert.equal(aoeColorHex(undefined), AOE_COLORS.red);
+});
+
+test('aoeColorDarkHex risolve la versione scura di un colore noto', () => {
+  assert.equal(aoeColorDarkHex('blue'), AOE_COLORS_DARK.blue);
+  assert.notEqual(aoeColorDarkHex('blue'), aoeColorHex('blue'));
+});
+
+test('aoeColorDarkHex usa il rosso scuro come fallback per un nome sconosciuto o mancante', () => {
+  assert.equal(aoeColorDarkHex('mai-esistito'), AOE_COLORS_DARK.red);
+  assert.equal(aoeColorDarkHex(undefined), AOE_COLORS_DARK.red);
 });
 
 test('aoePixelsPerMeter converte cellSize in pixel-per-metro', () => {

@@ -549,16 +549,20 @@ function setSelectedAoeId(id) {
   render();
 }
 
+const AOE_CELL_FILL_OPACITY = 0.35;
+
 // Disegna, per ogni area piazzata, prima le celle colpite (sotto) poi il
 // contorno della forma (sopra) -- altrimenti il contorno sparirebbe sotto
-// il riempimento delle celle. Riempimento e contorno condividono lo stesso
-// colore scelto per quell'area (aoe.color), impostato inline: la palette è
-// fissa a 5 nomi, non un valore CSS statico.
+// il riempimento delle celle. Le celle usano il colore base dell'area in
+// trasparenza (fill-opacity); il contorno usa la stessa palette ma nella
+// versione scura, solo come linea (fill:none) -- i due restano
+// distinguibili senza bisogno di animarli.
 function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
   mapAoeSvg.innerHTML = '';
   if (!naturalW || !naturalH) return;
   aoes.forEach((aoe) => {
     const color = aoeColorHex(aoe.color);
+    const darkColor = aoeColorDarkHex(aoe.color);
     aoeAffectedCells(aoe, grid, naturalW, naturalH).forEach(({ col, row }) => {
       const rect = cellRectPercent(col, row, grid, naturalW, naturalH);
       const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -568,22 +572,22 @@ function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
       el.setAttribute('height', rect.heightPct);
       el.setAttribute('class', 'aoe-cell-highlight');
       el.setAttribute('fill', color);
-      el.setAttribute('stroke', color);
+      el.setAttribute('fill-opacity', AOE_CELL_FILL_OPACITY);
+      el.setAttribute('stroke', 'none');
       mapAoeSvg.appendChild(el);
     });
 
-    // shapeVisible:false nasconde solo l'aspetto del contorno (fill/stroke
+    // shapeVisible:false nasconde solo l'aspetto del contorno (stroke
     // "none"): il poligono resta nel DOM con la sua geometria e i suoi
     // pointer-events invariati, altrimenti trascinare l'area diventerebbe
-    // impossibile una volta nascosta. Non si usa opacity:0 -- l'animazione
-    // aoe-pulse anima proprio l'opacity e vincerebbe sul valore impostato qui.
+    // impossibile una volta nascosta.
     const points = aoeOutlinePoints(aoe, grid, naturalW, naturalH);
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     poly.setAttribute('points', points.map(([x, y]) => `${x},${y}`).join(' '));
     poly.setAttribute('class', `aoe-shape-overlay ${aoe.id === selectedAoeId ? 'selected' : ''}`);
     const shapeVisible = aoe.shapeVisible !== false;
-    poly.setAttribute('fill', shapeVisible ? color : 'none');
-    poly.setAttribute('stroke', shapeVisible ? color : 'none');
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', shapeVisible ? darkColor : 'none');
     poly.dataset.id = aoe.id;
     mapAoeSvg.appendChild(poly);
   });
