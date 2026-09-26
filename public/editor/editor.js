@@ -2220,7 +2220,7 @@ setupAudioSlotListeners(audioSpecialContent, 'special', 'Carica traccia speciale
 let shaderLoopRunning = false;
 
 function stepShaderLayer() {
-  const location = getActiveLocation();
+  const location = state ? getActiveLocation() : null;
   let shaders = [];
   if (location && location.map.file) {
     shaders = location.map.shaders || [];
