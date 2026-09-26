@@ -468,6 +468,7 @@ function render() {
   }
 
   updateViewportRect(previewLocation);
+  kickShaderLoop();
 }
 
 function renderDestinationOptions(selectedName) {
@@ -1328,13 +1329,37 @@ audioSpecialBtn.addEventListener('click', () => {
   socket.emit('audio:playSpecial', {});
 });
 
+// Il rAF loop va fermato quando non c'è nulla da disegnare (nessuna
+// decorazione shader sulla location in anteprima): su target come il
+// Raspberry Pi 4 un ciclo di clear+composite a 60fps a vuoto è spreco
+// puro. Quando lo shaders array torna non vuoto (es. il DM piazza una
+// decorazione), kickShaderLoop() lo riavvia da render().
+let shaderLoopRunning = false;
+
 function stepShaderLayer() {
+  let shaders = [];
   if (state) {
     const previewLocation = getPreviewLocation();
     if (previewLocation && previewLocation.map.file) {
-      shaderLayer.render(previewLocation.map.shaders || [], previewLocation.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+      shaders = previewLocation.map.shaders || [];
+      shaderLayer.render(shaders, previewLocation.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     }
+  }
+  if (!shaders.length) {
+    shaderLoopRunning = false;
+    return;
   }
   requestAnimationFrame(stepShaderLayer);
 }
+
+function kickShaderLoop() {
+  const previewLocation = state && getPreviewLocation();
+  const shaders = (previewLocation && previewLocation.map.shaders) || [];
+  if (shaders.length > 0 && !shaderLoopRunning) {
+    shaderLoopRunning = true;
+    requestAnimationFrame(stepShaderLayer);
+  }
+}
+
+shaderLoopRunning = true;
 requestAnimationFrame(stepShaderLayer);

@@ -192,6 +192,7 @@ function render(state) {
     renderMap(state, location, previousShowingImage);
   }
   previousShowingImage = showingImage;
+  kickShaderLoop();
 }
 
 // La rosa dei venti è un elemento fisso sullo schermo (percentuali di
@@ -389,14 +390,42 @@ function renderMap(state, location, returningFromImage) {
   }
 }
 
+// Il rAF loop va fermato quando non c'è nulla da disegnare (nessuna
+// decorazione shader sulla location attiva, o si sta mostrando
+// un'immagine al posto della mappa): su target come il Raspberry Pi 4 un
+// ciclo di clear+composite a 60fps a vuoto è spreco puro. Quando lo
+// shaders array torna rilevante (es. si piazza una decorazione, o si
+// torna dalla vista immagine alla mappa), kickShaderLoop() lo riavvia da
+// render().
+let shaderLoopRunning = false;
+
 function stepShaderLayer() {
+  let shaders = [];
   if (lastState) {
     const location = getActiveLocation(lastState);
     const showingImage = Boolean(lastState.activeImageId && location && location.images.some((i) => i.id === lastState.activeImageId));
     if (location && location.map.file && !showingImage) {
-      shaderLayer.render(location.map.shaders || [], location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+      shaders = location.map.shaders || [];
+      shaderLayer.render(shaders, location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     }
+  }
+  if (!shaders.length) {
+    shaderLoopRunning = false;
+    return;
   }
   requestAnimationFrame(stepShaderLayer);
 }
+
+function kickShaderLoop() {
+  if (!lastState) return;
+  const location = getActiveLocation(lastState);
+  const showingImage = Boolean(lastState.activeImageId && location && location.images.some((i) => i.id === lastState.activeImageId));
+  const shaders = (!showingImage && location && location.map.shaders) || [];
+  if (shaders.length > 0 && !shaderLoopRunning) {
+    shaderLoopRunning = true;
+    requestAnimationFrame(stepShaderLayer);
+  }
+}
+
+shaderLoopRunning = true;
 requestAnimationFrame(stepShaderLayer);

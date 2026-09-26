@@ -399,6 +399,7 @@ function render() {
   renderAudioPanel(location);
   updateZoomBox();
   updateOverlayBox();
+  kickShaderLoop();
 }
 
 function updateZoomBox() {
@@ -615,18 +616,14 @@ overlayBox.addEventListener('pointerdown', (e) => {
   const location = getActiveLocation();
   if (!location) return;
   const point = basePointFromClientXY(e.clientX, e.clientY);
-  const hit = (location.map.polygons || []).find((poly) => pointInPolygon(point, poly.points));
 
-  if (hit) {
-    selectedShaderId = null;
-    selectedPolygonId = hit.id;
-    draggingPolygon = { locationId: location.id, polygonId: hit.id, startBase: point, originalPoints: hit.points.map((p) => [...p]) };
-    renderPolygonsSvg();
-    renderPolygonList(location);
-    renderShaderList(location);
-    return;
-  }
-
+  // Il hit-test degli shader va eseguito PRIMA di quello dei poligoni: le
+  // decorazioni sono più piccole e concettualmente "sopra" ai fini
+  // dell'interazione in editor, anche se in fase di disegno su
+  // control/display i poligoni di nebbia coprono visivamente le
+  // decorazioni. Testare prima i poligoni renderebbe impossibile
+  // selezionare una decorazione piazzata dentro un poligono di nebbia
+  // (il caso comune, dato che la nebbia tipicamente copre l'intera stanza).
   const nw = mediaW(activeMapEl);
   const nh = mediaH(activeMapEl);
   const shaderHit = (location.map.shaders || []).find((deco) => {
@@ -640,11 +637,24 @@ overlayBox.addEventListener('pointerdown', (e) => {
     return pointInPolygon(point, corners);
   });
 
-  selectedPolygonId = null;
-  draggingPolygon = null;
-  selectedShaderId = shaderHit ? shaderHit.id : null;
-  draggingShader = shaderHit
-    ? { locationId: location.id, id: shaderHit.id, startBase: point, originalX: shaderHit.x, originalY: shaderHit.y }
+  if (shaderHit) {
+    selectedPolygonId = null;
+    draggingPolygon = null;
+    selectedShaderId = shaderHit.id;
+    draggingShader = { locationId: location.id, id: shaderHit.id, startBase: point, originalX: shaderHit.x, originalY: shaderHit.y };
+    renderPolygonsSvg();
+    renderPolygonList(location);
+    renderShaderList(location);
+    return;
+  }
+
+  const hit = (location.map.polygons || []).find((poly) => pointInPolygon(point, poly.points));
+
+  selectedShaderId = null;
+  draggingShader = null;
+  selectedPolygonId = hit ? hit.id : null;
+  draggingPolygon = hit
+    ? { locationId: location.id, polygonId: hit.id, startBase: point, originalPoints: hit.points.map((p) => [...p]) }
     : null;
   renderPolygonsSvg();
   renderPolygonList(location);
@@ -2202,11 +2212,35 @@ function setupAudioSlotListeners(containerEl, slot, uploadLabel) {
 setupAudioSlotListeners(audioMainContent, 'main', 'Carica traccia principale');
 setupAudioSlotListeners(audioSpecialContent, 'special', 'Carica traccia speciale');
 
+// Il rAF loop va fermato quando non c'è nulla da disegnare (nessuna
+// decorazione shader sulla location attiva): su target come il Raspberry
+// Pi 4 un ciclo di clear+composite a 60fps a vuoto è spreco puro. Quando
+// lo shaders array torna non vuoto (es. si piazza una decorazione),
+// kickShaderLoop() lo riavvia da render().
+let shaderLoopRunning = false;
+
 function stepShaderLayer() {
   const location = getActiveLocation();
+  let shaders = [];
   if (location && location.map.file) {
-    shaderLayer.render(location.map.shaders || [], location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+    shaders = location.map.shaders || [];
+    shaderLayer.render(shaders, location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+  }
+  if (!shaders.length) {
+    shaderLoopRunning = false;
+    return;
   }
   requestAnimationFrame(stepShaderLayer);
 }
+
+function kickShaderLoop() {
+  const location = getActiveLocation();
+  const shaders = (location && location.map.shaders) || [];
+  if (shaders.length > 0 && !shaderLoopRunning) {
+    shaderLoopRunning = true;
+    requestAnimationFrame(stepShaderLayer);
+  }
+}
+
+shaderLoopRunning = true;
 requestAnimationFrame(stepShaderLayer);

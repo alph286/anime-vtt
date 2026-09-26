@@ -152,9 +152,15 @@ class ShaderLayer {
     if (this.programs.has(shaderId)) return this.programs.get(shaderId);
     const def = SHADER_EFFECTS[shaderId];
     if (!def) return null;
-    const program = linkProgram(this.gl, SHADER_VERTEX_SRC, def.fragmentSrc);
-    this.programs.set(shaderId, program);
-    return program;
+    try {
+      const program = linkProgram(this.gl, SHADER_VERTEX_SRC, def.fragmentSrc);
+      this.programs.set(shaderId, program);
+      return program;
+    } catch (err) {
+      console.warn(`ShaderLayer: impossibile compilare/linkare lo shader "${shaderId}": ${err.message}`);
+      this.programs.set(shaderId, null);
+      return null;
+    }
   }
 
   ensureNoiseTexture() {
@@ -180,10 +186,9 @@ class ShaderLayer {
   // Senza questo il canvas resta bloccato alla prima misura presa, anche se
   // il contenitore cambia dimensione dopo.
   syncCanvasSize() {
-    const rect = this.canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const cssW = Math.max(1, Math.round(rect.width));
-    const cssH = Math.max(1, Math.round(rect.height));
+    const cssW = Math.max(1, Math.round(this.canvas.clientWidth));
+    const cssH = Math.max(1, Math.round(this.canvas.clientHeight));
     if (cssW === this.lastCssW && cssH === this.lastCssH) return;
     this.lastCssW = cssW;
     this.lastCssH = cssH;
