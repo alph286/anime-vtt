@@ -1,4 +1,7 @@
-# Anime VTT
+# Magnetron
+
+*(Il progetto si chiamava "Anime VTT"; il codice sorgente vive ancora nel
+repository `anime-vtt` su GitHub — solo il nome del programma è cambiato.)*
 
 Un "tavolo virtuale" per il gioco di ruolo: mostra mappe e immagini su una TV,
 le nasconde a pezzi con la nebbia di guerra (fog of war), e tutto viene
@@ -20,11 +23,14 @@ creare da nessuna parte.
 Il programma ha **quattro pagine**, ognuna con un ruolo diverso:
 
 - **`/editor`** — la usi prima della sessione, dal tuo PC: qui carichi le
-  mappe, disegni le zone coperte dalla nebbia di guerra, carichi le immagini
-  da mostrare ai giocatori, e prepari tutto con calma.
+  mappe, disegni le zone coperte dalla nebbia di guerra, tracci la griglia
+  di combattimento, piazzi decorazioni animate sulla mappa (vedi sotto),
+  carichi le immagini e la traccia audio da usare durante la sessione, e
+  prepari tutto con calma.
 - **`/control`** — la usi durante la sessione, dal telefono: da qui scegli
   cosa mostrare sulla TV, sveli o nascondi pezzi di mappa, muovi la vista,
-  mostri un'immagine ai giocatori.
+  piazzi aree d'effetto degli incantesimi sulla griglia, mostri un'immagine
+  ai giocatori, gestisci l'audio della location.
 - **`/display`** — è quella che resta aperta sulla TV, a schermo intero: i
   giocatori la guardano e basta, non la toccano mai.
 - **`/opzioni`** — impostazioni generali: qui configuri l'URL di PicSender e
@@ -57,7 +63,7 @@ Ogni comando va copiato e incollato esattamente com'è scritto.
 
 ### 1. Installa Node.js
 
-Node.js è il programma "motore" su cui gira Anime VTT — senza di lui, il
+Node.js è il programma "motore" su cui gira Magnetron — senza di lui, il
 programma non parte. Vai su **[nodejs.org](https://nodejs.org)**, scarica la
 versione consigliata per il tuo sistema (quella indicata come "LTS") e
 installala come un programma qualsiasi (Avanti, Avanti, Fine).
@@ -186,19 +192,53 @@ computer della rete.
 
 1. **Da `/editor`** (PC, prima della sessione): crea una "location" (una
    scena/stanza/luogo), carica un'immagine o un video come mappa, disegna
-   le zone da coprire con la nebbia di guerra trascinando col mouse,
-   carica eventuali immagini da mostrare ai giocatori (illustrazioni,
-   ritratti di PNG, ecc.).
+   le zone da coprire con la nebbia di guerra trascinando col mouse, traccia
+   la griglia di combattimento, piazza eventuali decorazioni animate (vedi
+   "Decorazioni a shader" sotto), carica eventuali immagini da mostrare ai
+   giocatori (illustrazioni, ritratti di PNG, ecc.) e la traccia audio della
+   location.
 2. **Da `/control`** (telefono, durante la sessione): scegli quale location
    mostrare sulla TV, rivela o nascondi le zone coperte, sposta/zooma la
-   vista, mostra un'immagine a schermo intero ai giocatori quando serve.
+   vista, piazza un'area d'effetto sulla griglia quando un giocatore lancia
+   un incantesimo, avvia/pausa/ferma l'audio e regola il volume, mostra
+   un'immagine a schermo intero ai giocatori quando serve.
 3. **`/display`** (TV): non richiede nessuna azione — mostra semplicemente
    quello che decidi da `/control`, aggiornandosi da solo in tempo reale.
 
-Il resto delle funzioni (griglia per il combattimento, rosa dei venti,
-esportazione/backup delle location, invio foto su Telegram) si scopre
-esplorando i menu di `/editor` e `/control` — sono tutte pensate per essere
-intuitive senza bisogno di documentazione aggiuntiva.
+### Aree d'effetto degli incantesimi
+
+Da `/control`, in modalità "Area d'effetto", puoi piazzare sulla griglia le
+quattro forme classiche di D&D — Cono, Cubo, Sfera, Linea — scegliendo
+colore e dimensione con uno stepper. Le celle coperte vengono calcolate con
+la regola di Xanathar (conta ogni cella toccata anche solo in parte dalla
+forma, non solo quelle il cui centro ci ricade dentro), e la forma si
+aggancia da sola alla griglia mentre la trascini. Puoi selezionare un'area
+già piazzata per ridimensionarla o cambiarle colore senza doverla
+ricreare da capo.
+
+### Decorazioni a shader
+
+Sempre da `/editor`, nella fase di preparazione della mappa, puoi piazzare
+elementi decorativi animati (per ora: un "Portale" luminoso; altri stili
+arriveranno in seguito) come elementi statici della scena — scegli
+larghezza e altezza in modo indipendente, poi li trascini dove vuoi.
+Compaiono sia su `/control` che su `/display`, e restano coperti dalla
+nebbia di guerra come qualunque altro dettaglio della mappa: se un giocatore
+non ha ancora scoperto quella zona, non vede la decorazione.
+
+### Audio per location
+
+Ogni location può avere due tracce audio: una **principale**, che parte da
+sola in autoplay quando la location diventa attiva (utile per un sottofondo
+ambientale), e una **speciale** (es. musica da combattimento), che fai
+partire in qualsiasi momento con un tasto dedicato da `/control`. Entrambe
+si mettono in pausa, si fermano e si regolano di volume dallo stesso
+pannello.
+
+Il resto delle funzioni (rosa dei venti, esportazione/backup delle
+location, invio foto su Telegram) si scopre esplorando i menu di `/editor`
+e `/control` — sono tutte pensate per essere intuitive senza bisogno di
+documentazione aggiuntiva.
 
 ## Metterlo su un Raspberry Pi collegato alla TV (facoltativo)
 
@@ -218,7 +258,7 @@ Poi, dalla cartella del progetto sul Raspberry:
 sudo ./deploy/install-service.sh
 ```
 
-Questo comando fa partire Anime VTT automaticamente ogni volta che il
+Questo comando fa partire Magnetron automaticamente ogni volta che il
 Raspberry si accende, e lo fa ripartire da solo se per qualche motivo si
 blocca — non dovrai più aprire un terminale per farlo funzionare. Ogni
 volta che riscarichi una versione più recente del codice, puoi rilanciare
