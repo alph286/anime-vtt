@@ -156,6 +156,26 @@ function rotatePointToBase([rx, ry], rotation) {
   return [u * 100, v * 100];
 }
 
+// Stessa idea di rotatePointToBase, ma per una DIREZIONE (es. un tasto "su"
+// premuto sullo schermo) invece di un punto assoluto -- è la derivata della
+// trasformazione sopra rispetto a (rx,ry), verificata numericamente contro
+// rotatePointToBase stessa. Serve ai pulsanti direzionali di un'area
+// d'effetto: premere "su" deve sempre spostarla verso l'alto sullo SCHERMO,
+// qualunque sia la rotazione della mappa -- non verso l'alto nello spazio
+// base, che dopo una rotazione di 90°/270° è un'altra direzione sullo
+// schermo.
+function rotateDirectionToBase([dx, dy], rotation) {
+  // `-dx`/`-dy` producono -0 quando dx/dy è 0: innocuo in aritmetica ma
+  // rompe un confronto stretto (===/deepEqual) a valle.
+  const neg = (n) => (n ? -n : 0);
+  switch (rotation) {
+    case 90: return [dy, neg(dx)];
+    case 180: return [neg(dx), neg(dy)];
+    case 270: return [neg(dy), dx];
+    default: return [dx, dy];
+  }
+}
+
 /**
  * Sizes/rotates `wrapEl` to fill `container`, accounting for a 90°/270° rotation
  * swapping the effective width/height. Returns the effective (pre-rotation) box
@@ -282,10 +302,20 @@ function aoePixelsPerMeter(grid) {
 // Punti della forma in pixel reali della mappa, centrati sull'origine locale
 // (0,0), PRIMA di ogni rotazione -- il chiamante ruota e trasla. Il cono ha
 // il vertice in (0,0) e si apre verso -Y (largo quanto la distanza
-// dall'origine, regola ufficiale D&D); la linea parte da (0,0) verso -Y; il
-// cubo è centrato sull'origine (mai ruotato: resta allineato agli assi); la
-// sfera è approssimata con un poligono a 32 lati (necessario per un contorno
-// disegnabile con clip-path/SVG, non distorce percettibilmente un cerchio).
+// dall'origine, regola ufficiale D&D); il cubo è centrato sull'origine (mai
+// ruotato: resta allineato agli assi); la sfera è approssimata con un
+// poligono a 32 lati (necessario per un contorno disegnabile con
+// clip-path/SVG, non distorce percettibilmente un cerchio).
+//
+// La linea parte verso -Y come il cono, ma NON da (0,0): quando la sua
+// larghezza è un numero dispari di celle, l'origine (vedi snapAoeOrigin) è
+// il centro di una cella intera, e quella cella non deve mai contare come
+// colpita. Il bordo vicino della linea parte quindi mezza cella più avanti
+// (lo "stem"), cosà la cella di origine resta fuori dal poligono per intero
+// (tocco di area zero, vedi rectIntersectsPolygon) e i metri scelti si
+// misurano tutti oltre di essa. Con larghezza pari l'origine è già un
+// vertice di griglia -- un confine condiviso da 4 celle, non dentro
+// nessuna in particolare -- quindi lì lo stem resta a zero.
 function aoeShapePointsPx(shape, sizeM, widthM, grid) {
   const ppm = aoePixelsPerMeter(grid);
   const size = sizeM * ppm;
@@ -299,7 +329,11 @@ function aoeShapePointsPx(shape, sizeM, widthM, grid) {
     case 'line': {
       const width = (widthM || AOE_METERS_PER_CELL) * ppm;
       const w = width / 2;
-      return [[-w, 0], [w, 0], [w, -size], [-w, -size]];
+      const widthN = Math.round((widthM || AOE_METERS_PER_CELL) / AOE_METERS_PER_CELL);
+      const cellSize = (grid && grid.cellSize) || 100;
+      const stem = widthN % 2 !== 0 ? cellSize / 2 : 0;
+      const nearY = stem ? -stem : 0; // evita un -0 quando lo stem è zero
+      return [[-w, nearY], [w, nearY], [w, nearY - size], [-w, nearY - size]];
     }
     case 'sphere': {
       const r = size;
@@ -337,10 +371,34 @@ function snapToGridAxis(px, offset, cellSize, alignToCenter) {
 // di celle -- ma il punto che allinea i bordi alla griglia dipende dalla sua
 // PARITÀ: un numero pari di celle si allinea su un incrocio di griglia, un
 // numero dispari sul centro di una cella (altrimenti i bordi cadrebbero a
-// metà cella anche da agganciati). Cono e sfera non hanno mai bordi dritti
-// allineabili alla griglia: restano a posizionamento libero. Una linea
-// ruotata fuori dagli assi cardinali (0/90/180/270) non può comunque avere
-// tutti i bordi allineati: anche lei resta libera in quel caso.
+// metà cella anche da agganciati).
+//
+// La Sfera non ha bordi dritti da allineare, ma per regolamento (PHB/
+// Xanathar: "Areas of Effect on a Grid") il suo punto d'origine è comunque
+// un incrocio di griglia -- si aggancia sempre al vertice più vicino,
+// qualunque sia la sua taglia.
+//
+// Il Cono invece HA bordi dritti (i due lati obliqui, più la base) che
+// traggono lo stesso beneficio del Cubo/Linea dall'allinearsi alla griglia
+// -- ma a differenza loro, qui NON è la taglia a decidere se il vertice
+// cade su un incrocio o sul centro di un lato di cella: entrambi i punti
+// restano sempre validi (il cono si apre SEMPRE verso l'esterno
+// dall'origine, quindi un centro-lato tiene i bordi puliti indipendente
+// dalla taglia). Si sceglie semplicemente il punto valido più vicino a dove
+// il DM sta trascinando o spostando -- vedi nearestConeAnchor. Quale lato
+// di cella (orizzontale o verticale) sia il candidato "centro-lato" dipende
+// comunque da quanto il cono è ruotato -- vedi axisAlignmentForRotation.
+//
+// La Linea invece, a differenza del Cono, ha un lato (il bordo "vicino",
+// quello più vicino all'origine) che taglierebbe una cella a metà se
+// l'origine coincidesse con un centro-lato -- per questo la Linea con
+// larghezza dispari si aggancia al CENTRO DI UNA CELLA INTERA (entrambi gli
+// assi centrati, indipendente dalla rotazione: il centro di una cella è lo
+// stesso punto comunque la si guardi). La cella di origine resta ESCLUSA
+// dall'area colpita: l'effetto vero e proprio parte mezza cella più avanti,
+// nella direzione in cui punta la linea -- vedi lo spostamento "stem" in
+// aoeShapePointsPx, che applica esattamente questo mezzo passo in più prima
+// che la lunghezza scelta cominci a contare.
 function snapAoeOrigin(shape, sizeM, widthM, rotation, grid, xPct, yPct, naturalW, naturalH) {
   if (!grid || !grid.enabled || !naturalW || !naturalH) return [xPct, yPct];
   const cellSize = Math.max(4, grid.cellSize || 100);
@@ -349,27 +407,21 @@ function snapAoeOrigin(shape, sizeM, widthM, rotation, grid, xPct, yPct, natural
   const pxX = (xPct / 100) * naturalW;
   const pxY = (yPct / 100) * naturalH;
 
+  if (shape === 'cone') {
+    const [snappedPxX, snappedPxY] = nearestConeAnchor(pxX, pxY, offsetX, offsetY, cellSize, rotation);
+    return [(snappedPxX / naturalW) * 100, (snappedPxY / naturalH) * 100];
+  }
+
   let alignXToCenter;
   let alignYToCenter;
   if (shape === 'cube') {
     const n = Math.round(sizeM / AOE_METERS_PER_CELL);
     alignXToCenter = alignYToCenter = n % 2 !== 0;
+  } else if (shape === 'sphere') {
+    alignXToCenter = alignYToCenter = false;
   } else if (shape === 'line') {
-    const rot = ((Math.round(rotation || 0) % 360) + 360) % 360;
-    if (rot !== 0 && rot !== 90 && rot !== 180 && rot !== 270) return [xPct, yPct];
     const widthN = Math.round((widthM || AOE_METERS_PER_CELL) / AOE_METERS_PER_CELL);
-    const widthCentered = widthN % 2 !== 0;
-    if (rot === 0 || rot === 180) {
-      // Asse X = larghezza (dipende dalla parità), asse Y = lunghezza --
-      // l'origine sta a un ESTREMO della lunghezza, non al centro: basta che
-      // sia su un incrocio perché, essendo la lunghezza un numero intero di
-      // celle, anche l'estremo opposto ci cada sopra, qualunque sia la parità.
-      alignXToCenter = widthCentered;
-      alignYToCenter = false;
-    } else {
-      alignXToCenter = false;
-      alignYToCenter = widthCentered;
-    }
+    alignXToCenter = alignYToCenter = widthN % 2 !== 0;
   } else {
     return [xPct, yPct];
   }
@@ -377,6 +429,33 @@ function snapAoeOrigin(shape, sizeM, widthM, rotation, grid, xPct, yPct, natural
   const snappedPxX = snapToGridAxis(pxX, offsetX, cellSize, alignXToCenter);
   const snappedPxY = snapToGridAxis(pxY, offsetY, cellSize, alignYToCenter);
   return [(snappedPxX / naturalW) * 100, (snappedPxY / naturalH) * 100];
+}
+
+// Quale asse schermo gioca il ruolo di "larghezza" (quello soggetto al
+// centro-lato) dipende da quanto la forma è ruotata: a 0°/180° la lunghezza
+// è verticale quindi la larghezza è X; a 90°/270° è il contrario; qualunque
+// rotazione intermedia ricade sul lato più vicino (nessun caso speciale per
+// le diagonali a 45°, cadono esattamente sul confine tra i due lati).
+function axisAlignmentForRotation(centered, rotation) {
+  const rot = ((Math.round(rotation || 0) % 180) + 180) % 180;
+  const lengthMostlyVertical = rot < 45 || rot > 135;
+  return lengthMostlyVertical ? [centered, false] : [false, centered];
+}
+
+// Il vertice e il centro-lato (vedi il commento sopra snapAoeOrigin) sono
+// entrambi candidati validi per il Cono: si calcolano entrambi i punti e si
+// restituisce quello più vicino alla posizione grezza (pixel reali), così
+// trascinare o spostare il cono sceglie l'uno o l'altro semplicemente in
+// base a dove lo si porta.
+function nearestConeAnchor(pxX, pxY, offsetX, offsetY, cellSize, rotation) {
+  const vertexX = snapToGridAxis(pxX, offsetX, cellSize, false);
+  const vertexY = snapToGridAxis(pxY, offsetY, cellSize, false);
+  const [edgeAlignX, edgeAlignY] = axisAlignmentForRotation(true, rotation);
+  const edgeX = snapToGridAxis(pxX, offsetX, cellSize, edgeAlignX);
+  const edgeY = snapToGridAxis(pxY, offsetY, cellSize, edgeAlignY);
+  const dVertex = Math.hypot(pxX - vertexX, pxY - vertexY);
+  const dEdge = Math.hypot(pxX - edgeX, pxY - edgeY);
+  return dEdge < dVertex ? [edgeX, edgeY] : [vertexX, vertexY];
 }
 
 // Punti del contorno in percentuale, spazio locale (pre-rotazione mappa) --
@@ -561,6 +640,7 @@ if (typeof module !== 'undefined' && module.exports) {
     aoeColorHex,
     aoeColorDarkHex,
     rotateVector,
+    rotateDirectionToBase,
     aoePixelsPerMeter,
     aoeShapePointsPx,
     snapToGridAxis,

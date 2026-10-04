@@ -423,25 +423,40 @@ h2 {
   align-items: center;
   gap: 6px;
   height: 44px;
-  padding: 0 8px 0 12px;
+  padding: 0 0 0 12px;
   border-radius: 8px;
   border: 1px solid var(--border-control);
   background: var(--bg-control);
   color: var(--text-primary);
   cursor: pointer;
+  /* Il bottone tocca il bordo destro della pillola (vedi .aoe-chip-delete):
+     overflow:hidden gli taglia gli spigoli allo stesso raggio della
+     pillola, invece di farli sporgere squadrati oltre il suo profilo. */
+  overflow: hidden;
 }
 
-.aoe-chip-shape-toggle {
+/* Quadrato pieno quanto la pillola è alta (44px, lo stesso standard di
+   tocco usato ovunque sul telefono), appoggiato al bordo destro senza
+   margine -- prima era 32x32 con aria intorno su tutti i lati, quindi
+   visibilmente più stretto che alto rispetto alla pillola che lo conteneva. */
+.aoe-chip-delete {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 0;
   background: none;
   color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.aoe-chip-delete.confirm {
+  background: var(--danger);
+  color: #fff;
 }
 
 .aoe-chip.selected .aoe-chip-pill {
@@ -449,27 +464,64 @@ h2 {
   background: var(--accent-bg-subtle);
 }
 
-.aoe-selected-actions {
-  display: flex;
+/* Fisso in basso a destra del viewport (non più ancorato alla mappa, vedi
+   renderAoeNudgeOverlay in control.js): resta raggiungibile col pollice da
+   qualunque scheda/scroll, non solo da /control -- sempre sopra la tab bar
+   (il calc tiene conto della sua altezza + l'eventuale notch). Più
+   trasparente del pannello normale apposta: deve lasciar intravedere la
+   mappa sotto, non coprirla come un pannello pieno. */
+.aoe-nudge-overlay {
+  position: fixed;
+  right: 12px;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(4, 44px);
   gap: 6px;
-  margin-top: 10px;
+  background: rgba(31, 35, 43, 0.55);
+  border: 1px solid var(--border-control);
+  border-radius: 12px;
+  padding: 8px;
+  z-index: 40;
 }
 
-.aoe-chip-rotate,
-.aoe-chip-remove {
+.aoe-nudge-overlay button {
   width: 44px;
   height: 44px;
-  border-radius: 6px;
-  border: 1px solid var(--border-control);
-  background: var(--bg-panel);
-  color: var(--text-primary);
   padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+  color: var(--text-primary);
+  font-size: 15px;
 }
 
-.aoe-chip-remove.confirm {
-  background: var(--danger);
-  border-color: var(--danger);
-  color: #fff;
+.aoe-nudge-overlay button:disabled {
+  opacity: 0.4;
+}
+
+.aoe-nudge-color {
+  border-color: var(--border-control);
+}
+
+/* Unica cella del pad che non esegue un'azione al tap, ma si afferra e si
+   trascina per spostare l'intero pannello -- un tono sull'accent la
+   distingue dalle altre 11 celle, altrimenti identiche, cosà non la si
+   confonde con un tasto normale. touch-action:none impedisce alla pagina
+   di scrollare mentre si trascina col dito. */
+.aoe-nudge-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-bg-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: grab;
+  touch-action: none;
+}
+
+.aoe-nudge-drag-handle:active {
+  cursor: grabbing;
 }
 
 .icon {
