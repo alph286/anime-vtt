@@ -237,6 +237,15 @@ partire in qualsiasi momento con un tasto dedicato da `/control`. Entrambe
 si mettono in pausa, si fermano e si regolano di volume dallo stesso
 pannello.
 
+### Indicare un punto ai giocatori (ping)
+
+Da `/control`, in modalità "Ping", un tocco sulla mappa manda ai giocatori
+un segnale luminoso momentaneo sul punto esatto — utile per dire "guardate
+qui" senza dover spiegare a parole dove. Se invece trascini il dito, lasci
+una scia che segue il percorso e si consuma da sola, come una piccola
+stella cometa. Compare anche sulla tua stessa anteprima su `/control`, non
+solo sullo schermo dei giocatori.
+
 Il resto delle funzioni (rosa dei venti, esportazione/backup delle
 location, invio foto su Telegram) si scopre esplorando i menu di `/editor`
 e `/control` — sono tutte pensate per essere intuitive senza bisogno di
