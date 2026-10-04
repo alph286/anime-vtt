@@ -67,7 +67,12 @@ const toolShaderBtn = document.getElementById('tool-shader');
 const mapShaderCanvas = document.getElementById('map-shader-canvas');
 const shaderList = document.getElementById('shader-list');
 const deleteShaderBtn = document.getElementById('delete-shader');
+const shaderTypeSelect = document.getElementById('shader-type-select');
 const shaderLayer = new ShaderLayer(mapShaderCanvas);
+
+shaderTypeSelect.innerHTML = Object.entries(SHADER_EFFECTS)
+  .map(([id, def]) => `<option value="${id}">${escapeHtml(def.label)}</option>`)
+  .join('');
 const gridDivisionsNum = document.getElementById('grid-divisions-num');
 let gridSquareConstrain = false;
 const gridSizeNum = document.getElementById('grid-size-num');
@@ -228,7 +233,7 @@ const lightboxCloseBtn = document.getElementById('lightbox-close');
 const LOCATION_DEPENDENT_CONTROLS = [
   mapUpload, removeMapBtn, flip180Btn, rotate90Btn, mapScaleNum,
   toolSelectBtn, toolDrawBtn, drawFinishBtn, drawCancelBtn, deletePolygonBtn, polygonSortAzBtn, fogOpacityNum,
-  toolShaderBtn, deleteShaderBtn,
+  toolShaderBtn, deleteShaderBtn, shaderTypeSelect,
   gridToggleBtn, gridAlignToolBtn, gridAlignSquareBtn, gridDivisionsNum, gridColorInput, gridWidthNum, gridOpacityNum,
   gridSizeNum, gridOffsetXNum, gridOffsetYNum, gridSavePresetBtn, gridApplyPresetBtn,
   imageUpload
@@ -934,7 +939,7 @@ function applyShaderPlacement(start, end) {
   const centerYPct = topPct + heightPct / 2;
   socket.emit('shader:place', {
     locationId: location.id,
-    shaderId: 'portal',
+    shaderId: shaderTypeSelect.value || 'portal',
     x: centerXPct,
     y: centerYPct,
     widthM,

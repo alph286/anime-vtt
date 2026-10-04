@@ -1,0 +1,423 @@
+<title>Guida Anime VTT</title>
+<style>
+  :root{
+    --bg-page:#16181d;
+    --bg-panel:#1f232b;
+    --bg-control:#262b34;
+    --bg-canvas:#0e1014;
+    --border:#2c313b;
+    --border-control:#333947;
+    --text-primary:#cfd6e0;
+    --text-secondary:#9aa3b2;
+    --accent:#c9822c;
+    --accent-strong:#d99a4d;
+    --accent-text:#1a1a1a;
+    --accent-bg-subtle:rgba(201,130,44,0.14);
+    --danger-text:#e08a86;
+  }
+
+  *{box-sizing:border-box;}
+  html{color-scheme:dark;}
+  body{
+    background:var(--bg-page);
+    color:var(--text-primary);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:15px;
+    line-height:1.6;
+    margin:0;
+  }
+
+  .wrap{
+    max-width:700px;
+    margin:0 auto;
+    padding:56px 24px 96px;
+  }
+
+  header.hero{
+    margin-bottom:36px;
+  }
+  .eyebrow{
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin:0 0 10px;
+  }
+  h1{
+    font-size:32px;
+    font-weight:700;
+    letter-spacing:-0.01em;
+    line-height:1.15;
+    text-wrap:balance;
+    margin:0 0 14px;
+  }
+  .lede{
+    font-size:16px;
+    color:var(--text-secondary);
+    line-height:1.65;
+    max-width:62ch;
+    margin:0;
+  }
+
+  .callout{
+    background:var(--accent-bg-subtle);
+    border:1px solid var(--border-control);
+    border-left:3px solid var(--accent);
+    border-radius:10px;
+    padding:16px 18px;
+    margin:28px 0 8px;
+    font-size:14px;
+    line-height:1.65;
+    color:var(--text-primary);
+  }
+  .callout p{margin:0 0 10px;}
+  .callout p:last-child{margin-bottom:0;}
+  .callout strong{color:var(--text-primary);}
+
+  section{margin-top:52px;}
+  h2{
+    font-size:21px;
+    font-weight:700;
+    letter-spacing:-0.005em;
+    text-wrap:balance;
+    margin:0 0 6px;
+    padding-bottom:10px;
+    border-bottom:1px solid var(--border);
+  }
+  .section-num{
+    display:inline-block;
+    color:var(--text-secondary);
+    font-variant-numeric:tabular-nums;
+    font-weight:600;
+    margin-right:10px;
+  }
+  h3{
+    font-size:15px;
+    font-weight:700;
+    color:var(--text-primary);
+    margin:26px 0 8px;
+  }
+  h3 .step-num{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    background:var(--accent);
+    color:var(--accent-text);
+    font-size:11px;
+    font-weight:700;
+    margin-right:8px;
+    vertical-align:-4px;
+  }
+
+  p{margin:0 0 14px; color:var(--text-primary);}
+  section > p:first-of-type{margin-top:14px;}
+  ul,ol{margin:0 0 14px; padding-left:22px;}
+  li{margin-bottom:7px;}
+  li:last-child{margin-bottom:0;}
+  strong{font-weight:600;}
+  a{color:var(--accent); text-decoration:underline; text-decoration-color:var(--border-control); text-underline-offset:2px;}
+  a:hover{text-decoration-color:var(--accent);}
+
+  code{
+    font-family:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    background:var(--bg-control);
+    border:1px solid var(--border-control);
+    border-radius:4px;
+    padding:1px 5px;
+    font-size:0.88em;
+    color:var(--text-primary);
+  }
+
+  pre{
+    background:var(--bg-canvas);
+    border:1px solid var(--border-control);
+    border-radius:10px;
+    padding:14px 16px;
+    overflow-x:auto;
+    margin:0 0 16px;
+  }
+  pre code{
+    background:none;
+    border:none;
+    padding:0;
+    font-size:13px;
+    line-height:1.6;
+    color:#d7dce4;
+    white-space:pre;
+  }
+  .cmd-label{
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    color:var(--text-secondary);
+    margin:0 0 8px;
+  }
+
+  .platform-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:10px;
+    margin:0 0 16px;
+  }
+  .platform-card{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px 14px;
+  }
+  .platform-card .os{
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin:0 0 4px;
+  }
+  .platform-card p{
+    font-size:13px;
+    color:var(--text-secondary);
+    margin:0;
+  }
+
+  dl.env-vars{margin:0 0 16px;}
+  dl.env-vars div{
+    display:flex;
+    gap:14px;
+    padding:10px 0;
+    border-bottom:1px solid var(--border);
+    align-items:baseline;
+    flex-wrap:wrap;
+  }
+  dl.env-vars div:last-child{border-bottom:none;}
+  dl.env-vars dt{
+    flex:0 0 auto;
+    font-family:"SF Mono",Menlo,Consolas,monospace;
+    font-size:12.5px;
+    color:var(--accent);
+    white-space:nowrap;
+  }
+  dl.env-vars dd{
+    margin:0;
+    flex:1 1 220px;
+    font-size:13.5px;
+    color:var(--text-secondary);
+    line-height:1.55;
+  }
+
+  .route-list{margin:0 0 16px; padding:0; list-style:none;}
+  .route-list li{
+    display:flex;
+    gap:14px;
+    align-items:baseline;
+    padding:10px 0;
+    border-bottom:1px solid var(--border);
+    margin:0;
+  }
+  .route-list li:last-child{border-bottom:none;}
+  .route-list code{
+    flex:0 0 auto;
+    color:var(--accent);
+    background:var(--bg-control);
+  }
+  .route-list span{
+    font-size:13.5px;
+    color:var(--text-secondary);
+  }
+
+  .faq-item{
+    margin-bottom:20px;
+    padding-bottom:20px;
+    border-bottom:1px solid var(--border);
+  }
+  .faq-item:last-child{border:none; margin-bottom:0; padding-bottom:0;}
+  .faq-q{
+    font-weight:700;
+    font-size:14.5px;
+    color:var(--text-primary);
+    margin:0 0 6px;
+  }
+  .faq-a{margin:0; color:var(--text-secondary); font-size:14px;}
+
+  .note{
+    font-size:13px;
+    color:var(--text-secondary);
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px 14px;
+    margin:0 0 16px;
+  }
+  .note strong{color:var(--text-primary);}
+
+  footer{
+    margin-top:64px;
+    padding-top:20px;
+    border-top:1px solid var(--border);
+    font-size:12.5px;
+    color:var(--text-secondary);
+  }
+
+  @media (max-width:520px){
+    .wrap{padding:36px 18px 72px;}
+    h1{font-size:26px;}
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">README — installazione e uso</p>
+    <h1>Anime VTT</h1>
+    <p class="lede">Un "tavolo virtuale" per il gioco di ruolo: mostra mappe e immagini su una TV, le nasconde a pezzi con la nebbia di guerra, e tutto viene comandato da uno smartphone mentre si gioca. Gira sul tuo computer o su un Raspberry Pi collegato alla TV, sulla tua rete di casa — non serve internet una volta installato, e non c'è nessun account da creare.</p>
+  </header>
+
+  <div class="callout">
+    <p><strong>Nato per un tavolo, aperto a tutti.</strong> Questo programma è nato per una campagna di Dungeons &amp; Dragons specifica ("Anime Salve"), pensato per un solo Dungeon Master che prepara le scene e le pilota durante la sessione — non è un servizio online con più utenti o più tavoli contemporaneamente.</p>
+    <p>Il codice però non contiene nulla di specifico legato a quella campagna: chiunque può scaricarlo e usarlo per il proprio tavolo, seguendo questa guida.</p>
+  </div>
+
+  <section id="cose">
+    <h2><span class="section-num">01</span>Cos'è, in pratica</h2>
+    <p>Il programma ha tre pagine, ognuna con un ruolo diverso:</p>
+    <ul>
+      <li><strong>/editor</strong> — la usi prima della sessione, dal tuo PC: qui carichi le mappe, disegni le zone coperte dalla nebbia di guerra, carichi le immagini da mostrare ai giocatori, e prepari tutto con calma.</li>
+      <li><strong>/control</strong> — la usi durante la sessione, dal telefono: da qui scegli cosa mostrare sulla TV, sveli o nascondi pezzi di mappa, muovi la vista, mostri un'immagine ai giocatori.</li>
+      <li><strong>/display</strong> — resta aperta sulla TV, a schermo intero: i giocatori la guardano e basta, non la toccano mai.</li>
+    </ul>
+    <p>Le tre pagine restano sincronizzate in tempo reale: quello che fai sul telefono in <code>/control</code> appare subito sulla TV in <code>/display</code>, senza bisogno di premere "aggiorna" o ricaricare nulla.</p>
+  </section>
+
+  <section id="serve">
+    <h2><span class="section-num">02</span>Cosa ti serve prima di iniziare</h2>
+    <div class="platform-grid">
+      <div class="platform-card">
+        <p class="os">Un computer</p>
+        <p>Windows, Mac o Linux — su cui installare ed eseguire il programma. Basta questo per provarlo.</p>
+      </div>
+      <div class="platform-card">
+        <p class="os">Facoltativo — Raspberry Pi</p>
+        <p>Se vuoi uno schermo dedicato sempre acceso per il tavolo: un Raspberry Pi (modello 4 o più recente) collegato alla TV, più una scheda SD.</p>
+      </div>
+      <div class="platform-card">
+        <p class="os">Una rete di casa</p>
+        <p>Telefono, computer (ed eventuale Raspberry Pi) sulla stessa Wi-Fi o cavo. Non serve internet, serve solo che i dispositivi si "vedano" tra loro.</p>
+      </div>
+    </div>
+    <p class="note">Un Raspberry Pi è un piccolo computer economico, grande quanto un mazzo di carte, pensato per restare acceso e collegato a uno schermo. Non è obbligatorio: puoi tenere aperta <code>/display</code> anche su un normale PC o una smart TV con browser.</p>
+  </section>
+
+  <section id="installazione">
+    <h2><span class="section-num">03</span>Installazione, passo per passo</h2>
+    <p>Questa sezione presume che tu non abbia mai usato un terminale prima. Ogni comando va copiato e incollato esattamente com'è scritto.</p>
+
+    <h3><span class="step-num">1</span>Installa Node.js</h3>
+    <p>Node.js è il programma "motore" su cui gira Anime VTT — senza di lui, il programma non parte. Vai su <a href="https://nodejs.org">nodejs.org</a>, scarica la versione consigliata per il tuo sistema (quella indicata come "LTS") e installala come un programma qualsiasi (Avanti, Avanti, Fine).</p>
+    <p>Per controllare che sia andato tutto bene, apri un terminale (vedi il passo successivo) e scrivi:</p>
+    <div class="cmd-label">terminale</div>
+    <pre><code>node -v</code></pre>
+    <p>Se risponde con qualcosa tipo <code>v20.11.0</code>, ha funzionato.</p>
+
+    <h3><span class="step-num">2</span>Apri un terminale</h3>
+    <p>Il "terminale" è una finestra dove si scrivono comandi invece di cliccare sulle icone — è lo strumento che useremo per installare e avviare il programma.</p>
+    <ul>
+      <li><strong>Windows:</strong> cerca "PowerShell" o "Prompt dei comandi" nel menu Start e aprilo.</li>
+      <li><strong>Mac:</strong> cerca "Terminale" con Spotlight (⌘ + Barra spaziatrice, poi scrivi "Terminale").</li>
+      <li><strong>Linux:</strong> di solito Ctrl + Alt + T, oppure cerca "Terminale" nel menu applicazioni.</li>
+    </ul>
+
+    <h3><span class="step-num">3</span>Scarica il programma</h3>
+    <p>Se hai già <code>git</code> installato, nel terminale scrivi:</p>
+    <div class="cmd-label">terminale</div>
+    <pre><code>git clone https://github.com/alph286/anime-vtt.git
+cd anime-vtt</code></pre>
+    <p>Se non vuoi installare git, in alternativa vai sulla pagina del progetto su GitHub, clicca sul pulsante verde "Code" e poi "Download ZIP", estrai lo ZIP in una cartella a tua scelta, poi nel terminale spostati dentro quella cartella con <code>cd</code> seguito dal percorso (es. <code>cd Desktop/anime-vtt</code>).</p>
+
+    <h3><span class="step-num">4</span>Installa i "pezzi" di codice che servono</h3>
+    <p>Sempre dentro la cartella del progetto, scrivi:</p>
+    <div class="cmd-label">terminale</div>
+    <pre><code>npm install</code></pre>
+    <p>Questo comando scarica automaticamente i pezzi di codice di cui il programma ha bisogno (non serve capire cosa siano, il comando fa tutto da solo). Ci vuole di solito meno di un minuto — ed è l'unico momento in cui questo programma ha bisogno di internet, solo qui, in fase di installazione.</p>
+
+    <h3><span class="step-num">5</span>Crea il file di configurazione</h3>
+    <p>Il programma legge le sue impostazioni da un file chiamato <code>.env</code>. Per crearlo a partire da un modello già pronto:</p>
+    <div class="cmd-label">terminale</div>
+    <pre><code>cp .env.example .env</code></pre>
+    <p>Non serve modificarlo per iniziare — funziona già con i valori di base. Se in futuro vuoi capire cosa contiene:</p>
+    <dl class="env-vars">
+      <div><dt>PORT=3000</dt><dd>Su quale "canale" (porta) del computer gira il programma. Lascialo com'è a meno che tu non sappia già che la porta 3000 è occupata da qualcos'altro.</dd></div>
+      <div><dt>DATA_DIR=./data</dt><dd>Dove viene salvato lo stato del gioco (location, posizioni, eccetera).</dd></div>
+      <div><dt>STORAGE_DIR=./storage</dt><dd>Dove vengono salvate le mappe e le immagini che carichi.</dd></div>
+      <div><dt>PICSENDER_URL=</dt><dd>Funzione facoltativa per inviare foto su Telegram tramite un altro programma esterno. Se non ti interessa, lasciala vuota: il resto funziona comunque.</dd></div>
+    </dl>
+
+    <h3><span class="step-num">6</span>Avvia il programma</h3>
+    <div class="cmd-label">terminale</div>
+    <pre><code>npm run dev</code></pre>
+    <p>Se tutto è andato bene, il terminale mostrerà che il server è partito. <strong>Lascia questa finestra aperta</strong>: è lei che tiene acceso il programma. Se la chiudi, il programma si spegne (più avanti trovi come farlo partire da solo, senza tenere aperto nulla, con il Raspberry Pi).</p>
+
+    <h3><span class="step-num">7</span>Apri le tre pagine</h3>
+    <p>Sullo stesso computer dove hai avviato il programma, apri un browser e vai su:</p>
+    <ul class="route-list">
+      <li><code>localhost:3000/editor</code><span>per preparare le mappe</span></li>
+      <li><code>localhost:3000/control</code><span>per pilotare la sessione</span></li>
+      <li><code>localhost:3000/display</code><span>quella che andrà sulla TV</span></li>
+    </ul>
+    <p>Per aprire <code>/control</code> dal telefono — il modo in cui verrà usata davvero — il telefono deve essere sulla stessa Wi-Fi del computer, e al posto di <code>localhost</code> devi scrivere l'indirizzo di rete locale del computer:</p>
+    <ul>
+      <li><strong>Windows:</strong> Prompt dei comandi → <code>ipconfig</code> → cerca "Indirizzo IPv4" (es. <code>192.168.1.23</code>).</li>
+      <li><strong>Mac:</strong> Preferenze di Sistema → Rete → seleziona la connessione attiva.</li>
+      <li><strong>Linux:</strong> terminale → <code>hostname -I</code>.</li>
+    </ul>
+    <p>Poi dal telefono vai su <code>http://192.168.1.23:3000/control</code> (sostituendo con il tuo indirizzo reale). Stessa cosa per <code>/display</code> su un'altra TV o computer della rete.</p>
+  </section>
+
+  <section id="uso">
+    <h2><span class="section-num">04</span>Come si usa, in breve</h2>
+    <ol>
+      <li><strong>Da /editor</strong> (PC, prima della sessione): crea una "location" (una scena/stanza/luogo), carica un'immagine o un video come mappa, disegna le zone da coprire con la nebbia di guerra trascinando col mouse, carica eventuali immagini da mostrare ai giocatori.</li>
+      <li><strong>Da /control</strong> (telefono, durante la sessione): scegli quale location mostrare sulla TV, rivela o nascondi le zone coperte, sposta/zooma la vista, mostra un'immagine a schermo intero ai giocatori quando serve.</li>
+      <li><strong>/display</strong> (TV): non richiede nessuna azione — mostra quello che decidi da /control, aggiornandosi da solo in tempo reale.</li>
+    </ol>
+    <p>Il resto delle funzioni (griglia per il combattimento, rosa dei venti, esportazione/backup delle location, invio foto su Telegram) si scopre esplorando i menu di <code>/editor</code> e <code>/control</code> — sono pensate per essere intuitive senza documentazione aggiuntiva.</p>
+  </section>
+
+  <section id="raspberry">
+    <h2><span class="section-num">05</span>Metterlo su un Raspberry Pi collegato alla TV</h2>
+    <p class="note"><strong>Facoltativo.</strong> Questa parte è per chi vuole uno schermo sempre pronto per il tavolo, che si accende da solo insieme alla TV senza aprire terminali o browser a mano. Se ti basta usarlo dal computer come sopra, salta pure questa sezione.</p>
+    <p>Prerequisiti: un Raspberry Pi con Raspberry Pi OS (con interfaccia grafica), collegato alla TV via HDMI, con Node.js installato sopra (stessi passi 1-6 della sezione di installazione, eseguiti direttamente sul Raspberry).</p>
+    <p>Poi, dalla cartella del progetto sul Raspberry:</p>
+    <div class="cmd-label">terminale, sul Raspberry Pi</div>
+    <pre><code>sudo ./deploy/install-service.sh</code></pre>
+    <p>Fa partire Anime VTT automaticamente a ogni accensione, e lo fa ripartire da solo se si blocca — non dovrai più aprire un terminale per farlo funzionare. Rilancia lo stesso comando dopo ogni aggiornamento del codice, per aggiornare il servizio.</p>
+    <p>Poi, perché la TV mostri automaticamente <code>/display</code> a schermo intero appena il Raspberry si accende:</p>
+    <div class="cmd-label">terminale, sul Raspberry Pi — senza sudo</div>
+    <pre><code>./deploy/install-kiosk-autostart.sh</code></pre>
+    <p>Dopo aver eseguito entrambi gli script, basta riavviare il Raspberry Pi: la TV si accenderà da sola su <code>/display</code>, pronta per la sessione.</p>
+  </section>
+
+  <section id="faq">
+    <h2><span class="section-num">06</span>Domande frequenti</h2>
+    <div class="faq-item">
+      <p class="faq-q">Ho chiuso la finestra del terminale e /control o /display non rispondono più.</p>
+      <p class="faq-a">È normale se hai avviato il programma con <code>npm run dev</code>: quella finestra deve restare aperta. Per un uso permanente senza tenere aperto nulla, guarda la sezione sul Raspberry Pi.</p>
+    </div>
+    <div class="faq-item">
+      <p class="faq-q">Ho paura di perdere mappe e immagini che ho caricato.</p>
+      <p class="faq-a">Tutto quello che carichi vive in due cartelle dentro il progetto: <code>data/</code> (le informazioni sulle location) e <code>storage/</code> (le mappe e immagini vere e proprie). Per un backup, basta copiare queste due cartelle. C'è anche una funzione di esportazione integrata (menu in alto a destra in <code>/editor</code>) per salvare una singola location o l'intera campagna come file scaricabile.</p>
+    </div>
+    <div class="faq-item">
+      <p class="faq-q">Posso usarlo per la mia campagna, con un altro nome?</p>
+      <p class="faq-a">Sì. Il nome "Anime Salve" compare solo come testo nell'interfaccia — puoi cambiarlo modificando <code>data/state.json</code> dopo il primo avvio, oppure lasciarlo così: non ha nessun effetto sul funzionamento.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Ambienti separati.</strong> <code>node_modules/</code>, <code>.env</code> e i contenuti di <code>data/</code> e <code>storage/</code> sono esclusi da git. Ogni macchina (il tuo computer, e poi eventualmente il Raspberry Pi) fa il proprio <code>npm install</code> e ha il proprio <code>.env</code>: le due installazioni restano indipendenti pur condividendo lo stesso codice sorgente — aggiornare il codice su una non tocca mai i dati salvati sull'altra.</p>
+  </footer>
+
+</div>
