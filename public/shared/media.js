@@ -470,6 +470,42 @@ function aoeOutlinePoints(aoe, grid, naturalW, naturalH) {
   });
 }
 
+// Marker "+" sul punto d'origine: solo per Sfera e Cubo, le uniche due forme
+// centrate sulla propria origine (vedi aoeShapePointsPx) -- per Cono e Linea
+// l'origine è un vertice/bordo della sagoma, non il suo centro, quindi un
+// mirino lì non avrebbe lo stesso significato. Condiviso da /control e
+// /display: entrambi mostrano lo stesso aiuto visivo per individuare il
+// centro esatto (un vertice di griglia o un centro-cella, a seconda dello
+// snap). `strokeWidth` è passato dal chiamante (non fisso) perché /control
+// lo compensa in base allo zoom locale del DM, /display no.
+function appendAoeOriginMarker(svgEl, aoe, strokeColor, strokeWidth, naturalW, naturalH) {
+  if (aoe.shape !== 'sphere' && aoe.shape !== 'cube') return;
+  const markerPx = 10;
+  const dxPct = (markerPx / naturalW) * 100;
+  const dyPct = (markerPx / naturalH) * 100;
+  const marker = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  marker.setAttribute('class', 'aoe-origin-marker');
+  marker.setAttribute('pointer-events', 'none');
+  const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  hLine.setAttribute('x1', aoe.x - dxPct);
+  hLine.setAttribute('y1', aoe.y);
+  hLine.setAttribute('x2', aoe.x + dxPct);
+  hLine.setAttribute('y2', aoe.y);
+  const vLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  vLine.setAttribute('x1', aoe.x);
+  vLine.setAttribute('y1', aoe.y - dyPct);
+  vLine.setAttribute('x2', aoe.x);
+  vLine.setAttribute('y2', aoe.y + dyPct);
+  [hLine, vLine].forEach((line) => {
+    line.setAttribute('stroke', strokeColor);
+    line.setAttribute('stroke-width', strokeWidth);
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+  });
+  marker.appendChild(hLine);
+  marker.appendChild(vLine);
+  svgEl.appendChild(marker);
+}
+
 // Test punto-in-poligono per ray casting (pari/dispari). `point` e `polygon`
 // devono essere nello stesso spazio a scala uniforme (pixel reali, mai
 // percentuale grezza su un'immagine non quadrata).

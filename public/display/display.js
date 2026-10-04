@@ -321,13 +321,21 @@ function renderAoe(aoes, grid, naturalW, naturalH) {
     // mai a trascinare nulla -- si può saltarne il disegno del tutto invece di
     // renderlo solo invisibile.
     if (aoe.shapeVisible === false) return;
+    const darkColor = aoeColorDarkHex(aoe.color);
     const points = aoeOutlinePoints(aoe, grid, naturalW, naturalH);
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     poly.setAttribute('points', points.map(([x, y]) => `${x},${y}`).join(' '));
     poly.setAttribute('class', 'aoe-shape-overlay');
     poly.setAttribute('fill', 'none');
-    poly.setAttribute('stroke', aoeColorDarkHex(aoe.color));
+    poly.setAttribute('stroke', darkColor);
     mapAoeSvg.appendChild(poly);
+
+    // Marker "+" sul punto d'origine (Sfera e Cubo): stesso aiuto visivo di
+    // /control (vedi appendAoeOriginMarker in shared/media.js), qui senza
+    // compensazione per lo zoom -- /display non ha una modalità "Zoom
+    // locale" (quella è solo del DM su /control), quindi lo stroke-width
+    // resta fisso.
+    appendAoeOriginMarker(mapAoeSvg, aoe, darkColor, 1.5, naturalW, naturalH);
   });
 }
 

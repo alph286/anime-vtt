@@ -5,6 +5,33 @@ let currentImageRect = null;
 let socketConnected = false;
 let displayConnected = false;
 
+// Opacità e visibilità della griglia nella SOLA anteprima del DM: non sono
+// dati di gioco (non vanno a `location.map.grid`, non si sincronizzano con
+// i giocatori), ma preferenze del dispositivo -- stesso pattern già usato
+// per la posizione del pad AOE (vedi AOE_NUDGE_POS_KEY più sotto).
+const DM_GRID_OPACITY_KEY = 'dmGridOpacity';
+const DM_GRID_VISIBLE_KEY = 'dmGridVisible';
+
+function loadDmGridOpacity() {
+  try {
+    const raw = localStorage.getItem(DM_GRID_OPACITY_KEY);
+    const n = raw === null ? NaN : Number(raw);
+    if (Number.isFinite(n)) return Math.min(1, Math.max(0, n));
+  } catch (err) { /* localStorage non disponibile o valore corrotto: resta sul default */ }
+  return 1;
+}
+
+function loadDmGridVisible() {
+  try {
+    const raw = localStorage.getItem(DM_GRID_VISIBLE_KEY);
+    if (raw !== null) return raw === 'true';
+  } catch (err) { /* localStorage non disponibile: resta sul default */ }
+  return true;
+}
+
+let dmGridOpacity = loadDmGridOpacity();
+let dmGridVisible = loadDmGridVisible();
+
 const locationSelect = document.getElementById('location-select');
 const previewBanner = document.getElementById('preview-banner');
 const previewBannerName = document.getElementById('preview-banner-name');
@@ -19,9 +46,13 @@ const mapVideo = document.getElementById('map-video');
 let activeMapEl = mapImg;
 const mapPlaceholder = document.getElementById('map-placeholder');
 const mapFogLayer = document.getElementById('map-fog-layer');
+const fogSection = document.getElementById('fog-section');
 const fogOpacityOutBtn = document.getElementById('fog-opacity-out');
 const fogOpacityInBtn = document.getElementById('fog-opacity-in');
 const fogOpacityLevel = document.getElementById('fog-opacity-level');
+const fogProgressRow = document.getElementById('fog-progress-row');
+const fogProgressFraction = document.getElementById('fog-progress-fraction');
+const fogProgressFill = document.getElementById('fog-progress-fill');
 const FOG_OPACITY_STEP = 0.1;
 const fowList = document.getElementById('fow-list');
 const imagesList = document.getElementById('images-list');
@@ -34,7 +65,17 @@ const imageSendBtn = document.getElementById('image-send-btn');
 const imageHideBtn = document.getElementById('image-hide-btn');
 const imageSendFeedback = document.getElementById('image-send-feedback');
 const panZoomSection = document.getElementById('pan-zoom-section');
-const gridOpacityRow = document.getElementById('grid-opacity-row');
+const gridOpacityDmRow = document.getElementById('grid-opacity-dm-row');
+const gridOpacityDmOutBtn = document.getElementById('grid-opacity-dm-out');
+const gridOpacityDmInBtn = document.getElementById('grid-opacity-dm-in');
+const gridOpacityDmLevel = document.getElementById('grid-opacity-dm-level');
+const gridOpacityPlayersRow = document.getElementById('grid-opacity-players-row');
+const gridOpacityPlayersOutBtn = document.getElementById('grid-opacity-players-out');
+const gridOpacityPlayersInBtn = document.getElementById('grid-opacity-players-in');
+const gridOpacityPlayersLevel = document.getElementById('grid-opacity-players-level');
+const gridDmVisibleRow = document.getElementById('grid-dm-visible-row');
+const gridDmVisibleToggle = document.getElementById('grid-dm-visible-toggle');
+const gridDmVisibleIcon = document.getElementById('grid-dm-visible-icon');
 const compassSection = document.getElementById('compass-section');
 const compassToggle = document.getElementById('compass-toggle');
 const compassNudgeUp = document.getElementById('compass-nudge-up');
@@ -43,9 +84,6 @@ const compassNudgeLeft = document.getElementById('compass-nudge-left');
 const compassNudgeRight = document.getElementById('compass-nudge-right');
 const compassRotateBtn = document.getElementById('compass-rotate');
 const COMPASS_NUDGE_STEP = 2;
-const gridOpacityOutBtn = document.getElementById('grid-opacity-out');
-const gridOpacityInBtn = document.getElementById('grid-opacity-in');
-const gridOpacityLevel = document.getElementById('grid-opacity-level');
 const GRID_OPACITY_STEP = 0.1;
 const audioSection = document.getElementById('audio-section');
 const audioSpecialRow = document.getElementById('audio-special-row');
@@ -64,12 +102,15 @@ const zoomInBtn = document.getElementById('zoom-in');
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 0.2;
+const zoomSection = document.getElementById('zoom-section');
+const zoomToPlayersBtn = document.getElementById('zoom-to-players-btn');
 const wifiDot = document.getElementById('wifi-dot');
 const showingBanner = document.getElementById('showing-banner');
 const showingBannerName = document.getElementById('showing-banner-name');
 const fowHideAllBtn = document.getElementById('fow-hide-all');
 const fowRevealAllBtn = document.getElementById('fow-reveal-all');
 const viewportRect = document.getElementById('viewport-rect');
+const mapCompassMarker = document.getElementById('map-compass-marker');
 const panModeToggle = document.getElementById('pan-mode-toggle');
 const fogModeToggle = document.getElementById('fog-mode-toggle');
 const pingModeToggle = document.getElementById('ping-mode-toggle');
@@ -534,17 +575,10 @@ function render() {
 
   renderImageDetail(getPreviewImage(location));
 
-  const hidePanZoomForImage = showingImage && !isPreviewing;
-  panZoomSection.style.display = hidePanZoomForImage ? 'none' : 'block';
-
-  const gridEnabled = Boolean(previewLocation && previewLocation.map.grid && previewLocation.map.grid.enabled) && !hidePanZoomForImage;
-  gridOpacityRow.hidden = !gridEnabled;
-  if (gridEnabled) {
-    gridOpacityLevel.textContent = `${Math.round((previewLocation.map.grid.opacity === undefined ? 1 : previewLocation.map.grid.opacity) * 100)}%`;
-  }
-
-  compassSection.style.display = hidePanZoomForImage ? 'none' : 'block';
-  compassToggle.classList.toggle('active', Boolean(previewLocation && previewLocation.map.compass && previewLocation.map.compass.visible));
+  renderPanSection();
+  renderFogSection();
+  renderPingSection();
+  renderZoomSection();
 
   // A differenza delle sezioni sopra, l'audio riflette sempre la location
   // ATTIVA (`location`, non `previewLocation`): i comandi non hanno un
@@ -566,6 +600,7 @@ function render() {
   }
 
   updateViewportRect(previewLocation);
+  renderMapCompassMarker(previewLocation);
   kickShaderLoop();
 }
 
@@ -658,9 +693,29 @@ const AOE_CELL_FILL_OPACITY = 0.35;
 // trasparenza (fill-opacity); il contorno usa la stessa palette ma nella
 // versione scura, solo come linea (fill:none) -- i due restano
 // distinguibili senza bisogno di animarli.
+// Stessi 4 argomenti ricordati come currentGrid/NW/NH per la griglia: serve
+// per poterla ridisegnare da applyLocalZoom() con la compensazione zoom
+// aggiornata ad ogni frame di zoom/pinch, non solo al render successivo
+// dello stato.
+let currentAoes = [];
+let currentAoeGrid = null;
+let currentAoeNW = 0;
+let currentAoeNH = 0;
+
 function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
+  currentAoes = aoes;
+  currentAoeGrid = grid;
+  currentAoeNW = naturalW;
+  currentAoeNH = naturalH;
   mapAoeSvg.innerHTML = '';
   if (!naturalW || !naturalH) return;
+  // Stesso motivo della griglia (vedi renderGrid): vector-effect
+  // "non-scaling-stroke" protegge il tratto solo dallo scaling interno
+  // dell'SVG (viewBox), non dal transform CSS di #map-local-zoom-wrap --
+  // senza questa compensazione, zoomare con la modalità "Zoom locale"
+  // (scale 1→5) farebbe apparire il contorno (e il mirino "+") sempre più
+  // spesso. Dividere per lo scale qui annulla esattamente quell'effetto.
+  const zoomComp = Math.max(localZoom.scale, 0.01);
   aoes.forEach((aoe) => {
     const color = aoeColorHex(aoe.color);
     const darkColor = aoeColorDarkHex(aoe.color);
@@ -689,39 +744,18 @@ function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
     const shapeVisible = aoe.shapeVisible !== false;
     poly.setAttribute('fill', 'none');
     poly.setAttribute('stroke', shapeVisible ? darkColor : 'none');
+    // Sovrascrive lo stroke-width da CSS (2, o 3 se .selected): qui serve
+    // un valore calcolato a runtime, non ricavabile da una regola statica.
+    poly.style.strokeWidth = (aoe.id === selectedAoeId ? 3 : 2) / zoomComp;
     poly.dataset.id = aoe.id;
     mapAoeSvg.appendChild(poly);
 
-    // Marker "+" sul punto d'origine della Sfera: solo su /control, mai su
-    // /display -- è un aiuto al DM per vedere esattamente dove cade il
-    // centro (ora sempre un vertice di griglia), non qualcosa che i
-    // giocatori devono vedere. Segue la stessa visibilità del contorno.
-    if (aoe.shape === 'sphere') {
-      const markerPx = 10;
-      const dxPct = (markerPx / naturalW) * 100;
-      const dyPct = (markerPx / naturalH) * 100;
-      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      marker.setAttribute('class', 'aoe-origin-marker');
-      marker.setAttribute('pointer-events', 'none');
-      const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      hLine.setAttribute('x1', aoe.x - dxPct);
-      hLine.setAttribute('y1', aoe.y);
-      hLine.setAttribute('x2', aoe.x + dxPct);
-      hLine.setAttribute('y2', aoe.y);
-      const vLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      vLine.setAttribute('x1', aoe.x);
-      vLine.setAttribute('y1', aoe.y - dyPct);
-      vLine.setAttribute('x2', aoe.x);
-      vLine.setAttribute('y2', aoe.y + dyPct);
-      [hLine, vLine].forEach((line) => {
-        line.setAttribute('stroke', shapeVisible ? darkColor : 'none');
-        line.setAttribute('stroke-width', 1.5);
-        line.setAttribute('vector-effect', 'non-scaling-stroke');
-      });
-      marker.appendChild(hLine);
-      marker.appendChild(vLine);
-      mapAoeSvg.appendChild(marker);
-    }
+    // Marker "+" sul punto d'origine (Sfera e Cubo, vedi
+    // appendAoeOriginMarker): anche questo su /control, visibile pure su
+    // /display (chiamata gemella in display.js, senza compensazione zoom
+    // perché lì non esiste zoom locale). Segue la stessa visibilità del
+    // contorno.
+    appendAoeOriginMarker(mapAoeSvg, aoe, shapeVisible ? darkColor : 'none', 1.5 / zoomComp, naturalW, naturalH);
   });
 }
 
@@ -812,7 +846,106 @@ function renderGrid(grid, naturalW, naturalH) {
     mapGridSvg.innerHTML = '';
     return;
   }
-  renderGridSvg(mapGridSvg, { ...grid, lineWidth: (grid.lineWidth || 0.3) / Math.max(localZoom.scale, 0.01) }, naturalW, naturalH);
+  // La griglia sulla PROPRIA anteprima del DM usa opacità/visibilità locali
+  // (dmGridOpacity/dmGridVisible), non quelle condivise coi giocatori: lo
+  // stesso dato grid.enabled/opacity che arriva dal server resta intatto per
+  // renderGridSvg su display.js.
+  renderGridSvg(
+    mapGridSvg,
+    {
+      ...grid,
+      lineWidth: (grid.lineWidth || 0.3) / Math.max(localZoom.scale, 0.01),
+      enabled: grid.enabled && dmGridVisible,
+      opacity: dmGridOpacity
+    },
+    naturalW,
+    naturalH
+  );
+}
+
+// Visibilità del box "Controlli" (pad di movimento + opacità griglia
+// DM/giocatori + toggle griglia solo-DM): appare SOLO in modalità pan,
+// sparisce nelle altre modalità e quando si sta mostrando un'immagine al
+// posto della mappa. Richiamata sia da render() (su ogni stato dal server)
+// sia da setMode() (il cambio di modalità è puramente locale, non passa da
+// un round-trip col server).
+function renderPanSection() {
+  const previewLocation = getPreviewLocation();
+  const showingImage = Boolean(state && state.activeImageId);
+  const isPreviewing = Boolean(state) && previewLocationId !== state.activeLocationId;
+  const hidePanZoomForImage = showingImage && !isPreviewing;
+  const showPanSection = currentMode === 'pan' && !hidePanZoomForImage;
+  panZoomSection.style.display = showPanSection ? 'block' : 'none';
+
+  const gridEnabled = showPanSection && Boolean(previewLocation && previewLocation.map.grid && previewLocation.map.grid.enabled);
+  gridOpacityPlayersRow.hidden = !gridEnabled;
+  gridOpacityDmRow.hidden = !gridEnabled;
+  gridDmVisibleRow.hidden = !gridEnabled;
+  if (gridEnabled) {
+    gridOpacityPlayersLevel.textContent = `${Math.round((previewLocation.map.grid.opacity === undefined ? 1 : previewLocation.map.grid.opacity) * 100)}%`;
+    gridOpacityDmLevel.textContent = `${Math.round(dmGridOpacity * 100)}%`;
+    gridDmVisibleToggle.classList.toggle('active', dmGridVisible);
+    gridDmVisibleIcon.setAttribute('href', dmGridVisible ? '#i-eye' : '#i-eye-off');
+  }
+}
+
+// Visibilità del box "Fog of war" (opacità fog locale al DM + percentuale
+// zone rivelate sulla location corrente): appare SOLO in modalità fog,
+// stesso motivo/pattern di renderPanSection(). La percentuale si aggiorna
+// da qualunque punto arrivi un reveal/hide (tab "Fog", bulk nascondi/rivela
+// tutto), perché legge sempre `previewLocation.map.polygons` fresco.
+function renderFogSection() {
+  const previewLocation = getPreviewLocation();
+  const showFogSection = currentMode === 'fog';
+  fogSection.style.display = showFogSection ? 'block' : 'none';
+
+  const polygons = (previewLocation && previewLocation.map.polygons) || [];
+  const total = polygons.length;
+  const revealed = polygons.filter((p) => p.revealed).length;
+  fogProgressRow.hidden = !showFogSection || total === 0;
+  if (total > 0) {
+    fogProgressFraction.textContent = `${revealed}/${total}`;
+    fogProgressFill.style.transform = `scaleX(${revealed / total})`;
+  }
+}
+
+// Visibilità del box "Rosa dei venti" (toggle visibile/nascosta + pad di
+// nudge/rotazione): appare SOLO in modalità ping, stesso motivo/pattern di
+// renderPanSection()/renderFogSection(). A differenza del pulsante "pan"
+// (vedi bug risolto sopra), pingModeToggle si disabilita/forza l'uscita per
+// condizioni transitorie e recuperabili (anteprima di un'altra location,
+// immagine mostrata, nessuna location attiva) non per un dato che potrebbe
+// non arrivare mai: gating puro su currentMode è quindi sicuro, non rischia
+// di restare bloccato per sempre.
+function renderPingSection() {
+  const previewLocation = getPreviewLocation();
+  const showPingSection = currentMode === 'ping';
+  compassSection.style.display = showPingSection ? 'block' : 'none';
+  compassToggle.classList.toggle('active', Boolean(previewLocation && previewLocation.map.compass && previewLocation.map.compass.visible));
+}
+
+// Visibilità del box "Zoom locale" (pulsante "Zooma sull'area dei PG"):
+// appare SOLO in modalità zoom, stesso pattern di renderPanSection()/
+// renderFogSection()/renderPingSection(). Lo zoom non è più automatico
+// all'ingresso in modalità (vedi setMode): qui si offre solo il comando per
+// farlo scattare a richiesta.
+function renderZoomSection() {
+  zoomSection.style.display = currentMode === 'zoom' ? 'block' : 'none';
+}
+
+// Il transform dello zoom locale restaurato da localStorage va applicato
+// una sola volta, non appena mapPreview ha dimensioni reali (clientWidth/
+// Height a 0 prima del primo layout renderebbero inutile il clamp) --
+// richiamata dalla fine di entrambi i rami di renderMapPreview, che è
+// l'unico punto chiamato sia al caricamento iniziale sia ad ogni resize/
+// cambio location successivo (dove non deve più fare nulla, da qui il
+// guard).
+let localZoomRestored = false;
+function applyRestoredLocalZoomOnce() {
+  if (localZoomRestored) return;
+  localZoomRestored = true;
+  clampLocalZoomPan();
+  applyLocalZoom();
 }
 
 function renderMapPreview(location) {
@@ -841,6 +974,7 @@ function renderMapPreview(location) {
       renderAoeOverlays((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
       shaderLayer.render((location && location.map.shaders) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
       updateViewportRect(location);
+      applyRestoredLocalZoomOnce();
     });
   } else {
     mapImg.hidden = true;
@@ -865,6 +999,7 @@ function renderMapPreview(location) {
     renderAoeOverlays((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     shaderLayer.render((location && location.map.shaders) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     updateViewportRect(location);
+    applyRestoredLocalZoomOnce();
   }
 }
 
@@ -1145,15 +1280,31 @@ function stepZoom(delta) {
 zoomOutBtn.addEventListener('click', () => stepZoom(-ZOOM_STEP));
 zoomInBtn.addEventListener('click', () => stepZoom(ZOOM_STEP));
 
-function stepGridOpacity(delta) {
+function stepGridOpacityPlayers(delta) {
   const location = getPreviewLocation();
   if (!location || !location.map.grid) return;
   const current = location.map.grid.opacity === undefined ? 1 : location.map.grid.opacity;
   const next = Math.min(1, Math.max(0, Math.round((current + delta) * 10) / 10));
   socket.emit('grid:update', { locationId: previewLocationId, opacity: next });
 }
-gridOpacityOutBtn.addEventListener('click', () => stepGridOpacity(-GRID_OPACITY_STEP));
-gridOpacityInBtn.addEventListener('click', () => stepGridOpacity(GRID_OPACITY_STEP));
+gridOpacityPlayersOutBtn.addEventListener('click', () => stepGridOpacityPlayers(-GRID_OPACITY_STEP));
+gridOpacityPlayersInBtn.addEventListener('click', () => stepGridOpacityPlayers(GRID_OPACITY_STEP));
+
+function stepGridOpacityDm(delta) {
+  dmGridOpacity = Math.min(1, Math.max(0, Math.round((dmGridOpacity + delta) * 10) / 10));
+  try { localStorage.setItem(DM_GRID_OPACITY_KEY, String(dmGridOpacity)); } catch (err) { /* localStorage non disponibile: resta solo per questa sessione */ }
+  if (currentGrid) renderGrid(currentGrid, currentGridNW, currentGridNH);
+  renderPanSection();
+}
+gridOpacityDmOutBtn.addEventListener('click', () => stepGridOpacityDm(-GRID_OPACITY_STEP));
+gridOpacityDmInBtn.addEventListener('click', () => stepGridOpacityDm(GRID_OPACITY_STEP));
+
+gridDmVisibleToggle.addEventListener('click', () => {
+  dmGridVisible = !dmGridVisible;
+  try { localStorage.setItem(DM_GRID_VISIBLE_KEY, String(dmGridVisible)); } catch (err) { /* localStorage non disponibile: resta solo per questa sessione */ }
+  if (currentGrid) renderGrid(currentGrid, currentGridNW, currentGridNH);
+  renderPanSection();
+});
 
 document.getElementById('view-reset').addEventListener('click', () => socket.emit('view:reset', { locationId: previewLocationId }));
 
@@ -1281,12 +1432,22 @@ function computeViewportScreenRect(location) {
   };
 }
 
+// Il riquadro giallo (e il trascinamento diretto sulla mappa, vedi
+// pointermove più sotto) hanno bisogno di `state.displayViewport`, noto
+// solo dopo che un /display si è connesso almeno una volta. Quando manca,
+// qui si nasconde solo il riquadro -- NON si disabilita più il pulsante
+// "pan" né si forza l'uscita dalla modalità: il resto del box "Controlli"
+// (pad, opacità griglia, toggle griglia-DM) non dipende da displayViewport
+// e deve restare raggiungibile anche senza un display connesso (prima del
+// box mode-gated introdotto per il punto 1, questo non si notava perché il
+// box era sempre visibile indipendentemente dal pulsante).
+// Ha senso solo in modalità pan (è il riferimento per il trascinamento):
+// nelle altre modalità -- mai in zoom, dove confonderebbe con l'inquadratura
+// locale del DM -- resta nascosto a prescindere dai dati disponibili.
 function updateViewportRect(location) {
-  const rect = computeViewportScreenRect(location);
+  const rect = currentMode === 'pan' ? computeViewportScreenRect(location) : null;
   if (!rect) {
     viewportRect.hidden = true;
-    panModeToggle.disabled = true;
-    if (currentMode === 'pan') setMode(null);
     return;
   }
 
@@ -1295,8 +1456,34 @@ function updateViewportRect(location) {
   viewportRect.style.top = `${rect.top}px`;
   viewportRect.style.width = `${rect.width}px`;
   viewportRect.style.height = `${rect.height}px`;
+}
 
-  panModeToggle.disabled = false;
+// Bussola sulla PROPRIA anteprima del DM: in ogni modalità tranne pan
+// rispecchia esattamente la posizione vista dai giocatori su /display
+// (stessa coppia x%/y% di `compass`, applicata allo stesso tipo di
+// contenitore "a schermo intero" che usa display.js per il proprio
+// #compass — non lo spazio locale della mappa, quindi resta stabile anche
+// con zoom locale del DM). In pan mode si fissa invece in basso a destra,
+// fuori dai piedi del riquadro giallo che lì è il riferimento principale:
+// ruota comunque con compass.rotation, solo la posizione è fissa.
+function renderMapCompassMarker(location) {
+  const compass = location && location.map.compass;
+  const showingImage = Boolean(state && state.activeImageId);
+  const visible = Boolean(compass && compass.visible) && !showingImage;
+  mapCompassMarker.hidden = !visible;
+  if (!visible) return;
+
+  const pinned = currentMode === 'pan';
+  mapCompassMarker.classList.toggle('pinned', pinned);
+  if (pinned) {
+    mapCompassMarker.style.left = '';
+    mapCompassMarker.style.top = '';
+    mapCompassMarker.style.transform = `rotate(${compass.rotation}deg)`;
+  } else {
+    mapCompassMarker.style.left = `${compass.x}%`;
+    mapCompassMarker.style.top = `${compass.y}%`;
+    mapCompassMarker.style.transform = `translate(-50%, -50%) rotate(${compass.rotation}deg)`;
+  }
 }
 
 let currentMode = null; // null | 'pan' | 'fog' | 'ping' | 'zoom' | 'aoe'
@@ -1310,10 +1497,13 @@ const MODE_BUTTONS = { pan: panModeToggle, fog: fogModeToggle, ping: pingModeTog
 // fa nulla).
 function setMode(mode) {
   if (mode && MODE_BUTTONS[mode].disabled) mode = null;
-  // Solo quando si ENTRA in zoom da un'altra modalità (non ad ogni
-  // render/pinch successivo): riaprirla deve sempre ripartire da dove sono
-  // ora i giocatori, non dall'ultimo zoom/pan locale lasciato in giro.
-  const enteringZoom = mode === 'zoom' && currentMode !== 'zoom';
+  // Solo quando si ENTRA in pan da un'altra modalità (non ad ogni
+  // render/drag successivo): il riquadro giallo ha senso solo sulla mappa
+  // intera, quindi uno zoom locale lasciato acceso da prima va azzerato
+  // (lo zoom locale non è mai persistito su reset programmatici come
+  // questo, solo sulle modifiche esplicite dell'utente -- vedi
+  // saveLocalZoomState).
+  const enteringPan = mode === 'pan' && currentMode !== 'pan';
   currentMode = currentMode === mode ? null : mode;
   Object.entries(MODE_BUTTONS).forEach(([m, btn]) => btn.classList.toggle('active', currentMode === m));
   mapPreview.classList.toggle('mode-pan', currentMode === 'pan');
@@ -1321,8 +1511,14 @@ function setMode(mode) {
   mapPreview.classList.toggle('mode-ping', currentMode === 'ping');
   mapPreview.classList.toggle('mode-zoom', currentMode === 'zoom');
   mapPreview.classList.toggle('mode-aoe', currentMode === 'aoe');
-  if (enteringZoom && currentMode === 'zoom') zoomLocalToViewport();
+  if (enteringPan && currentMode === 'pan') resetLocalZoom();
   renderAoePanel();
+  renderPanSection();
+  renderFogSection();
+  renderPingSection();
+  renderZoomSection();
+  updateViewportRect(getPreviewLocation());
+  renderMapCompassMarker(getPreviewLocation());
 }
 
 Object.entries(MODE_BUTTONS).forEach(([mode, btn]) => {
@@ -1390,7 +1586,36 @@ mapPreview.addEventListener('pointercancel', () => { panDrag = null; });
 // viewport-rect/pan-mode, che restano nello spazio "non zoomato".
 const ZOOM_LOCAL_MIN = 1;
 const ZOOM_LOCAL_MAX = 5;
-let localZoom = { scale: 1, x: 0, y: 0 };
+
+// Stato e posizione dello zoom locale sopravvivono a un reload (stesso
+// pattern/motivo di AOE_NUDGE_POS_KEY: preferenza del dispositivo, non dato
+// di gioco). Si salva solo quando l'utente lo cambia esplicitamente
+// (trascinamento, pinch, rotellina, pulsante "Zooma sull'area dei PG"):
+// un reset programmatico (cambio location, ingresso in pan) NON tocca lo
+// storage, così lo zoom scelto resta lì ad attenderlo al prossimo ingresso
+// in modalità zoom.
+const ZOOM_LOCAL_STATE_KEY = 'zoomLocalState';
+
+function loadLocalZoomState() {
+  try {
+    const raw = localStorage.getItem(ZOOM_LOCAL_STATE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Number.isFinite(parsed.scale) && Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
+        return { scale: Math.min(ZOOM_LOCAL_MAX, Math.max(ZOOM_LOCAL_MIN, parsed.scale)), x: parsed.x, y: parsed.y };
+      }
+    }
+  } catch (err) { /* localStorage non disponibile o valore corrotto: resta sul default */ }
+  return { scale: 1, x: 0, y: 0 };
+}
+
+function saveLocalZoomState() {
+  try {
+    localStorage.setItem(ZOOM_LOCAL_STATE_KEY, JSON.stringify(localZoom));
+  } catch (err) { /* localStorage non disponibile: lo zoom vale solo per questa sessione */ }
+}
+
+let localZoom = loadLocalZoomState();
 const localZoomPointers = new Map();
 let localZoomPinchStartDist = null;
 let localZoomPinchStartScale = 1;
@@ -1401,10 +1626,12 @@ function applyLocalZoom() {
     localZoom.scale === 1 && !localZoom.x && !localZoom.y
       ? ''
       : `translate(${localZoom.x}px, ${localZoom.y}px) scale(${localZoom.scale})`;
-  // Il transform sopra scala anche lo spessore della griglia: ridisegnarla
-  // con lineWidth ricompensato mantiene lo spessore scelto costante mentre
-  // si zooma, non solo al render successivo dello stato.
+  // Il transform sopra scala anche lo spessore della griglia e del
+  // contorno AOE: ridisegnarli con lo spessore ricompensato mantiene lo
+  // spessore scelto costante mentre si zooma, non solo al render successivo
+  // dello stato.
   if (currentGrid) renderGrid(currentGrid, currentGridNW, currentGridNH);
+  if (currentAoeNW) renderAoeOverlays(currentAoes, currentAoeGrid, currentAoeNW, currentAoeNH);
 }
 
 // Non lascia che il contenuto ingrandito scivoli così lontano da uscire
@@ -1427,12 +1654,13 @@ function resetLocalZoom() {
 
 // Centra lo zoom locale esattamente sull'area che la TV sta mostrando ora
 // (stesso rettangolo di updateViewportRect, prima che lo zoom lo sposti) --
-// chiamata ogni volta che si ENTRA in modalità zoom (vedi setMode), mai
-// durante lo zoom/pan successivo che resta libero come oggi. "Contain", non
-// "cover": l'intera area vista dai giocatori deve restare visibile, anche
-// a costo di un bordo vuoto su un lato se le proporzioni non combaciano
-// esattamente -- coprire tutto il riquadro locale potrebbe tagliarne fuori
-// un pezzo.
+// non più automatica all'ingresso in modalità zoom (lo era in una sessione
+// precedente: vedi il box "Zoom locale"/renderZoomSection), solo a comando
+// dal pulsante "Zooma sull'area dei PG", ripetibile a piacere. "Contain",
+// non "cover": l'intera area vista dai giocatori deve restare visibile,
+// anche a costo di un bordo vuoto su un lato se le proporzioni non
+// combaciano esattamente -- coprire tutto il riquadro locale potrebbe
+// tagliarne fuori un pezzo.
 function zoomLocalToViewport() {
   const rect = computeViewportScreenRect(getPreviewLocation());
   const viewportW = mapPreview.clientWidth;
@@ -1509,6 +1737,7 @@ function endLocalZoomPointer(e) {
   } else if (localZoomPointers.size === 0) {
     localZoomDragLast = null;
     mapPreview.classList.remove('zoom-dragging');
+    saveLocalZoomState();
   }
 }
 
@@ -1529,7 +1758,16 @@ mapPreview.addEventListener('wheel', (e) => {
   localZoom.scale = Math.min(ZOOM_LOCAL_MAX, Math.max(ZOOM_LOCAL_MIN, Math.round((localZoom.scale + delta) * 10) / 10));
   clampLocalZoomPan();
   applyLocalZoom();
+  saveLocalZoomState();
 }, { passive: false });
+
+// Pulsante del box "Zoom locale" (sotto la mappa, solo in modalità zoom):
+// sostituisce il vecchio centraggio automatico all'ingresso in modalità
+// (rimosso da setMode) con un comando esplicito, ripetibile a piacere.
+zoomToPlayersBtn.addEventListener('click', () => {
+  zoomLocalToViewport();
+  saveLocalZoomState();
+});
 
 compassToggle.addEventListener('click', () => {
   const previewLocation = getPreviewLocation();

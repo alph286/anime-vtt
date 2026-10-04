@@ -65,6 +65,15 @@
         ],
         "createdAt": "2026-09-25T17:43:23.727Z",
         "reason": "Claude: .ping-marker pulse (public/display/display.css) fires only on a live 'ping:show' event from the DM's control page, a real transient occurrence, not a decorative fake-liveness indicator — matches the rule's own stated exception for genuinely live, changing data."
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "public/control/index.html"
+        ],
+        "createdAt": "2026-10-04T13:45:45.049Z",
+        "reason": "SVG compass-rose glyph coords (N/S/E/O at viewBox edges) copied verbatim from the already-shipped public/display/index.html #compass icon; decorative rose-point labels, not body text in a padded container"
       }
     ]
   }

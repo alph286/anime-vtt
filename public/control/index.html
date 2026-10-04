@@ -48,7 +48,7 @@
 
     <div class="tab-panel" data-tab="mappa">
       <div id="map-mode-toggles">
-        <button id="pan-mode-toggle" class="icon-btn map-mode-btn" title="Sposta inquadratura trascinando" disabled>
+        <button id="pan-mode-toggle" class="icon-btn map-mode-btn" title="Sposta inquadratura trascinando">
           <svg class="icon"><use href="#i-move"></use></svg>
         </button>
         <button id="fog-mode-toggle" class="icon-btn map-mode-btn" title="Rivela/nascondi fog toccando la mappa">
@@ -64,6 +64,127 @@
           <svg class="icon"><use href="#i-aoe"></use></svg>
         </button>
       </div>
+      <div id="map-column">
+        <div id="map-preview" class="map-preview">
+          <div id="map-local-zoom-wrap">
+            <div class="media-wrap" id="map-media-wrap">
+              <div class="fit-box" id="map-fit-box">
+                <img id="map-img" class="media-img" draggable="false" hidden>
+                <video id="map-video" class="media-img" muted loop playsinline disablepictureinpicture hidden></video>
+                <div class="map-placeholder" id="map-placeholder" hidden></div>
+                <canvas id="map-shader-canvas" class="shader-layer"></canvas>
+                <div class="fog-layer" id="map-fog-layer"></div>
+                <svg id="map-grid-svg" class="grid-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+                <svg id="map-aoe-svg" class="aoe-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+              </div>
+            </div>
+          </div>
+          <div id="viewport-rect" hidden></div>
+          <div id="map-compass-marker" class="map-compass-marker" hidden>
+            <svg viewBox="0 0 120 120">
+              <path class="compass-star" d="M60,12 L74,46 L108,60 L74,74 L60,108 L46,74 L12,60 L46,46 Z"/>
+              <circle class="compass-hub" cx="60" cy="60" r="7"/>
+              <text x="60" y="10" text-anchor="middle">N</text>
+              <text x="60" y="118" text-anchor="middle">S</text>
+              <text x="114" y="64" text-anchor="middle">E</text>
+              <text x="6" y="64" text-anchor="middle">O</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <section id="pan-zoom-section" class="control-section">
+        <h2>Controlli</h2>
+        <div class="pan-zoom">
+          <div class="pad">
+            <span></span>
+            <button data-pan="0,1">▲</button>
+            <span></span>
+            <button data-pan="1,0">◀</button>
+            <span></span>
+            <button data-pan="-1,0">▶</button>
+            <span></span>
+            <button data-pan="0,-1">▼</button>
+            <span></span>
+          </div>
+          <div class="zoom-controls">
+            <button id="zoom-in" title="Aumenta zoom">+</button>
+            <button id="zoom-out" title="Riduci zoom">−</button>
+            <button id="view-reset" title="Reset vista">⟳</button>
+          </div>
+        </div>
+        <div id="grid-opacity-dm-row" class="opacity-row" hidden>
+          <span>Griglia (tu)</span>
+          <div class="zoom">
+            <button id="grid-opacity-dm-out" title="Riduci opacità griglia (solo per te)">−</button>
+            <span id="grid-opacity-dm-level">100%</span>
+            <button id="grid-opacity-dm-in" title="Aumenta opacità griglia (solo per te)">+</button>
+          </div>
+        </div>
+        <div id="grid-opacity-players-row" class="opacity-row" hidden>
+          <span>Griglia (giocatori)</span>
+          <div class="zoom">
+            <button id="grid-opacity-players-out" title="Riduci opacità griglia">−</button>
+            <span id="grid-opacity-players-level">100%</span>
+            <button id="grid-opacity-players-in" title="Aumenta opacità griglia">+</button>
+          </div>
+        </div>
+        <div id="grid-dm-visible-row" class="opacity-row" hidden>
+          <span>Griglia visibile solo per te</span>
+          <button id="grid-dm-visible-toggle" class="icon-btn" title="Mostra/nascondi la griglia solo nella tua vista">
+            <svg class="icon"><use id="grid-dm-visible-icon" href="#i-eye"></use></svg>
+          </button>
+        </div>
+      </section>
+
+      <section id="fog-section" class="control-section">
+        <h2>Fog of war</h2>
+        <div class="opacity-row">
+          <span>Opacità</span>
+          <div class="zoom">
+            <button id="fog-opacity-out" title="Riduci opacità fog">−</button>
+            <span id="fog-opacity-level">45%</span>
+            <button id="fog-opacity-in" title="Aumenta opacità fog">+</button>
+          </div>
+        </div>
+        <div id="fog-progress-row" class="fog-progress-row" hidden>
+          <div class="fog-progress-label">
+            <span>Rivelate</span>
+            <span id="fog-progress-fraction">0/0</span>
+          </div>
+          <div class="fog-progress-bar">
+            <div id="fog-progress-fill" class="fog-progress-fill"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="compass-section" class="control-section">
+        <h2>Rosa dei venti</h2>
+        <div class="opacity-row">
+          <span>Visibile</span>
+          <button id="compass-toggle" class="icon-btn" title="Mostra/nascondi rosa dei venti">
+            <svg class="icon"><use href="#i-compass"></use></svg>
+          </button>
+        </div>
+        <div class="pad compass-pad">
+          <span></span>
+          <button id="compass-nudge-up" title="Sposta su">▲</button>
+          <span></span>
+          <button id="compass-nudge-left" title="Sposta a sinistra">◀</button>
+          <button id="compass-rotate" title="Ruota 90°">↻</button>
+          <button id="compass-nudge-right" title="Sposta a destra">▶</button>
+          <span></span>
+          <button id="compass-nudge-down" title="Sposta giù">▼</button>
+          <span></span>
+        </div>
+      </section>
+
+      <section id="zoom-section" class="control-section">
+        <h2>Zoom locale</h2>
+        <p class="hint">Solo per te, non visibile ai giocatori.</p>
+        <button id="zoom-to-players-btn" class="primary">Zooma sull'area dei PG</button>
+      </section>
+
       <section id="aoe-panel" class="control-section" hidden>
         <p id="aoe-editing-label" class="hint" hidden></p>
         <div id="aoe-shape-bar" class="aoe-shape-bar">
@@ -100,87 +221,6 @@
           </div>
         </div>
         <div id="aoe-chip-list" class="aoe-chip-list"></div>
-      </section>
-      <div id="map-column">
-        <div id="map-preview" class="map-preview">
-          <div id="map-local-zoom-wrap">
-            <div class="media-wrap" id="map-media-wrap">
-              <div class="fit-box" id="map-fit-box">
-                <img id="map-img" class="media-img" draggable="false" hidden>
-                <video id="map-video" class="media-img" muted loop playsinline disablepictureinpicture hidden></video>
-                <div class="map-placeholder" id="map-placeholder" hidden></div>
-                <canvas id="map-shader-canvas" class="shader-layer"></canvas>
-                <div class="fog-layer" id="map-fog-layer"></div>
-                <svg id="map-grid-svg" class="grid-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
-                <svg id="map-aoe-svg" class="aoe-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
-              </div>
-            </div>
-          </div>
-          <div id="viewport-rect" hidden></div>
-        </div>
-      </div>
-
-      <section id="pan-zoom-section" class="control-section">
-        <h2>Controlli</h2>
-        <div class="pan-zoom">
-          <div class="pad">
-            <span></span>
-            <button data-pan="0,1">▲</button>
-            <span></span>
-            <button data-pan="1,0">◀</button>
-            <span></span>
-            <button data-pan="-1,0">▶</button>
-            <span></span>
-            <button data-pan="0,-1">▼</button>
-            <span></span>
-          </div>
-          <div class="zoom-controls">
-            <button id="zoom-in" title="Aumenta zoom">+</button>
-            <button id="zoom-out" title="Riduci zoom">−</button>
-            <button id="view-reset" title="Reset vista">⟳</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="opacity-section" class="control-section">
-        <h2>Opacità</h2>
-        <div id="grid-opacity-row" class="opacity-row">
-          <span>Griglia</span>
-          <div class="zoom">
-            <button id="grid-opacity-out" title="Riduci opacità griglia">−</button>
-            <span id="grid-opacity-level">100%</span>
-            <button id="grid-opacity-in" title="Aumenta opacità griglia">+</button>
-          </div>
-        </div>
-        <div class="opacity-row">
-          <span>Fog of war</span>
-          <div class="zoom">
-            <button id="fog-opacity-out" title="Riduci opacità fog">−</button>
-            <span id="fog-opacity-level">45%</span>
-            <button id="fog-opacity-in" title="Aumenta opacità fog">+</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="compass-section" class="control-section">
-        <h2>Rosa dei venti</h2>
-        <div class="opacity-row">
-          <span>Visibile</span>
-          <button id="compass-toggle" class="icon-btn" title="Mostra/nascondi rosa dei venti">
-            <svg class="icon"><use href="#i-compass"></use></svg>
-          </button>
-        </div>
-        <div class="pad compass-pad">
-          <span></span>
-          <button id="compass-nudge-up" title="Sposta su">▲</button>
-          <span></span>
-          <button id="compass-nudge-left" title="Sposta a sinistra">◀</button>
-          <button id="compass-rotate" title="Ruota 90°">↻</button>
-          <button id="compass-nudge-right" title="Sposta a destra">▶</button>
-          <span></span>
-          <button id="compass-nudge-down" title="Sposta giù">▼</button>
-          <span></span>
-        </div>
       </section>
 
       <section id="audio-section" class="control-section" hidden>

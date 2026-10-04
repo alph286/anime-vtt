@@ -308,6 +308,47 @@ h2 {
   z-index: 5;
 }
 
+/* Fuori da #map-local-zoom-wrap apposta: deve restare uno spazio-schermo
+   stabile (stessa logica di #viewport-rect), non seguire lo zoom locale del
+   DM. In modalità pan non ha senso mostrare la posizione reale (il
+   riquadro giallo è lì il riferimento), quindi .pinned la fissa in un
+   angolo fuori dai piedi, orientata ma non posizionata via left/top. */
+.map-compass-marker {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.map-compass-marker.pinned {
+  left: auto;
+  top: auto;
+  right: 10px;
+  bottom: 10px;
+}
+
+.map-compass-marker svg {
+  width: 100%;
+  height: 100%;
+}
+
+.map-compass-marker .compass-star {
+  fill: var(--accent);
+}
+
+.map-compass-marker .compass-hub {
+  fill: var(--bg-panel);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.map-compass-marker text {
+  fill: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .grid-layer {
   position: absolute;
   inset: 0;
@@ -336,9 +377,12 @@ h2 {
    elemento -- qui restano solo le proprietà comuni. Il contorno mostra la
    sagoma esatta con lo stesso colore ma più scuro (fill:none, solo stroke);
    le celle colpite mostrano il colore base in trasparenza (fill-opacity),
-   così i due restano distinguibili senza bisogno di un'animazione. */
+   così i due restano distinguibili senza bisogno di un'animazione.
+   stroke-width NON è qui: lo spessore base (2, o 3 se .selected) va
+   compensato in base allo zoom locale del DM, quindi è impostato inline da
+   renderAoeOverlays() -- un valore calcolato a runtime non è esprimibile in
+   una regola statica. */
 .aoe-shape-overlay {
-  stroke-width: 2;
   vector-effect: non-scaling-stroke;
   cursor: grab;
 }
@@ -349,10 +393,6 @@ h2 {
    "all" ignora fill/stroke e usa sempre la sola geometria per l'hit-test. */
 .map-preview.mode-aoe .aoe-shape-overlay {
   pointer-events: all;
-}
-
-.aoe-shape-overlay.selected {
-  stroke-width: 3;
 }
 
 .aoe-cell-highlight {
@@ -577,6 +617,12 @@ h2 {
   border-color: var(--accent);
 }
 
+#grid-dm-visible-toggle.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
 #audio-play-pause.active {
   background: var(--accent);
   color: var(--accent-text);
@@ -651,6 +697,39 @@ h2 {
   flex: 1;
 }
 
+.fog-progress-row {
+  margin-top: 10px;
+}
+
+.fog-progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.fog-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-control);
+  overflow: hidden;
+}
+
+/* width resta sempre 100%: il riempimento è reso dallo scaleX sul
+   transform, non dalla larghezza, così l'animazione gira sul compositor
+   invece di innescare un reflow ad ogni variazione di opacity/opacity%. */
+.fog-progress-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s ease;
+}
+
 /* Dentro una riga etichetta+controllo il controllo non deve più
    allargarsi/centrarsi nello spazio restante (comportamento di .zoom
    altrove): resta alla sua larghezza naturale, ancorato a destra da
@@ -705,7 +784,8 @@ h2 {
   margin: 12px auto 0;
 }
 
-#opacity-section .opacity-row + .opacity-row {
+.control-section .opacity-row + .opacity-row,
+.control-section .pan-zoom + .opacity-row {
   margin-top: 10px;
 }
 
