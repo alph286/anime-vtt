@@ -88,10 +88,19 @@ const aoeWidthOutBtn = document.getElementById('aoe-width-out');
 const aoeWidthInBtn = document.getElementById('aoe-width-in');
 const aoeWidthLevel = document.getElementById('aoe-width-level');
 const aoeChipList = document.getElementById('aoe-chip-list');
-const aoeSelectedActions = document.getElementById('aoe-selected-actions');
-const aoeSelectedRotateLeft = document.getElementById('aoe-selected-rotate-left');
-const aoeSelectedRotateRight = document.getElementById('aoe-selected-rotate-right');
-const aoeSelectedRemoveBtn = document.getElementById('aoe-selected-remove');
+const aoeNudgeOverlay = document.getElementById('aoe-nudge-overlay');
+const aoeRotateCcw = document.getElementById('aoe-rotate-ccw');
+const aoeRotateCw = document.getElementById('aoe-rotate-cw');
+const aoeNudgeUp = document.getElementById('aoe-nudge-up');
+const aoeNudgeDown = document.getElementById('aoe-nudge-down');
+const aoeNudgeLeft = document.getElementById('aoe-nudge-left');
+const aoeNudgeRight = document.getElementById('aoe-nudge-right');
+const aoeNudgeColor = document.getElementById('aoe-nudge-color');
+const aoeNudgeSizeUp = document.getElementById('aoe-nudge-size-up');
+const aoeNudgeSizeDown = document.getElementById('aoe-nudge-size-down');
+const aoeNudgeWidthUp = document.getElementById('aoe-nudge-width-up');
+const aoeNudgeWidthDown = document.getElementById('aoe-nudge-width-down');
+const aoeNudgeDragHandle = document.getElementById('aoe-nudge-drag-handle');
 const mapAoeSvg = document.getElementById('map-aoe-svg');
 const mapGridSvg = document.getElementById('map-grid-svg');
 const mapShaderCanvas = document.getElementById('map-shader-canvas');
@@ -136,19 +145,15 @@ function renderAoePanel() {
 
   aoeShapeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.shape === displayShape));
   aoeColorButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.color === displayColor));
-  aoeSizeLevel.textContent = `${displaySize.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
+  const sizeDimensionLabel = aoeSizeDimensionLabel(displayShape);
+  aoeSizeLevel.textContent = `${sizeDimensionLabel}: ${displaySize.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
+  aoeSizeOutBtn.title = `Riduci ${sizeDimensionLabel.toLowerCase()}`;
+  aoeSizeInBtn.title = `Aumenta ${sizeDimensionLabel.toLowerCase()}`;
   aoeWidthRow.hidden = displayShape !== 'line';
   aoeWidthLevel.textContent = `${displayWidth.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
 
-  const rotatable = Boolean(editingAoe) && (editingAoe.shape === 'cone' || editingAoe.shape === 'line');
-  aoeSelectedActions.hidden = !editingAoe;
-  aoeSelectedRotateLeft.hidden = !rotatable;
-  aoeSelectedRotateRight.hidden = !rotatable;
-  if (editingAoe) {
-    const armed = armedRemoveAoeId === editingAoe.id;
-    aoeSelectedRemoveBtn.classList.toggle('confirm', armed);
-    aoeSelectedRemoveBtn.title = armed ? 'Tocca di nuovo per confermare' : 'Rimuovi';
-  }
+  const previewLocation = getPreviewLocation();
+  renderAoeNudgeOverlay(editingAoe, previewLocation && previewLocation.map.grid);
 }
 
 aoeShapeButtons.forEach((btn) => {
@@ -218,37 +223,130 @@ function stepAoeWidth(delta) {
 aoeWidthOutBtn.addEventListener('click', () => stepAoeWidth(-AOE_METERS_PER_CELL));
 aoeWidthInBtn.addEventListener('click', () => stepAoeWidth(AOE_METERS_PER_CELL));
 
-aoeSelectedRotateLeft.addEventListener('click', () => {
+// Per Cono e Linea il punto valido (vertice o centro-lato/cella) dipende
+// dall'angolo -- senza ri-agganciare qui, l'origine resterebbe ferma dove
+// era mentre la regola di aggancio cambia sotto di lei, disallineando la
+// forma dalla griglia appena ruotata (stesso pattern di resizeSelectedAoe
+// per la taglia).
+function rotateSelectedAoe(delta) {
   const editingAoe = getSelectedAoe();
   if (!editingAoe) return;
-  const nextRotation = ((editingAoe.rotation - 15) % 360 + 360) % 360;
-  socket.emit('aoe:rotate', { locationId: previewLocationId, aoeId: editingAoe.id, rotation: nextRotation });
+  const previewLocation = getPreviewLocation();
+  const grid = previewLocation && previewLocation.map.grid;
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  const nextRotation = ((editingAoe.rotation + delta) % 360 + 360) % 360;
+  const [x, y] = snapAoeOrigin(editingAoe.shape, editingAoe.sizeM, editingAoe.widthM, nextRotation, grid, editingAoe.x, editingAoe.y, nw, nh);
+  socket.emit('aoe:rotate', { locationId: previewLocationId, aoeId: editingAoe.id, rotation: nextRotation, x, y });
+}
+
+aoeRotateCcw.addEventListener('click', () => rotateSelectedAoe(-15));
+aoeRotateCw.addEventListener('click', () => rotateSelectedAoe(15));
+
+// Sposta l'origine dell'area selezionata di esattamente 1 cella nella
+// direzione data, poi ri-applica lo snap (stessa logica del trascinamento):
+// così il risultato resta sempre un punto valido per la forma, qualunque
+// sia la sua regola di aggancio attuale.
+// dx/dy arrivano in direzioni SCHERMO (il tasto "su" preme sempre verso
+// l'alto sullo schermo) -- rotateDirectionToBase le converte nella
+// direzione base corrispondente prima di applicarle a x/y, altrimenti con
+// la mappa ruotata (es. un'immagine verticale, auto-ruotata di 90°)
+// "su" sposterebbe la forma di lato invece che in alto.
+function nudgeSelectedAoe(dx, dy) {
+  const editingAoe = getSelectedAoe();
+  if (!editingAoe) return;
+  const previewLocation = getPreviewLocation();
+  const grid = previewLocation && previewLocation.map.grid;
+  if (!grid || !grid.enabled) return;
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  if (!nw || !nh) return;
+  const rotation = computeTotalRotation(nw, nh, previewLocation.map.flip180, previewLocation.map.rotate90);
+  const [baseDx, baseDy] = rotateDirectionToBase([dx, dy], rotation);
+  const stepXPct = (grid.cellSize / nw) * 100;
+  const stepYPct = (grid.cellSize / nh) * 100;
+  const rawX = Math.min(100, Math.max(0, editingAoe.x + baseDx * stepXPct));
+  const rawY = Math.min(100, Math.max(0, editingAoe.y + baseDy * stepYPct));
+  const [x, y] = snapAoeOrigin(editingAoe.shape, editingAoe.sizeM, editingAoe.widthM, editingAoe.rotation, grid, rawX, rawY, nw, nh);
+  socket.emit('aoe:move', { locationId: previewLocationId, aoeId: editingAoe.id, x, y });
+}
+
+aoeNudgeUp.addEventListener('click', () => nudgeSelectedAoe(0, -1));
+aoeNudgeDown.addEventListener('click', () => nudgeSelectedAoe(0, 1));
+aoeNudgeLeft.addEventListener('click', () => nudgeSelectedAoe(-1, 0));
+aoeNudgeRight.addEventListener('click', () => nudgeSelectedAoe(1, 0));
+
+aoeNudgeColor.addEventListener('click', () => {
+  const editingAoe = getSelectedAoe();
+  if (!editingAoe) return;
+  const names = Object.keys(AOE_COLORS);
+  const next = names[(names.indexOf(editingAoe.color) + 1) % names.length];
+  socket.emit('aoe:setColor', { locationId: previewLocationId, aoeId: editingAoe.id, color: next });
 });
 
-aoeSelectedRotateRight.addEventListener('click', () => {
-  const editingAoe = getSelectedAoe();
-  if (!editingAoe) return;
-  const nextRotation = ((editingAoe.rotation + 15) % 360 + 360) % 360;
-  socket.emit('aoe:rotate', { locationId: previewLocationId, aoeId: editingAoe.id, rotation: nextRotation });
+aoeNudgeSizeUp.addEventListener('click', () => resizeSelectedAoe(AOE_METERS_PER_CELL, 0));
+aoeNudgeSizeDown.addEventListener('click', () => resizeSelectedAoe(-AOE_METERS_PER_CELL, 0));
+aoeNudgeWidthUp.addEventListener('click', () => resizeSelectedAoe(0, AOE_METERS_PER_CELL));
+aoeNudgeWidthDown.addEventListener('click', () => resizeSelectedAoe(0, -AOE_METERS_PER_CELL));
+
+// Il pannello è fisso in basso a destra per default, ma la cella
+// "trascina" permette di spostarlo dove serve (pollice diverso, mano
+// diversa, schermo diverso) -- la posizione scelta si ricorda da questo
+// dispositivo (localStorage), non è condivisa con altri DM/dispositivi,
+// non essendo uno stato di gioco.
+const AOE_NUDGE_POS_KEY = 'aoeNudgeOverlayPos';
+let aoeNudgeDrag = null;
+
+function clampAoeNudgeOverlayPos(left, top) {
+  const w = aoeNudgeOverlay.offsetWidth || 160;
+  const h = aoeNudgeOverlay.offsetHeight || 210;
+  const maxLeft = Math.max(0, window.innerWidth - w);
+  const maxTop = Math.max(0, window.innerHeight - h);
+  return [Math.min(maxLeft, Math.max(0, left)), Math.min(maxTop, Math.max(0, top))];
+}
+
+function placeAoeNudgeOverlay(left, top) {
+  const [x, y] = clampAoeNudgeOverlayPos(left, top);
+  aoeNudgeOverlay.style.left = `${x}px`;
+  aoeNudgeOverlay.style.top = `${y}px`;
+  aoeNudgeOverlay.style.right = 'auto';
+  aoeNudgeOverlay.style.bottom = 'auto';
+}
+
+// Posizione salvata da una sessione precedente: si applica non appena il
+// pad diventa visibile per la prima volta, altrimenti resta nell'angolo di
+// default (right/bottom via CSS, mai toccato finché l'utente non trascina).
+let aoeNudgeStoredPos = null;
+try {
+  const raw = localStorage.getItem(AOE_NUDGE_POS_KEY);
+  if (raw) aoeNudgeStoredPos = JSON.parse(raw);
+} catch (err) { /* localStorage non disponibile o valore corrotto: resta sul default */ }
+
+aoeNudgeDragHandle.addEventListener('pointerdown', (e) => {
+  const rect = aoeNudgeOverlay.getBoundingClientRect();
+  aoeNudgeDrag = { pointerId: e.pointerId, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+  aoeNudgeDragHandle.setPointerCapture(e.pointerId);
+  // Da qui in poi la posizione è sempre esplicita (left/top): anche un
+  // semplice tap senza trascinamento vero e proprio fissa il pad dov'è
+  // ora, invece di lasciarlo "agganciato" all'angolo in modo invisibile.
+  placeAoeNudgeOverlay(rect.left, rect.top);
 });
 
-aoeSelectedRemoveBtn.addEventListener('click', () => {
-  const editingAoe = getSelectedAoe();
-  if (!editingAoe) return;
-  const aoeId = editingAoe.id;
-  if (armedRemoveAoeId !== aoeId) {
-    armedRemoveAoeId = aoeId;
-    clearTimeout(armedRemoveTimeout);
-    armedRemoveTimeout = setTimeout(() => {
-      armedRemoveAoeId = null;
-      render();
-    }, 2500);
-    render();
-    return;
-  }
-  disarmRemove();
-  socket.emit('aoe:remove', { locationId: previewLocationId, aoeId });
+aoeNudgeDragHandle.addEventListener('pointermove', (e) => {
+  if (!aoeNudgeDrag || e.pointerId !== aoeNudgeDrag.pointerId) return;
+  placeAoeNudgeOverlay(e.clientX - aoeNudgeDrag.offsetX, e.clientY - aoeNudgeDrag.offsetY);
 });
+
+function endAoeNudgeDrag(e) {
+  if (!aoeNudgeDrag || e.pointerId !== aoeNudgeDrag.pointerId) return;
+  aoeNudgeDrag = null;
+  try {
+    localStorage.setItem(AOE_NUDGE_POS_KEY, JSON.stringify({ left: aoeNudgeOverlay.offsetLeft, top: aoeNudgeOverlay.offsetTop }));
+  } catch (err) { /* localStorage non disponibile: la posizione vale solo per questa sessione */ }
+}
+
+aoeNudgeDragHandle.addEventListener('pointerup', endAoeNudgeDrag);
+aoeNudgeDragHandle.addEventListener('pointercancel', endAoeNudgeDrag);
 
 const mapLocalZoomWrap = document.getElementById('map-local-zoom-wrap');
 const controlTabs = document.getElementById('control-tabs');
@@ -593,31 +691,103 @@ function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
     poly.setAttribute('stroke', shapeVisible ? darkColor : 'none');
     poly.dataset.id = aoe.id;
     mapAoeSvg.appendChild(poly);
+
+    // Marker "+" sul punto d'origine della Sfera: solo su /control, mai su
+    // /display -- è un aiuto al DM per vedere esattamente dove cade il
+    // centro (ora sempre un vertice di griglia), non qualcosa che i
+    // giocatori devono vedere. Segue la stessa visibilità del contorno.
+    if (aoe.shape === 'sphere') {
+      const markerPx = 10;
+      const dxPct = (markerPx / naturalW) * 100;
+      const dyPct = (markerPx / naturalH) * 100;
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      marker.setAttribute('class', 'aoe-origin-marker');
+      marker.setAttribute('pointer-events', 'none');
+      const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      hLine.setAttribute('x1', aoe.x - dxPct);
+      hLine.setAttribute('y1', aoe.y);
+      hLine.setAttribute('x2', aoe.x + dxPct);
+      hLine.setAttribute('y2', aoe.y);
+      const vLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      vLine.setAttribute('x1', aoe.x);
+      vLine.setAttribute('y1', aoe.y - dyPct);
+      vLine.setAttribute('x2', aoe.x);
+      vLine.setAttribute('y2', aoe.y + dyPct);
+      [hLine, vLine].forEach((line) => {
+        line.setAttribute('stroke', shapeVisible ? darkColor : 'none');
+        line.setAttribute('stroke-width', 1.5);
+        line.setAttribute('vector-effect', 'non-scaling-stroke');
+      });
+      marker.appendChild(hLine);
+      marker.appendChild(vLine);
+      mapAoeSvg.appendChild(marker);
+    }
   });
+}
+
+// Fisso in basso a destra del viewport (non più ancorato alla mappa): niente
+// più calcoli di posizione/clamping, la CSS (position:fixed) basta da sola.
+// I 4 tasti direzione restano disattivati senza griglia attiva (non c'è
+// nulla a cui agganciare lo spostamento), ma rotazione/colore/taglia
+// restano utilizzabili comunque -- per questo il pad non si nasconde del
+// tutto in quel caso, solo quelle 4 frecce.
+let aoeNudgePositionApplied = false;
+
+function renderAoeNudgeOverlay(editingAoe, grid) {
+  aoeNudgeOverlay.hidden = !editingAoe || currentMode !== 'aoe';
+  if (!editingAoe) return;
+
+  // La posizione salvata (se c'è) si applica una sola volta, al primo
+  // render in cui il pad diventa visibile in questa pagina -- non ad ogni
+  // render, altrimenti un trascinamento in corso verrebbe riscritto sopra
+  // dal valore salvato prima ancora di essere stato aggiornato.
+  if (!aoeNudgePositionApplied) {
+    aoeNudgePositionApplied = true;
+    if (aoeNudgeStoredPos) placeAoeNudgeOverlay(aoeNudgeStoredPos.left, aoeNudgeStoredPos.top);
+  }
+
+  const gridEnabled = Boolean(grid && grid.enabled);
+  [aoeNudgeUp, aoeNudgeDown, aoeNudgeLeft, aoeNudgeRight].forEach((btn) => {
+    btn.disabled = !gridEnabled;
+  });
+
+  const rotatable = editingAoe.shape === 'cone' || editingAoe.shape === 'line';
+  aoeRotateCcw.disabled = !rotatable;
+  aoeRotateCw.disabled = !rotatable;
+
+  aoeNudgeWidthUp.disabled = editingAoe.shape !== 'line';
+  aoeNudgeWidthDown.disabled = editingAoe.shape !== 'line';
+
+  aoeNudgeColor.style.background = aoeColorHex(editingAoe.color);
 }
 
 function aoeShapeLabel(shape) {
   return { cone: 'Cono', cube: 'Cubo', sphere: 'Sfera', line: 'Linea' }[shape] || shape;
 }
 
-// Ruota/rimuovi vivono in #aoe-selected-actions, una riga fissa sotto la
-// lista (vedi renderAoePanel) e non più in coda a ogni chip: prima, la chip
-// selezionata si allargava e andava a capo, spingendo giù le successive a
-// ogni cambio di selezione. Ogni chip qui è quindi sempre della stessa
-// larghezza, e la lista non si muove più sotto il dito.
+// Lo stepper principale regola grandezze diverse secondo la forma (lunghezza
+// per Cono/Linea, lato per Cubo, raggio per Sfera) -- dirlo esplicitamente
+// evita che "3 m" sulla Sfera venga letto come diametro (sarebbe la metà di
+// quello che poi si vede disegnato, visto che il raggio è sempre sizeM).
+function aoeSizeDimensionLabel(shape) {
+  return { cone: 'Lunghezza', cube: 'Lato', sphere: 'Raggio', line: 'Lunghezza' }[shape] || 'Taglia';
+}
+
+// La rotazione vive nel pad flottante (vedi renderAoeNudgeOverlay); qui
+// resta solo l'eliminazione, con lo stesso pattern arma-poi-conferma di
+// armedRemoveAoeId -- ogni chip è sempre della stessa larghezza, la lista
+// non si muove più sotto il dito a ogni cambio di selezione.
 function renderAoeChipList(aoes) {
   aoeChipList.innerHTML = aoes
     .map((aoe) => {
       const sizeText = aoe.sizeM.toLocaleString('it-IT', { minimumFractionDigits: 1 });
       const selected = aoe.id === selectedAoeId;
-      const shapeVisible = aoe.shapeVisible !== false;
+      const armed = armedRemoveAoeId === aoe.id;
       return `
         <div class="aoe-chip ${selected ? 'selected' : ''}" data-id="${aoe.id}">
           <div class="aoe-chip-pill">
             <span class="aoe-chip-label">${escapeHtml(aoeShapeLabel(aoe.shape))} ${sizeText}m</span>
-            <button class="aoe-chip-shape-toggle" title="${shapeVisible ? 'Nascondi il contorno trascinabile' : 'Mostra il contorno trascinabile'}">
-              <svg class="icon"><use href="#${shapeVisible ? 'i-eye' : 'i-eye-off'}"></use></svg>
-            </button>
+            <button class="aoe-chip-delete ${armed ? 'confirm' : ''}" title="${armed ? 'Tocca di nuovo per confermare' : 'Rimuovi'}">✕</button>
           </div>
         </div>
       `;
@@ -766,13 +936,29 @@ mapFitBox.addEventListener('pointercancel', () => { pingTapStart = null; });
 // sposta invece di piazzarne una nuova. Stessa soglia di 8px del ping per
 // distinguere un tap da un trascinamento accidentale.
 let aoePlaceStart = null;
+// targetX/targetY inseguono la posizione NON agganciata (dove il dito sta
+// davvero trascinando): se si ripartisse ogni volta dall'ultima posizione
+// già agganciata, un movimento più piccolo di un passo di griglia verrebbe
+// arrotondato via a ogni evento e la forma non si muoverebbe affatto finché
+// lo spostamento accumulato non supera un passo intero.
 let aoeDrag = null;
 
 mapFitBox.addEventListener('pointerdown', (e) => {
   if (currentMode !== 'aoe' || aoeModeToggle.disabled) return;
   const overlay = e.target.closest('.aoe-shape-overlay');
   if (overlay) {
-    aoeDrag = { id: overlay.dataset.id, pointerId: e.pointerId };
+    const previewLocation = getPreviewLocation();
+    const aoe = previewLocation && previewLocation.map.aoes.find((a) => a.id === overlay.dataset.id);
+    const point = localPointFromEvent(e);
+    if (!aoe || !point) return;
+    aoeDrag = {
+      id: overlay.dataset.id,
+      pointerId: e.pointerId,
+      lastBaseX: point[0],
+      lastBaseY: point[1],
+      targetX: aoe.x,
+      targetY: aoe.y
+    };
     setSelectedAoeId(overlay.dataset.id);
     mapFitBox.setPointerCapture(e.pointerId);
   } else {
@@ -814,7 +1000,14 @@ mapFitBox.addEventListener('pointermove', (e) => {
   const previewLocation = getPreviewLocation();
   const aoe = previewLocation && previewLocation.map.aoes.find((a) => a.id === aoeDrag.id);
   if (!aoe) return;
-  const [x, y] = snapAoePlacement(aoe.shape, aoe.sizeM, aoe.widthM, aoe.rotation, point[0], point[1]);
+  // Delta dall'ultima posizione del puntatore, non posizione assoluta: così
+  // la forma segue il dito da dove l'hai afferrata invece di saltare a
+  // ricentrarsi sotto il cursore a ogni evento.
+  aoeDrag.targetX += point[0] - aoeDrag.lastBaseX;
+  aoeDrag.targetY += point[1] - aoeDrag.lastBaseY;
+  aoeDrag.lastBaseX = point[0];
+  aoeDrag.lastBaseY = point[1];
+  const [x, y] = snapAoePlacement(aoe.shape, aoe.sizeM, aoe.widthM, aoe.rotation, aoeDrag.targetX, aoeDrag.targetY);
   socket.emit('aoe:move', { locationId: previewLocationId, aoeId: aoeDrag.id, x, y });
 });
 
@@ -867,13 +1060,22 @@ fowList.addEventListener('click', (e) => {
 });
 
 aoeChipList.addEventListener('click', (e) => {
-  const shapeToggleBtn = e.target.closest('.aoe-chip-shape-toggle');
-  if (shapeToggleBtn) {
-    const chip = shapeToggleBtn.closest('.aoe-chip');
-    const previewLocation = getPreviewLocation();
-    const aoe = previewLocation && previewLocation.map.aoes.find((a) => a.id === chip.dataset.id);
-    if (!aoe) return;
-    socket.emit('aoe:setShapeVisible', { locationId: previewLocationId, aoeId: aoe.id, visible: aoe.shapeVisible === false });
+  const deleteBtn = e.target.closest('.aoe-chip-delete');
+  if (deleteBtn) {
+    const chip = deleteBtn.closest('.aoe-chip');
+    const aoeId = chip.dataset.id;
+    if (armedRemoveAoeId !== aoeId) {
+      armedRemoveAoeId = aoeId;
+      clearTimeout(armedRemoveTimeout);
+      armedRemoveTimeout = setTimeout(() => {
+        armedRemoveAoeId = null;
+        render();
+      }, 2500);
+      render();
+      return;
+    }
+    disarmRemove();
+    socket.emit('aoe:remove', { locationId: previewLocationId, aoeId });
     return;
   }
   const pill = e.target.closest('.aoe-chip-pill');
@@ -1005,8 +1207,9 @@ function screenToLocal(sx, sy, effW, effH, contW, contH, rotation, S, offX, offY
   return [effW / 2 + rx, effH / 2 + ry];
 }
 
-// Il rettangolo mostra quale porzione della mappa la TV sta effettivamente
-// inquadrando in questo momento. Procede in tre passi:
+// Il rettangolo (in pixel schermo della NOSTRA anteprima, spazio non
+// zoomato/pannato localmente) mostra quale porzione della mappa la TV sta
+// effettivamente inquadrando in questo momento. Procede in tre passi:
 // 1) dai quattro angoli dello schermo della TV si risale, con screenToLocal,
 //    al rettangolo corrispondente nello spazio locale (pre-rotazione) del
 //    wrap della TV — lo stesso spazio in cui vive tvFit — e lo si riesprime
@@ -1015,18 +1218,16 @@ function screenToLocal(sx, sy, effW, effH, contW, contH, rotation, S, offX, offY
 //    (currentImageRect, anch'esso pre-rotazione, calcolato da
 //    renderMapPreview con la stessa `rotation`), ottenendo il rettangolo
 //    nello spazio locale della nostra anteprima;
-// 3) #viewport-rect non è dentro il wrap ruotato (è un fratello di
-//    #map-media-wrap — deve restare cliccabile/staccato dal fog e dal suo
-//    tap-handler), quindi va portato dallo spazio locale allo spazio
-//    schermo della nostra anteprima con localToScreen (S=1, offset=0: la
-//    nostra anteprima non è mai pannata/zoomata rispetto a se stessa).
-function updateViewportRect(location) {
-  if (!location || !state.displayViewport || !mediaW(activeMapEl) || !currentImageRect) {
-    viewportRect.hidden = true;
-    panModeToggle.disabled = true;
-    if (currentMode === 'pan') setMode(null);
-    return;
-  }
+// 3) si converte dal locale allo schermo della nostra anteprima con
+//    localToScreen (S=1, offset=0: qui si lavora sempre nello spazio NON
+//    zoomato -- chi usa il risultato per applicare uno zoom locale lo fa
+//    esso stesso, chi lo usa per #viewport-rect lo mostra staccato dal wrap
+//    zoomato, vedi updateViewportRect).
+// Usata sia per disegnare il riquadro tratteggiato (updateViewportRect) sia
+// per centrare lo zoom locale su questa stessa area quando si entra in
+// modalità zoom (vedi zoomLocalToViewport).
+function computeViewportScreenRect(location) {
+  if (!location || !state.displayViewport || !mediaW(activeMapEl) || !currentImageRect) return null;
 
   const { width: vw, height: vh } = state.displayViewport;
   const nw = mediaW(activeMapEl);
@@ -1072,11 +1273,28 @@ function updateViewportRect(location) {
   const [sx0, sy0] = localToScreen(localLeft, localTop, ctrlEffW, ctrlEffH, contW, contH, rotation, 1, 0, 0);
   const [sx1, sy1] = localToScreen(localRight, localBottom, ctrlEffW, ctrlEffH, contW, contH, rotation, 1, 0, 0);
 
+  return {
+    left: Math.min(sx0, sx1),
+    top: Math.min(sy0, sy1),
+    width: Math.abs(sx1 - sx0),
+    height: Math.abs(sy1 - sy0)
+  };
+}
+
+function updateViewportRect(location) {
+  const rect = computeViewportScreenRect(location);
+  if (!rect) {
+    viewportRect.hidden = true;
+    panModeToggle.disabled = true;
+    if (currentMode === 'pan') setMode(null);
+    return;
+  }
+
   viewportRect.hidden = false;
-  viewportRect.style.left = `${Math.min(sx0, sx1)}px`;
-  viewportRect.style.top = `${Math.min(sy0, sy1)}px`;
-  viewportRect.style.width = `${Math.abs(sx1 - sx0)}px`;
-  viewportRect.style.height = `${Math.abs(sy1 - sy0)}px`;
+  viewportRect.style.left = `${rect.left}px`;
+  viewportRect.style.top = `${rect.top}px`;
+  viewportRect.style.width = `${rect.width}px`;
+  viewportRect.style.height = `${rect.height}px`;
 
   panModeToggle.disabled = false;
 }
@@ -1092,6 +1310,10 @@ const MODE_BUTTONS = { pan: panModeToggle, fog: fogModeToggle, ping: pingModeTog
 // fa nulla).
 function setMode(mode) {
   if (mode && MODE_BUTTONS[mode].disabled) mode = null;
+  // Solo quando si ENTRA in zoom da un'altra modalità (non ad ogni
+  // render/pinch successivo): riaprirla deve sempre ripartire da dove sono
+  // ora i giocatori, non dall'ultimo zoom/pan locale lasciato in giro.
+  const enteringZoom = mode === 'zoom' && currentMode !== 'zoom';
   currentMode = currentMode === mode ? null : mode;
   Object.entries(MODE_BUTTONS).forEach(([m, btn]) => btn.classList.toggle('active', currentMode === m));
   mapPreview.classList.toggle('mode-pan', currentMode === 'pan');
@@ -1099,6 +1321,7 @@ function setMode(mode) {
   mapPreview.classList.toggle('mode-ping', currentMode === 'ping');
   mapPreview.classList.toggle('mode-zoom', currentMode === 'zoom');
   mapPreview.classList.toggle('mode-aoe', currentMode === 'aoe');
+  if (enteringZoom && currentMode === 'zoom') zoomLocalToViewport();
   renderAoePanel();
 }
 
@@ -1199,6 +1422,36 @@ function resetLocalZoom() {
   localZoomPinchStartDist = null;
   localZoomDragLast = null;
   mapPreview.classList.remove('zoom-dragging');
+  applyLocalZoom();
+}
+
+// Centra lo zoom locale esattamente sull'area che la TV sta mostrando ora
+// (stesso rettangolo di updateViewportRect, prima che lo zoom lo sposti) --
+// chiamata ogni volta che si ENTRA in modalità zoom (vedi setMode), mai
+// durante lo zoom/pan successivo che resta libero come oggi. "Contain", non
+// "cover": l'intera area vista dai giocatori deve restare visibile, anche
+// a costo di un bordo vuoto su un lato se le proporzioni non combaciano
+// esattamente -- coprire tutto il riquadro locale potrebbe tagliarne fuori
+// un pezzo.
+function zoomLocalToViewport() {
+  const rect = computeViewportScreenRect(getPreviewLocation());
+  const viewportW = mapPreview.clientWidth;
+  const viewportH = mapPreview.clientHeight;
+  if (!rect || !rect.width || !rect.height || !viewportW || !viewportH) return;
+
+  const scale = Math.min(ZOOM_LOCAL_MAX, Math.max(ZOOM_LOCAL_MIN, Math.min(viewportW / rect.width, viewportH / rect.height)));
+  const cx = viewportW / 2;
+  const cy = viewportH / 2;
+  const rectCenterX = rect.left + rect.width / 2;
+  const rectCenterY = rect.top + rect.height / 2;
+  // Lo scale si applica intorno al centro di mapPreview (transform-origin
+  // di default): il centro del riquadro si sposta di conseguenza PRIMA
+  // della traslazione, che poi lo riporta esattamente al centro schermo.
+  const postScaleX = cx + (rectCenterX - cx) * scale;
+  const postScaleY = cy + (rectCenterY - cy) * scale;
+
+  localZoom = { scale, x: cx - postScaleX, y: cy - postScaleY };
+  clampLocalZoomPan();
   applyLocalZoom();
 }
 

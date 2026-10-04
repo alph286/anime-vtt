@@ -100,11 +100,6 @@
           </div>
         </div>
         <div id="aoe-chip-list" class="aoe-chip-list"></div>
-        <div id="aoe-selected-actions" class="aoe-selected-actions" hidden>
-          <button id="aoe-selected-rotate-left" class="aoe-chip-rotate" title="Ruota a sinistra">↺</button>
-          <button id="aoe-selected-rotate-right" class="aoe-chip-rotate" title="Ruota a destra">↻</button>
-          <button id="aoe-selected-remove" class="aoe-chip-remove" title="Rimuovi">✕</button>
-        </div>
       </section>
       <div id="map-column">
         <div id="map-preview" class="map-preview">
@@ -269,6 +264,23 @@
       <span>Immagini</span>
     </button>
   </nav>
+
+  <div id="aoe-nudge-overlay" class="aoe-nudge-overlay" hidden>
+    <button id="aoe-rotate-ccw" title="Ruota in senso antiorario">↺</button>
+    <button id="aoe-nudge-up" title="Sposta su di una cella">▲</button>
+    <button id="aoe-rotate-cw" title="Ruota in senso orario">↻</button>
+    <button id="aoe-nudge-left" title="Sposta a sinistra di una cella">◀</button>
+    <button id="aoe-nudge-color" class="aoe-nudge-color" title="Cambia colore"></button>
+    <button id="aoe-nudge-right" title="Sposta a destra di una cella">▶</button>
+    <button id="aoe-nudge-size-up" title="Aumenta taglia">+</button>
+    <button id="aoe-nudge-down" title="Sposta giù di una cella">▼</button>
+    <button id="aoe-nudge-size-down" title="Riduci taglia">−</button>
+    <button id="aoe-nudge-width-up" title="Aumenta larghezza">+</button>
+    <button id="aoe-nudge-drag-handle" class="aoe-nudge-drag-handle" title="Trascina per spostare il pannello">
+      <svg class="icon"><use href="#i-move"></use></svg>
+    </button>
+    <button id="aoe-nudge-width-down" title="Riduci larghezza">−</button>
+  </div>
 </div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/shared/media.js"></script>
