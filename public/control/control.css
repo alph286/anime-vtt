@@ -373,6 +373,20 @@ h2 {
   pointer-events: none;
 }
 
+/* Canvas dedicato al ping (PingLayer, vedi shared/shader-effects.js), stesso
+   ruolo e stesso z-index di .ping-layer in display.css -- qui nessun
+   sibling ha uno z-index esplicito, quindi non sarebbe strettamente
+   necessario (basterebbe l'ordine nel DOM), ma lo teniamo identico per
+   coerenza tra le due pagine. */
+.ping-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
 /* Il colore dell'area (aoe.color) è impostato inline da JS su ciascun
    elemento -- qui restano solo le proprietà comuni. Il contorno mostra la
    sagoma esatta con lo stesso colore ma più scuro (fill:none, solo stroke);

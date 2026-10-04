@@ -5,7 +5,7 @@ Va tenuto aggiornato ad ogni sessione: spuntare i completati, aggiungere
 nuovi punti quando emergono, annotare qui decisioni o vincoli scoperti
 strada facendo (non solo nella chat, che si perde).
 
-## Box sotto la mappa: contenuto diverso per modalità (in corso)
+## Box sotto la mappa: contenuto diverso per modalità (fatto)
 
 Oggi alcuni controlli vivono sopra la mappa, altri in una sezione fissa
 "Controlli" sempre visibile indipendentemente dalla modalità. Si vuole
@@ -44,7 +44,7 @@ attiva (pan / fog / ping / zoom / aoe). Ordine di lavoro concordato:
       completamento (frazione + barra) si nasconde quando la location non
       ha zone fog definite (`polygons.length === 0`); il tab "Fog" in basso
       con lista zone e bulk reveal/hide resta invariato, fuori scope.
-- [ ] **3. Ping** — la bussola/rosa dei venti si sposta qui (oggi vive
+- [x] **3. Ping** — la bussola/rosa dei venti si sposta qui (oggi vive
       nella sezione di "movimento visuale"/pan). Nuovo: tap-e-trascina per
       lasciare una scia dietro al ping. Il ping stesso diventa uno shader
       (riusando la pipeline `ShaderLayer` già usata per le decorazioni
@@ -60,9 +60,219 @@ attiva (pan / fog / ping / zoom / aoe). Ordine di lavoro concordato:
       `pingModeToggle` si disabilita/forza l'uscita solo per condizioni
       transitorie e recuperabili, non per un dato che potrebbe non arrivare
       mai (a differenza del bug di `displayViewport` risolto sopra).
-      **Da fare (parte 2/2, sessione successiva):** tap-e-trascina con scia
-      + ping come shader `ShaderLayer` — esplicitamente lasciato da parte
-      per ora, su richiesta dell'utente.
+      **Fatto (parte 2/2):** tap-e-trascina ora lascia una scia continua
+      che si consuma dalla coda; niente più soglia-annulla-ping oltre 8px
+      (quella soglia è ora il trigger della scia, non uno scarto). Il ping
+      stesso è diventato uno shader: NON la pipeline `ShaderLayer` delle
+      decorazioni persistite (quella disegna un rettangolo fisso per
+      decorazione, un gesto effimero senza rettangolo non ci si adatta) ma
+      una classe gemella dedicata, `PingLayer` (`public/shared/shader-effects.js`),
+      che riusa solo le funzioni di compilazione/link condivise: un solo
+      pass a schermo intero per frame, che calcola per ogni pixel la
+      distanza al segmento di scia più vicino e un'opacità che segue l'età
+      di quel punto. Canvas dedicato `#map-ping-canvas`, ultimo figlio di
+      `#map-fit-box` in entrambe le pagine (stessa posizione del vecchio
+      `#ping-marker` CSS che sostituisce, rimosso insieme alla sua
+      animazione). **Zero modifiche al server**: stesso evento `ping:show`,
+      stesso payload — un tap emette un punto, un trascinamento ne emette
+      tanti (soglia di distanza minima lato client per non floodare); il
+      relay `io.emit` broadcasta già al mittente stesso, quindi lo stesso
+      meccanismo mostra ora il ping anche sulla propria anteprima
+      `/control` (scelta confermata dall'utente: prima il DM non vedeva
+      nulla, solo i giocatori). Punti con lifespan fisso (1,2s) indipendente
+      dal trascinamento in corso: un tap fermo è "gratis" una scia di un
+      solo punto, stesso comportamento di prima. Stesso loop
+      `requestAnimationFrame` già usato per il Portale (`kickShaderLoop`/
+      `stepShaderLayer`), esteso a considerare anche i punti ping vivi.
+      Verificato in browser con un drag reale (non sintetico: un
+      `PointerEvent` costruito a mano fa fallire `setPointerCapture` con
+      `NotFoundError` per mancanza di un pointer attivo reale, falso
+      allarme isolato durante i test, non un bug — confermato riproducendo
+      con un drag vero dello strumento browser).
+      **Affinamento visivo (stessa sessione, su richiesta dell'utente):**
+      il tap fermo (singolo punto, `u_pointCount == 1` in
+      `PING_FRAGMENT_SRC`) non usa più il bagliore piatto a distanza fissa
+      della scia, ma un anello "radar ping" (formula trovata dall'utente su
+      Shadertoy, adattata: l'"orologio" è l'età del punto invece del loop
+      infinito `mod(iTime,...)` dell'originale, un solo anello che si
+      espande una volta e sfuma invece di una scansione radar continua a 3
+      copie sfalsate) con un crackle da rumore sul raggio e sull'intensità
+      per lo "sfrigolamento" richiesto, stesso linguaggio visivo del
+      Portale (stesso campionamento a texture `noise(x){texture(u_noise,
+      x*.01).x}`, non hash). `PingLayer` ha ora una propria texture di
+      rumore (`ensureNoiseTexture()`, copia di quella di `ShaderLayer` --
+      non condivisibile, contesti WebGL separati su due canvas distinti).
+      La scia a più punti (trascinamento) resta invariata, fuori scope di
+      questa richiesta. Verificato via lettura diretta dei pixel del
+      canvas (`gl.readPixels`) a età diverse: quasi invisibile ad età 0
+      (il raggio parte da 0, comportamento corretto per un anello che si
+      espande), ben visibile e con contorno visibilmente irregolare/vivo a
+      metà vita (età 0.5-0.9s su un lifespan di 1,2s).
+      **Ritocco (stessa sessione, su richiesta dell'utente):** 3 richieste
+      — colore blu "stile Portale" invece dell'accent (nuovo uniform
+      `u_ringColor`/costante `PING_RING_COLOR_RGB` in shader-effects.js,
+      fisso, non letto da CSS come `u_color` perché non è un token di
+      tema ma una scelta propria dell'effetto), anelli più spessi
+      (`RING_INNER_TAIL_FRAC` 0.10→0.24, `RING_FRONTIER_FRAC`
+      0.012→0.03), e 3 anelli concentrici per tap invece di uno. I 3
+      anelli condividono la stessa età (non sfalsati nel tempo, che li
+      avrebbe fatti partire in momenti diversi): sono sfalsati nel
+      RAGGIO, ognuno richiamando la stessa funzione `ringAt()` con
+      `time - i*RING_GAP_FRAC*u_fadeDistance` (increspature concentriche
+      che si espandono insieme, non una scansione radar a fasi come
+      l'originale Shadertoy). La scia a più punti resta col colore accent
+      di prima, fuori scope. Verificato: il raggio misurato via
+      `gl.readPixels` cresce correttamente con l'età (6px a 0.1s → 42px a
+      1.1s, su un `u_fadeDistance` di 45px), colore in uscita confermato
+      sul canale blu dominante, nessun errore/warning di compilazione né
+      su /control né su /display.
+      **Secondo ritocco (stessa sessione, su richiesta dell'utente,
+      verificato SENZA screenshot -- solo compile-check, il giudizio
+      visivo lo fa l'utente dal vivo):** crackle ridotto e rallentato
+      (`RING_CRACKLE_FRAC` 0.08→0.04; frequenza temporale del crepitio
+      sul raggio `age*6.0`→`age*2.5`, del flicker `age*7.8`→`age*3.0` --
+      solo le frequenze TEMPORALI, non quelle spaziali su `angle`, che
+      controllano quante increspature lungo il contorno, non la
+      velocità). Colore non più piatto: `u_ringColor` ora è la base a
+      bassa energia, con un `mix()` verso il bianco dove l'energia
+      (`ring * flicker`) supera `RING_WHITE_CORE_LOW`/`HIGH` (0.55/0.95)
+      -- stesso effetto "nucleo bianco, bordo blu" del Portale, ottenuto
+      con un mix esplicito invece di dividere un colore per un `rz`
+      piccolo (quello che fa in realtà `portalFragmentSrc`): stesso
+      risultato percepito, senza il rischio di dividere per quasi-zero.
+      Taglia +30% (`PING_RING_SIZE_PCT` da 45*1,3px fissi a 0,113 della
+      larghezza del canvas, vedi sotto il perché del cambio di unità) ed
+      easing ease-out quadratico sulla velocità di espansione degli
+      anelli (`time` non più lineare in age, parte veloce e decelera).
+      **Terzo ritocco (stessa sessione):** l'utente segnalava il ping
+      "ancora piccolo" su /display nonostante la taglia fosse identica a
+      /control -- causa reale: `u_fadeDistance` era in px CSS fissi
+      (`45*1.3*dpr`), ma /control e /display hanno canvas di risoluzione
+      molto diversa (telefono del DM vs TV/monitor dei giocatori), quindi
+      lo stesso valore fisso occupa una frazione diversa dello schermo.
+      Cambiato in percentuale della larghezza del canvas
+      (`PING_RING_SIZE_PCT = 0.113`, calibrato per coincidere con la
+      taglia già approvata su /control, dove canvas.width≈516px: 0,113×
+      516≈58,3px, prima era 45×1,3=58,5px fissi) -- ora la taglia APPARENTE
+      è coerente su schermi di risoluzione diversa. Aggiunta anche la
+      compensazione per lo zoom che già esiste per griglia/contorno AOE,
+      mai estesa al ping: `PingLayer.render()` accetta ora un 4° parametro
+      `zoomScale` (su /control `localZoom.scale`, lo zoom locale del DM;
+      su /display `displayedView.scale`, il pan/zoom condiviso coi
+      giocatori) per cui `u_fadeDistance` e `u_lineWidth` vengono divisi
+      -- senza, zoomare avrebbe cambiato anche la taglia del ping, non
+      solo quella già compensata di griglia/AOE. Verificato SENZA
+      screenshot (richiesta esplicita dell'utente, il giudizio visivo
+      resta suo): solo compile-check su /control e /display, nessun
+      errore/warning.
+      **Quarto ritocco (stessa sessione):** l'anello spariva di colpo a
+      fine vita invece di sfumare -- causa: l'unico fade esistente era
+      quello spaziale in `ringAt()` (`ring * smoothstep(u_fadeDistance,
+      0, r)`, un vignette sul raggio), che per costruzione coincide quasi
+      esattamente col momento in cui l'anello guida raggiunge il raggio
+      massimo a fine vita, risultando in un cutoff netto invece di una
+      sfumatura temporale. Aggiunto un fade esplicito sull'ETÀ
+      (`lifeFade`), indipendente dalla posizione: piena intensità per il
+      70% della vita (`RING_LIFE_FADE_START = 0.7`), poi sfuma a 0 negli
+      ultimi 30%. Verificato numericamente (non visivamente) via
+      `gl.readPixels` a età crescenti: picco di alpha 235→190→99→31→0,
+      calo continuo senza salti, a differenza del comportamento precedente.
+      **Quinto ritocco (stessa sessione) -- bug reale, non un refinement
+      cosmetico:** due tap ravvicinati (entrambi ancora vivi entro
+      `PING_LIFESPAN_SEC`) finivano nello stesso `pingPoints` piatto, e lo
+      shader (che decideva sonar-vs-scia solo da `u_pointCount`) li
+      disegnava come UN trascinamento che li collega con una scia color
+      accent, bloccando l'animazione del sonar precedente. Causa: nessun
+      concetto di "a quale gesto appartiene questo punto" da nessuna
+      parte, né lato client né nel payload del socket. Risolto con un
+      `strokeId` per gesto (generato una volta per `pointerdown`,
+      riusato per tutti i punti di quel tap/trascinamento fino a
+      `pointerup`/`pointercancel`): nuovo campo nel payload `ping:show`
+      (server/index.js fa solo passthrough, zero validazione di
+      formato -- è un id opaco consumato solo dal client), raggruppamento
+      lato client via `groupPingPointsByStroke()` (nuova funzione
+      condivisa in shader-effects.js) prima di passare i punti allo
+      shader. Lo shader stesso ha dovuto cambiare struttura dati: non più
+      una lista piatta + `u_pointCount`, ma `u_groupStart[8]`/
+      `u_groupCount[8]`/`u_groupTotal` che indicizzano nello stesso
+      `u_points`/`u_ages` piatto di prima -- un gruppo da 1 punto è un
+      sonar (`sonarAlphaAt()`), un gruppo con più punti è una scia
+      (`trailAlphaAt()`), ogni gruppo indipendente, si tiene il
+      contributo più luminoso pixel per pixel (`max`) invece di sommarli.
+      `PingLayer.render()` ora accetta `groups` (array di array) invece
+      di un array piatto di punti. **Nota operativa per sessioni future:**
+      durante la verifica di questo fix il server locale di questo
+      worktree (porta 3101, avviato con `node --watch` da una sessione
+      precedente) risultava SERVIRE CODICE VECCHIO nonostante `--watch` e
+      nonostante `server/index.js` fosse stato modificato dopo l'avvio
+      del processo (verificato confrontando `stat` del file col momento
+      di avvio del processo) -- `--watch` non ha riavviato da solo in
+      questo sandbox. Riavviato manualmente (`PORT=3101 node --watch
+      server/index.js`, **non** `preview_start`: quel tool in questo
+      progetto lancia da cwd sbagliata, la repo principale invece di
+      questo worktree -- già capitato una volta in questa sessione).
+      Verificato end-to-end con tap reali (non sintetici) attraverso il
+      socket vero: due tap ravvicinati → 2 gruppi da 1 punto ciascuno
+      (sonar indipendenti); un trascinamento reale → 1 gruppo da 3 punti
+      (scia unica). Nessun errore in console.
+      **Sesto ritocco (stessa sessione) -- scia rifatta "a stella
+      cometa":** prima era un bagliore piatto a colore accent, spessore
+      costante lungo tutto il tracciato -- sostituita con lo stesso mood
+      del Portale rosso. `trailAlphaAt()` ora: (1) interpola l'età tra i
+      due estremi del segmento più vicino (nuova `distToSegmentT()`,
+      restituisce anche il parametro lungo il segmento, non solo la
+      distanza) invece di un min secco tra le due età, per una
+      transizione continua lungo la coda; (2) la LARGHEZZA si assottiglia
+      con l'età (`mix(u_lineWidth, u_lineWidth*TRAIL_TAIL_WIDTH_FRAC,
+      eased)`, stesso easing ease-out del sonar) -- testa spessa, coda
+      sottile, l'"effetto cometa" richiesto; (3) stesso `crackleFbm()` del
+      sonar applicato al bordo (non più una linea pulita); (4) nucleo
+      bianco nel punto di massima energia via `mix()` verso il bianco,
+      ma qui l'energia usata per il colore è smorzata con `(1-eased)`
+      (`colorEnergy`, diversa da quella usata per l'alpha) -- SENZA
+      questo smorzamento il nucleo bianco appariva anche sul centro della
+      coda (campionando esattamente la linea centrale, `glow` tocca 1 lì
+      pure, anche se la coda è sottilissima e quasi spenta): scoperto e
+      corretto verificando i pixel via `gl.readPixels`, non "a occhio".
+      Nuovo colore fisso `PING_TRAIL_COLOR_RGB` (rosso, non più
+      derivato da `--accent`) -- rimossi di conseguenza `u_color`,
+      `PING_COLOR_RGB` e `hexColorToRgb01()` (diventati inutilizzati:
+      sia il sonar che la scia hanno ora un colore fisso proprio
+      dell'effetto, non più legato al tema). `PingLayer.render()` ha
+      perso il parametro `colorRgb` (firma: `(groups, lifespanSec,
+      zoomScale)`). Verificato via `gl.readPixels` su un gruppo-scia di 2
+      punti (età 0,02 e 1,1): testa larga 13px colore (0.98,0.85,0.83)
+      (quasi bianco, leggera tinta rossa), coda larga 3px colore
+      (0.92,0.17,0.08) (rosso puro, combacia con `PING_TRAIL_COLOR_RGB`)
+      -- rapporto larghezze ~0,23, vicino al 0,25 atteso. Nessun
+      errore/warning di compilazione.
+      **Settimo ritocco (stessa sessione):** due richieste -- più spessa
+      ovunque (larghezza base `u_lineWidth` in `PingLayer.render()` da
+      7 a 13px, stesso rapporto testa/coda 0,25 quindi tutto scala
+      insieme), e un bug reale segnalato dall'utente: girando con la
+      scia appariva uno spigolo visibile invece di una curva, proprio nei
+      punti dove cambia direzione. Diagnosi: NON la geometria della linea
+      (quella è già una SDF-capsula per segmento con estremità tonde, il
+      minimo tra segmenti consecutivi è già l'unione corretta -- doveva
+      essere morbida di suo) ma il crackle, campionato usando la
+      DIREZIONE del segmento più vicino (`segAngle`): esattamente nei
+      punti dove il "segmento più vicino" passa dall'uno all'altro,
+      quella direzione salta di colpo, producendo un salto visibile nel
+      rumore proprio lì. L'utente aveva proposto di sovrapporre un
+      secondo trail con un fade come soluzione; spiegato perché non
+      avrebbe funzionato (è un problema di continuità geometrica/di
+      campionamento in un punto preciso, non di opacità nel tempo) e
+      proposto invece di campionare il crackle sulla posizione a schermo
+      del pixel (`p.x`/`p.y`) invece che su `segAngle` -- lo stesso punto
+      fisico ottiene così sempre lo stesso rumore a prescindere da quale
+      segmento lo rivendica come più vicino, eliminando il salto alla
+      radice. `segAngle` rimosso del tutto (non serviva più a nient'altro).
+      Verificato: compila senza errori/warning, spessore misurato via
+      `gl.readPixels` raddoppiato circa come atteso (13px→22px in testa,
+      3px→5px in coda) con gli stessi colori di prima. La fluidità delle
+      curve non è verificabile a pixel isolati con sicurezza totale --
+      giudizio visivo dal vivo rimandato all'utente, come da sua richiesta
+      di non fare più screenshot per gli shader.
 - [x] **4. Zoom** — **rimuovere** lo zoom automatico all'ingresso in
       modalità zoom (implementato in una sessione precedente, va disfatto:
       vedi `zoomLocalToViewport()` chiamata da `setMode` in

@@ -12,11 +12,12 @@ const mapGridSvg = document.getElementById('map-grid-svg');
 const mapAoeSvg = document.getElementById('map-aoe-svg');
 const mapShaderCanvas = document.getElementById('map-shader-canvas');
 const shaderLayer = new ShaderLayer(mapShaderCanvas);
+const mapPingCanvas = document.getElementById('map-ping-canvas');
+const pingLayer = new PingLayer(mapPingCanvas);
 const imageFitBox = document.getElementById('image-fit-box');
 const shownImageImg = document.getElementById('shown-image-img');
 const wifiDot = document.getElementById('wifi-dot');
 const compassEl = document.getElementById('compass');
-const pingMarker = document.getElementById('ping-marker');
 const sceneAudioEl = document.getElementById('scene-audio');
 
 // Scatta solo per la speciale (mai in loop): la principale, essendo sempre
@@ -135,20 +136,52 @@ socket.on('control:status', ({ connected }) => {
   updateWifi();
 });
 
-// Gesto momentaneo dal DM (/control, modalità "ping"): appare per un attimo
-// e sparisce da solo, non è mai parte dello state persistito.
-let pingHideTimeout = null;
-function hidePing() {
-  clearTimeout(pingHideTimeout);
-  pingMarker.hidden = true;
+// Gesto momentaneo dal DM (/control, modalità "ping", tap o trascinamento):
+// ogni tocco/spostamento del DM arriva qui come un punto separato (stesso
+// evento sia per un tap fermo che per un trascinamento -- vedi
+// control.js), non è mai parte dello state persistito. Ogni punto sfuma da
+// solo dopo PING_LIFESPAN_SEC, indipendentemente dal fatto che il DM stia
+// ancora disegnando: un tap fermo è semplicemente una scia di un solo
+// punto, si comporta "gratis" come il vecchio marker CSS (appare, sfuma,
+// sparisce).
+const PING_LIFESPAN_SEC = 1.2;
+let pingPoints = [];
+
+function clearPing() {
+  if (!pingPoints.length) return;
+  pingPoints = [];
+  pingLayer.render([], PING_LIFESPAN_SEC, displayedView ? displayedView.scale : 1);
 }
-socket.on('ping:show', ({ x, y }) => {
+
+// Richiamata ad ogni frame dal loop di stepShaderLayer: scarta i punti
+// ormai sfumati e ridisegna. Ritorna true finché resta almeno un punto
+// vivo, così il chiamante sa se deve continuare il loop.
+function pruneAndRenderPing() {
+  if (!pingPoints.length) return false;
+  const now = performance.now();
+  pingPoints = pingPoints.filter((pt) => (now - pt.t) / 1000 < PING_LIFESPAN_SEC);
+  // Raggruppati per strokeId (vedi control.js/newPingStrokeId): due tap
+  // ravvicinati restano due "sonar" indipendenti invece di diventare un
+  // trascinamento che li collega -- ognuno nel proprio gruppo, mai
+  // mescolati.
+  const groups = groupPingPointsByStroke(
+    pingPoints.map((pt) => ({ x: pt.x, y: pt.y, age: (now - pt.t) / 1000, strokeId: pt.strokeId }))
+  );
+  // displayedView.scale: stesso transform CSS che avvolge #map-layer (e
+  // quindi anche il canvas del ping) per il pan/zoom condiviso -- stessa
+  // compensazione già fatta per la griglia in renderMap() (lì con la
+  // variabile locale `scale`, qui con displayedView.scale perché questo
+  // loop gira ad ogni frame, non solo ad ogni cambio di stato: vogliamo
+  // il valore corrente, non quello target mentre l'animazione è ancora
+  // a metà).
+  pingLayer.render(groups, PING_LIFESPAN_SEC, displayedView ? displayedView.scale : 1);
+  return pingPoints.length > 0;
+}
+
+socket.on('ping:show', ({ x, y, strokeId }) => {
   if (typeof x !== 'number' || typeof y !== 'number') return;
-  pingMarker.style.left = `${x}%`;
-  pingMarker.style.top = `${y}%`;
-  pingMarker.hidden = false;
-  clearTimeout(pingHideTimeout);
-  pingHideTimeout = setTimeout(hidePing, 3000);
+  pingPoints.push({ x, y, t: performance.now(), strokeId });
+  kickShaderLoop();
 });
 
 socket.on('state:update', (state) => {
@@ -175,7 +208,7 @@ function render(state) {
   // o si è passati a un'altra location, non ha più senso lasciarlo a schermo.
   const locationId = location ? location.id : null;
   if (showingImage || locationId !== lastPingLocationId) {
-    hidePing();
+    clearPing();
     mapAoeSvg.innerHTML = '';
   }
   lastPingLocationId = locationId;
@@ -399,12 +432,12 @@ function renderMap(state, location, returningFromImage) {
 }
 
 // Il rAF loop va fermato quando non c'è nulla da disegnare (nessuna
-// decorazione shader sulla location attiva, o si sta mostrando
-// un'immagine al posto della mappa): su target come il Raspberry Pi 4 un
-// ciclo di clear+composite a 60fps a vuoto è spreco puro. Quando lo
-// shaders array torna rilevante (es. si piazza una decorazione, o si
+// decorazione shader sulla location attiva o ping in corso, o si sta
+// mostrando un'immagine al posto della mappa): su target come il Raspberry
+// Pi 4 un ciclo di clear+composite a 60fps a vuoto è spreco puro. Quando
+// torna rilevante (es. si piazza una decorazione, arriva un ping, o si
 // torna dalla vista immagine alla mappa), kickShaderLoop() lo riavvia da
-// render().
+// render()/dall'handler di 'ping:show'.
 let shaderLoopRunning = false;
 
 function stepShaderLayer() {
@@ -417,7 +450,8 @@ function stepShaderLayer() {
       shaderLayer.render(shaders, location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     }
   }
-  if (!shaders.length) {
+  const pingActive = pruneAndRenderPing();
+  if (!shaders.length && !pingActive) {
     shaderLoopRunning = false;
     return;
   }
@@ -425,11 +459,11 @@ function stepShaderLayer() {
 }
 
 function kickShaderLoop() {
-  if (!lastState) return;
-  const location = getActiveLocation(lastState);
-  const showingImage = Boolean(lastState.activeImageId && location && location.images.some((i) => i.id === lastState.activeImageId));
+  if (shaderLoopRunning) return;
+  const location = lastState && getActiveLocation(lastState);
+  const showingImage = Boolean(lastState && lastState.activeImageId && location && location.images.some((i) => i.id === lastState.activeImageId));
   const shaders = (!showingImage && location && location.map.shaders) || [];
-  if (shaders.length > 0 && !shaderLoopRunning) {
+  if (shaders.length > 0 || pingPoints.length > 0) {
     shaderLoopRunning = true;
     requestAnimationFrame(stepShaderLayer);
   }

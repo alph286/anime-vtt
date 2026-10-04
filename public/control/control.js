@@ -146,6 +146,8 @@ const mapAoeSvg = document.getElementById('map-aoe-svg');
 const mapGridSvg = document.getElementById('map-grid-svg');
 const mapShaderCanvas = document.getElementById('map-shader-canvas');
 const shaderLayer = new ShaderLayer(mapShaderCanvas);
+const mapPingCanvas = document.getElementById('map-ping-canvas');
+const pingLayer = new PingLayer(mapPingCanvas);
 
 let aoeSelectedShape = 'cone';
 let aoeSelectedColor = 'red';
@@ -426,6 +428,16 @@ socket.on('state:update', (s) => {
   state = s;
   render();
 });
+// Eco del proprio ping (il server rilancia a tutti i connessi, incluso il
+// mittente): nessun filtro per locationId qui, il broadcast stesso non lo
+// include -- sicuro perché pingModeToggle è disabilitato ogni volta che si
+// sta solo previewando un'altra location (vedi render()), quindi un ping
+// può partire solo quando l'anteprima coincide già con la location attiva.
+socket.on('ping:show', ({ x, y, strokeId }) => {
+  if (typeof x !== 'number' || typeof y !== 'number') return;
+  pingPoints.push({ x, y, t: performance.now(), strokeId });
+  kickShaderLoop();
+});
 socket.on('telegram:sendResult', ({ imageId, ok, error }) => {
   telegramSendPending = false;
   telegramSendFeedback = { imageId, ok, error };
@@ -470,6 +482,39 @@ tabBar.addEventListener('click', (e) => {
 
 let previewLocationId = null;
 let previewImageId = null;
+
+// Gesto momentaneo del DM (modalità "ping", tap o trascinamento): stessa
+// logica di accumulo/sfumatura di display.js (vedi lì il perché), qui per
+// mostrare al DM dove sta puntando mentre lo fa -- prima non c'era alcun
+// riscontro visivo sulla propria anteprima, solo i giocatori vedevano
+// qualcosa.
+const PING_LIFESPAN_SEC = 1.2;
+let pingPoints = [];
+let lastPingPreviewLocationId = null;
+
+function clearPing() {
+  if (!pingPoints.length) return;
+  pingPoints = [];
+  pingLayer.render([], PING_LIFESPAN_SEC, localZoom.scale);
+}
+
+function pruneAndRenderPing() {
+  if (!pingPoints.length) return false;
+  const now = performance.now();
+  pingPoints = pingPoints.filter((pt) => (now - pt.t) / 1000 < PING_LIFESPAN_SEC);
+  // Raggruppati per strokeId (vedi newPingStrokeId): due tap ravvicinati
+  // restano due "sonar" indipendenti invece di diventare un trascinamento
+  // che li collega -- ognuno nel proprio gruppo, mai mescolati.
+  const groups = groupPingPointsByStroke(
+    pingPoints.map((pt) => ({ x: pt.x, y: pt.y, age: (now - pt.t) / 1000, strokeId: pt.strokeId }))
+  );
+  // localZoom.scale: stesso transform CSS che avvolge il canvas del ping
+  // (vedi PingLayer.render) -- senza compensarlo, zoomare in modalità
+  // "Zoom locale" cambierebbe anche la taglia del ping, non solo quella
+  // di griglia/contorno AOE già compensate.
+  pingLayer.render(groups, PING_LIFESPAN_SEC, localZoom.scale);
+  return pingPoints.length > 0;
+}
 let telegramDestinations = null; // null = non ancora caricate; [] = vuote/non disponibili
 let telegramSendPending = false;
 let telegramSendFeedback = null; // { imageId, ok, error } dell'ultimo invio, o null
@@ -504,6 +549,15 @@ function render() {
   const previewLocation = getPreviewLocation();
   const showingImage = Boolean(state.activeImageId);
   const isPreviewing = previewLocationId !== state.activeLocationId;
+
+  // Stesso guard di display.js: un ping in corso punta a una mappa precisa,
+  // se cambia la location in anteprima o compare un'immagine al posto
+  // della mappa non ha più senso lasciarlo a schermo (qui più che altro
+  // per coerenza visiva col DM stesso: i giocatori vedono comunque solo i
+  // ping sulla location davvero attiva, mai in anteprima).
+  const pingPreviewLocationId = previewLocation ? previewLocation.id : null;
+  if (showingImage || pingPreviewLocationId !== lastPingPreviewLocationId) clearPing();
+  lastPingPreviewLocationId = pingPreviewLocationId;
 
   // Il ping arriva ai giocatori solo se punta alla mappa che stanno
   // davvero guardando in questo momento: niente anteprima di un'altra
@@ -1036,35 +1090,69 @@ mapFogLayer.addEventListener('click', (e) => {
 // Usa pointerdown/pointerup invece di 'click': su touch, con touch-action:
 // none attivo sull'antenato, alcuni browser non sintetizzano mai il click
 // dopo un tap -- pointerup arriva sempre, sia da dito che da mouse.
-let pingTapStart = null;
-
-mapFitBox.addEventListener('pointerdown', (e) => {
-  if (currentMode !== 'ping' || pingModeToggle.disabled) return;
-  pingTapStart = { x: e.clientX, y: e.clientY, id: e.pointerId };
-});
-
-mapFitBox.addEventListener('pointerup', (e) => {
-  if (currentMode !== 'ping' || pingModeToggle.disabled || !pingTapStart || e.pointerId !== pingTapStart.id) return;
-  const { x: startX, y: startY } = pingTapStart;
-  pingTapStart = null;
-  // Oltre pochi pixel di movimento non è più un tap ma un trascinamento
-  // accidentale (es. dito che scivola): non deve piazzare un ping.
-  if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) return;
-
+//
+// Un tap fermo e un trascinamento sono ormai lo stesso gesto: pointerdown
+// emette subito il primo punto, pointermove ne emette altri mentre ci si
+// sposta (sotto una soglia di distanza, per non floodare il socket), e un
+// tap senza movimento resta semplicemente una scia di un solo punto --
+// esattamente il comportamento di prima, "gratis". Niente più soglia che
+// annulla il ping sopra 8px: quella soglia è ora il trigger della scia, non
+// un modo per scartarla.
+function pingLocalCoords(e) {
   const previewLocation = getPreviewLocation();
-  if (!previewLocation) return;
+  if (!previewLocation) return null;
   const rect = mapFitBox.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
+  if (!rect.width || !rect.height) return null;
   const rx = ((e.clientX - rect.left) / rect.width) * 100;
   const ry = ((e.clientY - rect.top) / rect.height) * 100;
   const nw = mediaW(activeMapEl);
   const nh = mediaH(activeMapEl);
   const rotation = computeTotalRotation(nw, nh, previewLocation.map.flip180, previewLocation.map.rotate90);
-  const [x, y] = rotatePointToBase([rx, ry], rotation);
-  socket.emit('ping:show', { locationId: previewLocationId, x, y });
+  return rotatePointToBase([rx, ry], rotation);
+}
+
+const PING_MIN_POINT_DIST_PCT = 1.5;
+let pingDrag = null; // { id, strokeId, lastX, lastY } in spazio locale (%, post-rotazione)
+
+// Un id per gesto, non per punto: lo stesso per tutti i punti emessi da
+// un singolo pointerdown→pointerup/cancel (tap o trascinamento), diverso
+// da un gesto al successivo. Il server lo rilancia senza toccarlo (vedi
+// server/index.js); chi riceve raggruppa i punti per strokeId prima di
+// passarli allo shader (vedi groupPingPointsByStroke in shader-effects.js)
+// -- senza, due tap ravvicinati finivano nello stesso elenco piatto e
+// venivano disegnati come un solo trascinamento che li collega.
+function newPingStrokeId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+mapFitBox.addEventListener('pointerdown', (e) => {
+  if (currentMode !== 'ping' || pingModeToggle.disabled) return;
+  const coords = pingLocalCoords(e);
+  if (!coords) return;
+  const [x, y] = coords;
+  const strokeId = newPingStrokeId();
+  pingDrag = { id: e.pointerId, strokeId, lastX: x, lastY: y };
+  mapFitBox.setPointerCapture(e.pointerId);
+  socket.emit('ping:show', { locationId: previewLocationId, x, y, strokeId });
 });
 
-mapFitBox.addEventListener('pointercancel', () => { pingTapStart = null; });
+mapFitBox.addEventListener('pointermove', (e) => {
+  if (currentMode !== 'ping' || !pingDrag || e.pointerId !== pingDrag.id) return;
+  const coords = pingLocalCoords(e);
+  if (!coords) return;
+  const [x, y] = coords;
+  if (Math.hypot(x - pingDrag.lastX, y - pingDrag.lastY) < PING_MIN_POINT_DIST_PCT) return;
+  pingDrag.lastX = x;
+  pingDrag.lastY = y;
+  socket.emit('ping:show', { locationId: previewLocationId, x, y, strokeId: pingDrag.strokeId });
+});
+
+function endPingDrag(e) {
+  if (!pingDrag || e.pointerId !== pingDrag.id) return;
+  pingDrag = null;
+}
+mapFitBox.addEventListener('pointerup', endPingDrag);
+mapFitBox.addEventListener('pointercancel', endPingDrag);
 
 // AoE: un tap su un'area vuota della mappa piazza una nuova area (forma/
 // taglia correnti); un trascinamento che parte da un'area già disegnata la
@@ -1821,10 +1909,11 @@ audioSpecialBtn.addEventListener('click', () => {
 });
 
 // Il rAF loop va fermato quando non c'è nulla da disegnare (nessuna
-// decorazione shader sulla location in anteprima): su target come il
-// Raspberry Pi 4 un ciclo di clear+composite a 60fps a vuoto è spreco
-// puro. Quando lo shaders array torna non vuoto (es. il DM piazza una
-// decorazione), kickShaderLoop() lo riavvia da render().
+// decorazione shader sulla location in anteprima, nessun ping in corso):
+// su target come il Raspberry Pi 4 un ciclo di clear+composite a 60fps a
+// vuoto è spreco puro. Quando torna rilevante (es. il DM piazza una
+// decorazione, o arriva un ping), kickShaderLoop() lo riavvia da
+// render()/dall'handler di 'ping:show'.
 let shaderLoopRunning = false;
 
 function stepShaderLayer() {
@@ -1836,7 +1925,8 @@ function stepShaderLayer() {
       shaderLayer.render(shaders, previewLocation.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     }
   }
-  if (!shaders.length) {
+  const pingActive = pruneAndRenderPing();
+  if (!shaders.length && !pingActive) {
     shaderLoopRunning = false;
     return;
   }
@@ -1844,9 +1934,10 @@ function stepShaderLayer() {
 }
 
 function kickShaderLoop() {
+  if (shaderLoopRunning) return;
   const previewLocation = state && getPreviewLocation();
   const shaders = (previewLocation && previewLocation.map.shaders) || [];
-  if (shaders.length > 0 && !shaderLoopRunning) {
+  if (shaders.length > 0 || pingPoints.length > 0) {
     shaderLoopRunning = true;
     requestAnimationFrame(stepShaderLayer);
   }
