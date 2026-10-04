@@ -844,13 +844,20 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  socket.on('aoe:rotate', ({ locationId, aoeId, rotation }) => {
+  // x/y arrivano già ricalcolati dal client (snapAoeOrigin con la NUOVA
+  // rotazione): per il Cono, quale punto è valido (vertice o centro-lato)
+  // dipende dall'angolo, quindi ruotare senza ri-agganciare lascerebbe
+  // l'origine disallineata dalla griglia.
+  socket.on('aoe:rotate', ({ locationId, aoeId, rotation, x, y }) => {
     const location = state.locations.find((l) => l.id === locationId);
     const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
     if (!aoe) return;
     if (aoe.shape === 'cube' || aoe.shape === 'sphere') return;
     if (!Number.isFinite(rotation)) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     aoe.rotation = ((Math.round(rotation) % 360) + 360) % 360;
+    aoe.x = x;
+    aoe.y = y;
     saveState(state);
     broadcastState();
   });

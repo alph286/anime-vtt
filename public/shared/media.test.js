@@ -8,6 +8,7 @@ const {
   aoeColorDarkHex,
   aoePixelsPerMeter,
   aoeShapePointsPx,
+  rotateDirectionToBase,
   snapAoeOrigin,
   aoeOutlinePoints,
   pointInPolygon,
@@ -19,6 +20,27 @@ const {
 
 test('AOE_METERS_PER_CELL è 1.5', () => {
   assert.equal(AOE_METERS_PER_CELL, 1.5);
+});
+
+test('rotateDirectionToBase: senza rotazione la direzione resta invariata', () => {
+  assert.deepEqual(rotateDirectionToBase([1, 0], 0), [1, 0]);
+  assert.deepEqual(rotateDirectionToBase([0, 1], 0), [0, 1]);
+  assert.deepEqual(rotateDirectionToBase([-1, 0], undefined), [-1, 0]);
+});
+
+test('rotateDirectionToBase: a 90°, destra schermo -> su base, giù schermo -> destra base', () => {
+  assert.deepEqual(rotateDirectionToBase([1, 0], 90), [0, -1]);
+  assert.deepEqual(rotateDirectionToBase([0, 1], 90), [1, 0]);
+});
+
+test('rotateDirectionToBase: a 180°, ogni asse si inverte', () => {
+  assert.deepEqual(rotateDirectionToBase([1, 0], 180), [-1, 0]);
+  assert.deepEqual(rotateDirectionToBase([0, 1], 180), [0, -1]);
+});
+
+test('rotateDirectionToBase: a 270°, destra schermo -> giù base, giù schermo -> sinistra base', () => {
+  assert.deepEqual(rotateDirectionToBase([1, 0], 270), [0, 1]);
+  assert.deepEqual(rotateDirectionToBase([0, 1], 270), [-1, 0]);
 });
 
 test('aoeColorHex risolve un colore noto della palette', () => {
@@ -73,10 +95,17 @@ test('aoeShapePointsPx: cono ha vertice all\'origine e base pari alla lunghezza'
   assert.deepEqual(points, [[0, 0], [-135, -270], [135, -270]]);
 });
 
-test('aoeShapePointsPx: linea usa la larghezza data, o 1.5m di default', () => {
+test('aoeShapePointsPx: linea con larghezza dispari (1 cella) parte mezza cella oltre l\'origine (stem)', () => {
   const points = aoeShapePointsPx('line', 3, 1.5, { cellSize: 100 });
   // ppm = 100/1.5, lunghezza = 3 * ppm = 200, larghezza = 1.5 * ppm = 100, metà larghezza = 50
-  assert.deepEqual(points, [[-50, 0], [50, 0], [50, -200], [-50, -200]]);
+  // larghezza dispari (1 cella) -> stem = cellSize/2 = 50
+  assert.deepEqual(points, [[-50, -50], [50, -50], [50, -250], [-50, -250]]);
+});
+
+test('aoeShapePointsPx: linea con larghezza pari (2 celle) non ha stem, parte da (0,0)', () => {
+  const points = aoeShapePointsPx('line', 3, 3, { cellSize: 100 });
+  // larghezza pari (2 celle) -> stem = 0, origine già su un vertice
+  assert.deepEqual(points, [[-100, 0], [100, 0], [100, -200], [-100, -200]]);
 });
 
 test('pointInPolygon: quadrato semplice', () => {
@@ -179,31 +208,58 @@ test('snapAoeOrigin: cubo con lato dispari (N=3) si aggancia al centro-cella pi�
   assert.equal(y, 25); // 280px -> centro-cella più vicino 250px
 });
 
-test('snapAoeOrigin: linea a 0°, larghezza dispari -- larghezza al centro-cella, lunghezza all\'incrocio', () => {
+test('snapAoeOrigin: linea con larghezza dispari (N=3) si aggancia al centro della cella più vicina, qualunque sia la rotazione', () => {
   const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
-  const [x, y] = snapAoeOrigin('line', 3 * AOE_METERS_PER_CELL, 3 * AOE_METERS_PER_CELL, 0, grid, 32, 28, 1000, 1000);
-  assert.equal(x, 35); // larghezza (asse X): centro-cella più vicino
-  assert.equal(y, 30); // lunghezza (asse Y): incrocio più vicino
+  [0, 45, 90, 17, 200].forEach((rotation) => {
+    const [x, y] = snapAoeOrigin('line', 3 * AOE_METERS_PER_CELL, 3 * AOE_METERS_PER_CELL, rotation, grid, 32, 28, 1000, 1000);
+    assert.equal(x, 35, `rotazione ${rotation}: asse X`);
+    assert.equal(y, 25, `rotazione ${rotation}: asse Y`);
+  });
 });
 
-test('snapAoeOrigin: linea a 90°, gli assi larghezza/lunghezza si scambiano', () => {
+test('snapAoeOrigin: linea con larghezza pari si aggancia sempre al vertice, a qualunque rotazione', () => {
   const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
-  const [x, y] = snapAoeOrigin('line', 3 * AOE_METERS_PER_CELL, 3 * AOE_METERS_PER_CELL, 90, grid, 32, 28, 1000, 1000);
-  assert.equal(x, 30); // lunghezza (asse X ora): incrocio più vicino
-  assert.equal(y, 25); // larghezza (asse Y ora): centro-cella più vicino
+  const [x, y] = snapAoeOrigin('line', 2 * AOE_METERS_PER_CELL, 4 * AOE_METERS_PER_CELL, 37, grid, 32, 28, 1000, 1000);
+  assert.equal(x, 30);
+  assert.equal(y, 30);
 });
 
-test('snapAoeOrigin: linea fuori dagli assi cardinali resta libera', () => {
+test('snapAoeOrigin: sfera si aggancia sempre al vertice più vicino, qualunque taglia o rotazione', () => {
   const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
-  const [x, y] = snapAoeOrigin('line', 3 * AOE_METERS_PER_CELL, 3 * AOE_METERS_PER_CELL, 45, grid, 32.4, 28.1, 1000, 1000);
-  assert.equal(x, 32.4);
-  assert.equal(y, 28.1);
+  assert.deepEqual(snapAoeOrigin('sphere', 6, undefined, 0, grid, 32.4, 28.1, 1000, 1000), [30, 30]);
+  assert.deepEqual(snapAoeOrigin('sphere', 3 * AOE_METERS_PER_CELL, undefined, 123, grid, 32.4, 28.1, 1000, 1000), [30, 30]);
 });
 
-test('snapAoeOrigin: cono e sfera restano sempre a posizionamento libero', () => {
+test('snapAoeOrigin: cono sceglie il vertice quando la posizione grezza è più vicina a quello', () => {
   const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
-  assert.deepEqual(snapAoeOrigin('cone', 6, undefined, 0, grid, 32.4, 28.1, 1000, 1000), [32.4, 28.1]);
-  assert.deepEqual(snapAoeOrigin('sphere', 6, undefined, 0, grid, 32.4, 28.1, 1000, 1000), [32.4, 28.1]);
+  // px (310,300): 10px dal vertice (300,300), 40px dal centro-lato più vicino.
+  const [x, y] = snapAoeOrigin('cone', 6, undefined, 0, grid, 31, 30, 1000, 1000);
+  assert.deepEqual([x, y], [30, 30]);
+});
+
+test('snapAoeOrigin: cono sceglie il centro-lato quando la posizione grezza è più vicina a quello', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  // px (345,300): 5px dal centro-lato (350,300), 45px dal vertice più vicino.
+  const [x, y] = snapAoeOrigin('cone', 6, undefined, 0, grid, 34.5, 30, 1000, 1000);
+  assert.deepEqual([x, y], [35, 30]);
+});
+
+test('snapAoeOrigin: cono -- la scelta vertice/centro-lato non dipende dalla taglia, solo dalla posizione e dalla rotazione', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  const a = snapAoeOrigin('cone', 3 * AOE_METERS_PER_CELL, undefined, 0, grid, 34.5, 30, 1000, 1000);
+  const b = snapAoeOrigin('cone', 8 * AOE_METERS_PER_CELL, undefined, 0, grid, 34.5, 30, 1000, 1000);
+  assert.deepEqual(a, b);
+});
+
+test('snapAoeOrigin: cono -- la rotazione cambia quale lato di cella conta come "centro-lato"', () => {
+  const grid = { enabled: true, cellSize: 100, offsetX: 0, offsetY: 0 };
+  // Stesso punto grezzo (30.5%,34.5%) -> px(305,345): a 0° il centro-lato
+  // candidato è su X (350,300 dista troppo su Y), vince il vertice; a 90°
+  // il centro-lato candidato è su Y (300,350, molto più vicino), vince lui.
+  const at0 = snapAoeOrigin('cone', 6, undefined, 0, grid, 30.5, 34.5, 1000, 1000);
+  assert.deepEqual(at0, [30, 30]);
+  const at90 = snapAoeOrigin('cone', 6, undefined, 90, grid, 30.5, 34.5, 1000, 1000);
+  assert.deepEqual(at90, [30, 35]);
 });
 
 test('snapAoeOrigin: griglia disattivata non aggancia nulla', () => {
