@@ -214,7 +214,9 @@ la regola di Xanathar (conta ogni cella toccata anche solo in parte dalla
 forma, non solo quelle il cui centro ci ricade dentro), e la forma si
 aggancia da sola alla griglia mentre la trascini. Puoi selezionare un'area
 già piazzata per ridimensionarla o cambiarle colore senza doverla
-ricreare da capo.
+ricreare da capo. Per Sfera e Cubo un mirino "+" segna il punto d'origine
+esatto (un vertice di griglia o un centro-cella): è visibile sia su
+`/control` che su `/display`.
 
 ### Decorazioni a shader
 
