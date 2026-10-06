@@ -8,7 +8,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
-const { AOE_COLORS } = require('../public/shared/media.js');
+const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -811,7 +811,7 @@ io.on('connection', (socket) => {
 
   // Gli AoE sono persistiti come poligoni/griglia/bussola -- a differenza
   // del `ping:show` transitorio, restano finché il DM non li rimuove.
-  socket.on('aoe:place', ({ locationId, shape, sizeM, widthM, x, y, color }) => {
+  socket.on('aoe:place', ({ locationId, shape, sizeM, widthM, x, y, color, shaderOverride }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     if (!['cone', 'cube', 'sphere', 'line'].includes(shape)) return;
@@ -827,7 +827,9 @@ io.on('connection', (socket) => {
       y,
       rotation: 0,
       color: AOE_COLOR_NAMES.includes(color) ? color : 'red',
-      shapeVisible: true
+      shapeVisible: true,
+      shaderOverride: AOE_SHADER_OVERRIDE_IDS.includes(shaderOverride) ? shaderOverride : null,
+      cast: false
     });
     saveState(state);
     broadcastState();
@@ -899,6 +901,33 @@ io.on('connection', (socket) => {
     const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
     if (!aoe) return;
     aoe.shapeVisible = Boolean(visible);
+    saveState(state);
+    broadcastState();
+  });
+
+  // Shader "extra" scelto dal menu "···" (non legato a un colore, vedi
+  // AOE_SHADER_OVERRIDE_IDS/resolveAoeShaderId in media.js) -- null
+  // riporta l'AoE al semplice abbinamento colore->shader. Indipendente da
+  // aoe:setColor: il colore resta sempre il colore di anteprima (vedi
+  // aoe.color), l'override sceglie solo QUALE shader lanciare.
+  socket.on('aoe:setShaderOverride', ({ locationId, aoeId, shaderOverride }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
+    if (!aoe) return;
+    aoe.shaderOverride = AOE_SHADER_OVERRIDE_IDS.includes(shaderOverride) ? shaderOverride : null;
+    saveState(state);
+    broadcastState();
+  });
+
+  // "Lancia incantesimo": finché cast è false l'area resta nel riempimento
+  // flat colorato di sempre (per leggere bene le celle colpite mentre il DM
+  // la piazza/aggiusta); a true passa al render shader (AoeShaderLayer,
+  // vedi shared/shader-effects.js) sia su /control che su /display.
+  socket.on('aoe:setCast', ({ locationId, aoeId, cast }) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    const aoe = location?.map.aoes?.find((a) => a.id === aoeId);
+    if (!aoe) return;
+    aoe.cast = Boolean(cast);
     saveState(state);
     broadcastState();
   });

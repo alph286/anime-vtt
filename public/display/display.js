@@ -14,6 +14,8 @@ const mapShaderCanvas = document.getElementById('map-shader-canvas');
 const shaderLayer = new ShaderLayer(mapShaderCanvas);
 const mapPingCanvas = document.getElementById('map-ping-canvas');
 const pingLayer = new PingLayer(mapPingCanvas);
+const mapAoeShaderCanvas = document.getElementById('map-aoe-shader-canvas');
+const aoeShaderLayer = new AoeShaderLayer(mapAoeShaderCanvas);
 const imageFitBox = document.getElementById('image-fit-box');
 const shownImageImg = document.getElementById('shown-image-img');
 const wifiDot = document.getElementById('wifi-dot');
@@ -336,6 +338,10 @@ function renderAoe(aoes, grid, naturalW, naturalH) {
   if (!naturalW || !naturalH) return;
   aoes.forEach((aoe) => {
     const color = aoeColorHex(aoe.color);
+    // L'evidenziazione delle celle colpite resta SEMPRE visibile, anche ad
+    // area "lanciata" (aoe.cast) -- richiesta esplicita dell'utente: lo
+    // shader (AoeShaderLayer) è il bagliore drammatico sopra, le celle
+    // vanno lette comunque con precisione meccanica.
     aoeAffectedCells(aoe, grid, naturalW, naturalH).forEach(({ col, row }) => {
       const rect = cellRectPercent(col, row, grid, naturalW, naturalH);
       const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -350,10 +356,11 @@ function renderAoe(aoes, grid, naturalW, naturalH) {
       mapAoeSvg.appendChild(el);
     });
 
-    // shapeVisible:false: a differenza di /control, qui il contorno non serve
-    // mai a trascinare nulla -- si può saltarne il disegno del tutto invece di
-    // renderlo solo invisibile.
-    if (aoe.shapeVisible === false) return;
+    // shapeVisible:false O area "lanciata" (vedi control.js per il motivo
+    // di quest'ultima): a differenza di /control, qui il contorno non
+    // serve mai a trascinare nulla -- si può saltarne il disegno del
+    // tutto invece di renderlo solo invisibile.
+    if (aoe.shapeVisible === false || aoe.cast) return;
     const darkColor = aoeColorDarkHex(aoe.color);
     const points = aoeOutlinePoints(aoe, grid, naturalW, naturalH);
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
@@ -442,16 +449,24 @@ let shaderLoopRunning = false;
 
 function stepShaderLayer() {
   let shaders = [];
+  let castAoes = [];
   if (lastState) {
     const location = getActiveLocation(lastState);
     const showingImage = Boolean(lastState.activeImageId && location && location.images.some((i) => i.id === lastState.activeImageId));
     if (location && location.map.file && !showingImage) {
       shaders = location.map.shaders || [];
       shaderLayer.render(shaders, location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+      castAoes = (location.map.aoes || []).filter((a) => a.cast);
+      aoeShaderLayer.render(
+        castAoes.map((a) => ({ ...a, shaderId: resolveAoeShaderId(a) })),
+        location.map.grid,
+        mediaW(activeMapEl),
+        mediaH(activeMapEl)
+      );
     }
   }
   const pingActive = pruneAndRenderPing();
-  if (!shaders.length && !pingActive) {
+  if (!shaders.length && !castAoes.length && !pingActive) {
     shaderLoopRunning = false;
     return;
   }
@@ -463,7 +478,8 @@ function kickShaderLoop() {
   const location = lastState && getActiveLocation(lastState);
   const showingImage = Boolean(lastState && lastState.activeImageId && location && location.images.some((i) => i.id === lastState.activeImageId));
   const shaders = (!showingImage && location && location.map.shaders) || [];
-  if (shaders.length > 0 || pingPoints.length > 0) {
+  const hasCastAoe = Boolean(!showingImage && location && (location.map.aoes || []).some((a) => a.cast));
+  if (shaders.length > 0 || hasCastAoe || pingPoints.length > 0) {
     shaderLoopRunning = true;
     requestAnimationFrame(stepShaderLayer);
   }

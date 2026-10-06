@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { AOE_COLORS } = require('../public/shared/media.js');
+const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -104,8 +104,25 @@ function migrate(state) {
     // fuori dalla palette) prendono il rosso come default -- stesso fallback
     // usato da aoeColorHex() lato client.
     location.map.aoes.forEach((aoe) => {
+      // Il colore "blue" è diventato "white" (bianco, abbinato al bagliore
+      // lunare) -- rinomina invece di lasciare un'area salvata con un
+      // valore ormai fuori palette che cadrebbe sul fallback rosso.
+      if (aoe.color === 'blue') aoe.color = 'white';
       if (!AOE_COLOR_NAMES.includes(aoe.color)) aoe.color = 'red';
       if (aoe.shapeVisible === undefined) aoe.shapeVisible = true;
+      // Aree piazzate prima dell'introduzione del "Lancia incantesimo":
+      // restano nel riempimento flat di sempre (cast false) senza uno
+      // shader speciale finché il DM non lo sceglie esplicitamente.
+      if (aoe.cast === undefined) aoe.cast = false;
+      if (aoe.shaderOverride === undefined) aoe.shaderOverride = null;
+      // "Luce divina dorata" è passata dal menu "···" al colore giallo, e
+      // "Viola Cornelia" (ex Cerchio di fuoco viola) è entrata nel menu al
+      // suo posto: un override salvato prima di questo cambio potrebbe
+      // puntare a uno slug non più valido come override (es.
+      // gold_divine_light) -- azzerarlo invece di lasciarlo passare alla
+      // validazione runtime, che lo scarterebbe comunque ma solo al primo
+      // tentativo di riscriverlo.
+      if (aoe.shaderOverride && !AOE_SHADER_OVERRIDE_IDS.includes(aoe.shaderOverride)) aoe.shaderOverride = null;
     });
     if (!location.map.audio) {
       location.map.audio = { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } };

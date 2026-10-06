@@ -44,7 +44,7 @@ test('rotateDirectionToBase: a 270°, destra schermo -> giù base, giù schermo 
 });
 
 test('aoeColorHex risolve un colore noto della palette', () => {
-  assert.equal(aoeColorHex('blue'), AOE_COLORS.blue);
+  assert.equal(aoeColorHex('white'), AOE_COLORS.white);
 });
 
 test('aoeColorHex usa il rosso come fallback per un nome sconosciuto o mancante', () => {
@@ -53,8 +53,8 @@ test('aoeColorHex usa il rosso come fallback per un nome sconosciuto o mancante'
 });
 
 test('aoeColorDarkHex risolve la versione scura di un colore noto', () => {
-  assert.equal(aoeColorDarkHex('blue'), AOE_COLORS_DARK.blue);
-  assert.notEqual(aoeColorDarkHex('blue'), aoeColorHex('blue'));
+  assert.equal(aoeColorDarkHex('white'), AOE_COLORS_DARK.white);
+  assert.notEqual(aoeColorDarkHex('white'), aoeColorHex('white'));
 });
 
 test('aoeColorDarkHex usa il rosso scuro come fallback per un nome sconosciuto o mancante', () => {

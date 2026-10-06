@@ -27,6 +27,11 @@
   <symbol id="i-shape-line" viewBox="0 0 24 24"><path d="M4 20 20 4"/></symbol>
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7c1.6 0 3 .3 4.2.8M22 12s-1.6 2.8-4.2 4.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+  <symbol id="i-smoke" viewBox="0 0 24 24"><path d="M8 20c-2 0-3-1.3-3-3s1.3-3 3-2.4c-.5-1.6.6-3.6 2.6-3.6 1.4 0 2.6.9 3 2.1.5-.4 1.1-.6 1.9-.6 2 0 3.5 1.5 3.5 3.5S17.5 19 15.5 19"/></symbol>
+  <symbol id="i-sun-rays" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+  <symbol id="i-web" viewBox="0 0 24 24"><path d="M12 2v20M3 8l18 8M21 8 3 16M4.5 4.5l15 15M19.5 4.5l-15 15"/><circle cx="12" cy="12" r="9"/></symbol>
+  <symbol id="i-wizard-hat" viewBox="0 0 24 24"><path d="M12 2 7 17h10L12 2Z"/><path d="M3 19c3 2 15 2 18 0"/><path d="M17 5v2.4M15.8 6.2h2.4"/></symbol>
 </svg>
 
 <div id="app">
@@ -75,6 +80,7 @@
                 <canvas id="map-shader-canvas" class="shader-layer"></canvas>
                 <div class="fog-layer" id="map-fog-layer"></div>
                 <svg id="map-grid-svg" class="grid-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+                <canvas id="map-aoe-shader-canvas" class="shader-layer aoe-shader-layer"></canvas>
                 <svg id="map-aoe-svg" class="aoe-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
                 <canvas id="map-ping-canvas" class="ping-layer"></canvas>
               </div>
@@ -205,9 +211,25 @@
         <div class="aoe-color-bar">
           <button class="aoe-color-btn" data-color="red" title="Rosso"></button>
           <button class="aoe-color-btn" data-color="green" title="Verde"></button>
-          <button class="aoe-color-btn" data-color="blue" title="Blu"></button>
-          <button class="aoe-color-btn" data-color="purple" title="Viola"></button>
+          <button class="aoe-color-btn" data-color="white" title="Bianco"></button>
           <button class="aoe-color-btn" data-color="yellow" title="Giallo"></button>
+          <button id="aoe-shader-menu-btn" class="aoe-shader-menu-btn" title="Altri shader">
+            <svg class="icon"><use href="#i-more"></use></svg>
+          </button>
+        </div>
+        <div id="aoe-shader-menu" class="aoe-shader-menu" hidden>
+          <button class="aoe-shader-menu-item" data-shader="web_area">
+            <svg class="icon"><use href="#i-web"></use></svg>
+            <span>Zona ragnatela</span>
+          </button>
+          <button class="aoe-shader-menu-item" data-shader="circular_smoke">
+            <svg class="icon"><use href="#i-smoke"></use></svg>
+            <span>Fumo circolare</span>
+          </button>
+          <button class="aoe-shader-menu-item" data-shader="purple_fire">
+            <svg class="icon"><use href="#i-wizard-hat"></use></svg>
+            <span>Viola Cornelia</span>
+          </button>
         </div>
         <div class="aoe-size-row">
           <div class="zoom">

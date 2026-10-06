@@ -121,6 +121,9 @@ const aoeEditingLabel = document.getElementById('aoe-editing-label');
 const aoeShapeBar = document.getElementById('aoe-shape-bar');
 const aoeShapeButtons = Array.from(document.querySelectorAll('.aoe-shape-btn'));
 const aoeColorButtons = Array.from(document.querySelectorAll('.aoe-color-btn'));
+const aoeShaderMenuBtn = document.getElementById('aoe-shader-menu-btn');
+const aoeShaderMenu = document.getElementById('aoe-shader-menu');
+const aoeShaderMenuItems = Array.from(document.querySelectorAll('.aoe-shader-menu-item'));
 const aoeSizeOutBtn = document.getElementById('aoe-size-out');
 const aoeSizeInBtn = document.getElementById('aoe-size-in');
 const aoeSizeLevel = document.getElementById('aoe-size-level');
@@ -148,11 +151,21 @@ const mapShaderCanvas = document.getElementById('map-shader-canvas');
 const shaderLayer = new ShaderLayer(mapShaderCanvas);
 const mapPingCanvas = document.getElementById('map-ping-canvas');
 const pingLayer = new PingLayer(mapPingCanvas);
+const mapAoeShaderCanvas = document.getElementById('map-aoe-shader-canvas');
+const aoeShaderLayer = new AoeShaderLayer(mapAoeShaderCanvas);
 
 let aoeSelectedShape = 'cone';
 let aoeSelectedColor = 'red';
 let aoeSelectedSize = AOE_METERS_PER_CELL;
 let aoeSelectedWidth = AOE_METERS_PER_CELL;
+// Shader "extra" (menu "···", vedi AOE_SHADER_OVERRIDE_IDS) di default per
+// il prossimo piazzamento -- stesso ruolo di aoeSelectedColor/Shape, ma
+// indipendente dal colore (vedi resolveAoeShaderId in media.js): il colore
+// resta sempre quello di anteprima, l'override sceglie solo lo shader.
+let aoeSelectedShaderOverride = null;
+// Stato puramente di interfaccia (mai inviato al server): se il menu
+// inline è aperto o chiuso in questo momento.
+let aoeShaderMenuOpen = false;
 
 // Ogni swatch mostra sempre il proprio colore (fisso, non dipende dalla
 // selezione corrente) -- va impostato una sola volta, non a ogni render.
@@ -185,9 +198,13 @@ function renderAoePanel() {
   const displayColor = editingAoe ? editingAoe.color : aoeSelectedColor;
   const displaySize = editingAoe ? editingAoe.sizeM : aoeSelectedSize;
   const displayWidth = editingAoe ? (editingAoe.widthM || AOE_METERS_PER_CELL) : aoeSelectedWidth;
+  const displayShaderOverride = editingAoe ? editingAoe.shaderOverride : aoeSelectedShaderOverride;
 
   aoeShapeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.shape === displayShape));
   aoeColorButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.color === displayColor));
+  aoeShaderMenuBtn.classList.toggle('active', Boolean(displayShaderOverride));
+  aoeShaderMenu.hidden = !aoeShaderMenuOpen;
+  aoeShaderMenuItems.forEach((btn) => btn.classList.toggle('active', btn.dataset.shader === displayShaderOverride));
   const sizeDimensionLabel = aoeSizeDimensionLabel(displayShape);
   aoeSizeLevel.textContent = `${sizeDimensionLabel}: ${displaySize.toLocaleString('it-IT', { minimumFractionDigits: 1 })} m`;
   aoeSizeOutBtn.title = `Riduci ${sizeDimensionLabel.toLowerCase()}`;
@@ -206,14 +223,58 @@ aoeShapeButtons.forEach((btn) => {
   });
 });
 
+// Scegliere un colore e scegliere uno shader dal menu "···" sono ora un
+// unico gruppo mutuamente esclusivo (come dei radio button): cliccare un
+// colore spegne anche un eventuale override attivo, altrimenti lo shader
+// "lanciato" restava quello del menu anche dopo aver toccato un colore
+// (bug segnalato dall'utente: sembrava di dover prima "disattivare" la
+// voce del menu per riavere i colori). Vedi il simmetrico in
+// aoeShaderMenuItems sotto, che azzera invece il colore scelto qui.
 aoeColorButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     const editingAoe = getSelectedAoe();
     if (editingAoe) {
       socket.emit('aoe:setColor', { locationId: previewLocationId, aoeId: editingAoe.id, color: btn.dataset.color });
+      if (editingAoe.shaderOverride) {
+        socket.emit('aoe:setShaderOverride', { locationId: previewLocationId, aoeId: editingAoe.id, shaderOverride: null });
+      }
       return;
     }
     aoeSelectedColor = btn.dataset.color;
+    aoeSelectedShaderOverride = null;
+    renderAoePanel();
+  });
+});
+
+aoeShaderMenuBtn.addEventListener('click', () => {
+  aoeShaderMenuOpen = !aoeShaderMenuOpen;
+  renderAoePanel();
+});
+
+// Scegliere una voce è un toggle (come la selezione di una chip area):
+// riselezionare la stessa voce torna al semplice abbinamento colore->
+// shader (shaderOverride null), invece di restare bloccati su quella
+// scelta senza un modo per tornare indietro dal menu stesso. Ogni voce
+// ha un proprio colore di anteprima/evidenziazione celle di default
+// (AOE_SHADER_OVERRIDE_DEFAULT_COLOR in media.js: bianco per la
+// maggior parte, viola solo per Viola Cornelia) -- applicato solo
+// quando si SCEGLIE un override (non quando lo si toglie); da lì in poi
+// il DM lo cicla a piacere col pulsante "cambia colore" del pad
+// (aoeNudgeColor), che resta indipendente dall'override scelto qui.
+aoeShaderMenuItems.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const editingAoe = getSelectedAoe();
+    const current = editingAoe ? editingAoe.shaderOverride : aoeSelectedShaderOverride;
+    const next = current === btn.dataset.shader ? null : btn.dataset.shader;
+    const defaultColor = AOE_SHADER_OVERRIDE_DEFAULT_COLOR[btn.dataset.shader];
+    if (editingAoe) {
+      socket.emit('aoe:setShaderOverride', { locationId: previewLocationId, aoeId: editingAoe.id, shaderOverride: next });
+      if (next) socket.emit('aoe:setColor', { locationId: previewLocationId, aoeId: editingAoe.id, color: defaultColor });
+    } else {
+      aoeSelectedShaderOverride = next;
+      if (next) aoeSelectedColor = defaultColor;
+    }
+    aoeShaderMenuOpen = false;
     renderAoePanel();
   });
 });
@@ -319,11 +380,17 @@ aoeNudgeDown.addEventListener('click', () => nudgeSelectedAoe(0, 1));
 aoeNudgeLeft.addEventListener('click', () => nudgeSelectedAoe(-1, 0));
 aoeNudgeRight.addEventListener('click', () => nudgeSelectedAoe(1, 0));
 
+// Cicla solo i 4 colori della color bar (AOE_COLOR_CYCLE_NAMES), mai
+// `purple`: quel colore resta riservato all'evidenziazione di Viola
+// Cornelia (vedi AOE_SHADER_OVERRIDE_DEFAULT_COLOR), non è una scelta
+// che il DM fa di persona qui. Se il colore attuale non è tra i 4
+// ciclabili (es. viola, o un valore futuro), si riparte dal primo.
 aoeNudgeColor.addEventListener('click', () => {
   const editingAoe = getSelectedAoe();
   if (!editingAoe) return;
-  const names = Object.keys(AOE_COLORS);
-  const next = names[(names.indexOf(editingAoe.color) + 1) % names.length];
+  const names = AOE_COLOR_CYCLE_NAMES;
+  const idx = names.indexOf(editingAoe.color);
+  const next = names[(idx + 1) % names.length];
   socket.emit('aoe:setColor', { locationId: previewLocationId, aoeId: editingAoe.id, color: next });
 });
 
@@ -773,6 +840,12 @@ function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
   aoes.forEach((aoe) => {
     const color = aoeColorHex(aoe.color);
     const darkColor = aoeColorDarkHex(aoe.color);
+    // L'evidenziazione delle celle colpite resta SEMPRE visibile, anche
+    // ad area "lanciata" (aoe.cast) -- richiesta esplicita dell'utente:
+    // lo shader (canvas separato, vedi stepShaderLayer) è il bagliore
+    // drammatico sopra, ma le celle vanno lette comunque con precisione
+    // meccanica. Prima il fill spariva proprio a shader attivo, il
+    // momento in cui invece conta di più sapere quali celle sono colpite.
     aoeAffectedCells(aoe, grid, naturalW, naturalH).forEach(({ col, row }) => {
       const rect = cellRectPercent(col, row, grid, naturalW, naturalH);
       const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -787,17 +860,20 @@ function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
       mapAoeSvg.appendChild(el);
     });
 
-    // shapeVisible:false nasconde solo l'aspetto del contorno (stroke
-    // "none"): il poligono resta nel DOM con la sua geometria e i suoi
-    // pointer-events invariati, altrimenti trascinare l'area diventerebbe
-    // impossibile una volta nascosta.
+    // shapeVisible:false O area "lanciata" nascondono solo l'aspetto del
+    // contorno (stroke "none") -- il poligono resta nel DOM con la sua
+    // geometria e i suoi pointer-events invariati, altrimenti trascinare
+    // l'area diventerebbe impossibile una volta nascosta. Il contorno
+    // sparisce a shader attivo su richiesta esplicita dell'utente: con lo
+    // shader sopra e le celle evidenziate sotto, il triangolo/rettangolo
+    // netto risultava ridondante.
     const points = aoeOutlinePoints(aoe, grid, naturalW, naturalH);
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     poly.setAttribute('points', points.map(([x, y]) => `${x},${y}`).join(' '));
     poly.setAttribute('class', `aoe-shape-overlay ${aoe.id === selectedAoeId ? 'selected' : ''}`);
-    const shapeVisible = aoe.shapeVisible !== false;
+    const outlineVisible = aoe.shapeVisible !== false && !aoe.cast;
     poly.setAttribute('fill', 'none');
-    poly.setAttribute('stroke', shapeVisible ? darkColor : 'none');
+    poly.setAttribute('stroke', outlineVisible ? darkColor : 'none');
     // Sovrascrive lo stroke-width da CSS (2, o 3 se .selected): qui serve
     // un valore calcolato a runtime, non ricavabile da una regola statica.
     poly.style.strokeWidth = (aoe.id === selectedAoeId ? 3 : 2) / zoomComp;
@@ -809,7 +885,7 @@ function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
     // /display (chiamata gemella in display.js, senza compensazione zoom
     // perché lì non esiste zoom locale). Segue la stessa visibilità del
     // contorno.
-    appendAoeOriginMarker(mapAoeSvg, aoe, shapeVisible ? darkColor : 'none', 1.5 / zoomComp, naturalW, naturalH);
+    appendAoeOriginMarker(mapAoeSvg, aoe, outlineVisible ? darkColor : 'none', 1.5 / zoomComp, naturalW, naturalH);
   });
 }
 
@@ -875,6 +951,9 @@ function renderAoeChipList(aoes) {
         <div class="aoe-chip ${selected ? 'selected' : ''}" data-id="${aoe.id}">
           <div class="aoe-chip-pill">
             <span class="aoe-chip-label">${escapeHtml(aoeShapeLabel(aoe.shape))} ${sizeText}m</span>
+            <button class="aoe-chip-cast ${aoe.cast ? 'active' : ''}" title="${aoe.cast ? 'Interrompi incantesimo' : 'Lancia incantesimo'}">
+              <svg class="icon"><use href="#i-bolt"></use></svg>
+            </button>
             <button class="aoe-chip-delete ${armed ? 'confirm' : ''}" title="${armed ? 'Tocca di nuovo per confermare' : 'Rimuovi'}">✕</button>
           </div>
         </div>
@@ -1257,6 +1336,7 @@ mapFitBox.addEventListener('pointerup', (e) => {
     locationId: previewLocationId,
     shape: aoeSelectedShape,
     color: aoeSelectedColor,
+    shaderOverride: aoeSelectedShaderOverride,
     sizeM: aoeSelectedSize,
     widthM,
     x,
@@ -1283,6 +1363,16 @@ fowList.addEventListener('click', (e) => {
 });
 
 aoeChipList.addEventListener('click', (e) => {
+  const castBtn = e.target.closest('.aoe-chip-cast');
+  if (castBtn) {
+    const chip = castBtn.closest('.aoe-chip');
+    const aoeId = chip.dataset.id;
+    const previewLocation = getPreviewLocation();
+    const aoe = previewLocation && previewLocation.map.aoes.find((a) => a.id === aoeId);
+    if (!aoe) return;
+    socket.emit('aoe:setCast', { locationId: previewLocationId, aoeId, cast: !aoe.cast });
+    return;
+  }
   const deleteBtn = e.target.closest('.aoe-chip-delete');
   if (deleteBtn) {
     const chip = deleteBtn.closest('.aoe-chip');
@@ -1918,15 +2008,23 @@ let shaderLoopRunning = false;
 
 function stepShaderLayer() {
   let shaders = [];
+  let castAoes = [];
   if (state) {
     const previewLocation = getPreviewLocation();
     if (previewLocation && previewLocation.map.file) {
       shaders = previewLocation.map.shaders || [];
       shaderLayer.render(shaders, previewLocation.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
+      castAoes = (previewLocation.map.aoes || []).filter((a) => a.cast);
+      aoeShaderLayer.render(
+        castAoes.map((a) => ({ ...a, shaderId: resolveAoeShaderId(a) })),
+        previewLocation.map.grid,
+        mediaW(activeMapEl),
+        mediaH(activeMapEl)
+      );
     }
   }
   const pingActive = pruneAndRenderPing();
-  if (!shaders.length && !pingActive) {
+  if (!shaders.length && !castAoes.length && !pingActive) {
     shaderLoopRunning = false;
     return;
   }
@@ -1937,7 +2035,8 @@ function kickShaderLoop() {
   if (shaderLoopRunning) return;
   const previewLocation = state && getPreviewLocation();
   const shaders = (previewLocation && previewLocation.map.shaders) || [];
-  if (shaders.length > 0 || pingPoints.length > 0) {
+  const hasCastAoe = ((previewLocation && previewLocation.map.aoes) || []).some((a) => a.cast);
+  if (shaders.length > 0 || hasCastAoe || pingPoints.length > 0) {
     shaderLoopRunning = true;
     requestAnimationFrame(stepShaderLayer);
   }

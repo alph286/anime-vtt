@@ -133,6 +133,730 @@ const SHADER_EFFECTS = {
   }
 };
 
+// Avvolge uno shader "ad area" portato da github.com/alph286/shaders (fuoco/
+// fumo/luce/ecc, ognuno autosufficiente: hash/noise/fbm propri, mai in
+// collisione tra loro perché ogni voce del registry compila come programma
+// WebGL indipendente -- vedi AoeShaderLayer.getProgram) con due aggiunte
+// comuni a tutti: la convenzione u_viewportOrigin già usata dal Portale
+// (gl_FragCoord è relativo all'intero framebuffer, non al rettangolo
+// passato a gl.viewport() per questa singola AoE) e un RITAGLIO sulla vera
+// sagoma dell'AoE (vedi aoeMaskContains sotto) -- senza il ritaglio, un
+// cono o una linea ruotata mostrerebbero lo shader riempire l'intero
+// bounding box rettangolare invece della sagoma triangolare/rettangolare
+// vera. Ogni shader porta la propria `mainImage(out vec4, in vec2)`
+// (stessa firma Shadertoy-style già usata dal file originale), invariata:
+// il ritaglio avviene DOPO, sul colore finale, non dentro la logica di
+// ciascun effetto -- non serve ritoccare le costanti/i raggi che ciascun
+// autore ha calibrato per il proprio shader.
+// Dove, in "unità p" (vedi u_fillScale in aoeEffectFragmentSrc), la
+// dissolvenza di questi shader (tutti della forma
+// `1-smoothstep(base-feather, base+feather, rad)`) è arrivata solo a MEZZA
+// intensità, non dove tocca zero -- `base+feather` (dove la densità è già
+// invisibile) non va bene come bersaglio: il punto più lontano della
+// sagoma vera finirebbe comunque nero. "A mezza intensità" lascia invece
+// il punto più lontano ancora visibilmente acceso (non al massimo, ma
+// riconoscibile), con una dissolvenza morbida verso quel bordo invece di
+// un buco nero -- media dei `base` calibrati dai vari autori (0.48 per i
+// 4 fuochi, 0.5 moonbeam, 0.42 luce divina, 0.55 fumo).
+const AOE_FILL_TARGET_REACH = 0.55;
+
+function aoeEffectFragmentSrc(mainImageGlsl) {
+  return `#version 300 es
+precision highp float;
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_viewportOrigin;
+uniform vec2 u_maskPoints[32];
+uniform int u_maskCount;
+uniform float u_fillScale;
+// Sistema di coordinate "srotolato" per Cono/Linea (vedi
+// aoeShapeWarpParams in questo stesso file) -- u_shapeWarp a 0 su
+// Cubo/Sfera, che non ne hanno bisogno.
+uniform int u_shapeWarp;
+uniform vec2 u_shapeOrigin;
+uniform vec2 u_shapeAxis;
+uniform float u_shapeLength;
+uniform float u_shapeNearHalfWidth;
+uniform float u_shapeFarHalfWidth;
+
+out vec4 fragColor;
+
+${mainImageGlsl}
+
+// Ray-casting pari/dispari in pixel reali locali al rettangolo, stesso
+// sistema top-down di u_maskPoints (vedi aoeShaderMaskRect in media.js).
+// u_maskCount a 0 significa "nessuna sagoma nota" (rete di sicurezza):
+// meglio mostrare l'intero rettangolo che niente.
+bool aoeMaskContains(vec2 p) {
+  if (u_maskCount == 0) return true;
+  bool inside = false;
+  int j = u_maskCount - 1;
+  for (int i = 0; i < 32; i++) {
+    if (i >= u_maskCount) break;
+    vec2 pi = u_maskPoints[i];
+    vec2 pj = u_maskPoints[j];
+    if (((pi.y > p.y) != (pj.y > p.y)) &&
+        (p.x < (pj.x - pi.x) * (p.y - pi.y) / (pj.y - pi.y) + pi.x)) {
+      inside = !inside;
+    }
+    j = i;
+  }
+  return inside;
+}
+
+void main() {
+  vec2 fragCoord = gl_FragCoord.xy - u_viewportOrigin;
+
+  // Cono/Linea: "srotola" la posizione fisica in un sistema locale alla
+  // forma invece di usare la distanza dal centro del rettangolo --
+  // along è quanto avanti lungo l'asse principale (vertice->base per il
+  // Cono, vicino->lontano per la Linea), across è lo scarto laterale
+  // diviso per la semi-larghezza A QUELLA ALTEZZA (mix tra vicina e
+  // lontana: 0 e la base per il Cono, costante per la Linea). Il
+  // risultato (warped) vale esattamente ±1 sul bordo vero della sagoma,
+  // su TUTTA la sua lunghezza -- non solo vicino al centro del bbox come
+  // con la sola distanza euclidea, che per un Cono/una Linea lascia gran
+  // parte dell'area (es. gli angoli della base) ben oltre il raggio dove
+  // il bagliore originale è già spento (segnalato dall'utente: "quasi
+  // nessuno occupano tutto lo spazio delle aoe"). Cubo/Sfera (u_shapeWarp
+  // 0) restano nella distanza dal centro di sempre, già un buon
+  // adattamento naturale per quelle forme.
+  vec2 center = u_resolution * 0.5;
+  vec2 warped;
+  if (u_shapeWarp == 1) {
+    vec2 rel = fragCoord - u_shapeOrigin;
+    float along = dot(rel, u_shapeAxis);
+    vec2 perp = vec2(-u_shapeAxis.y, u_shapeAxis.x);
+    float across = dot(rel, perp);
+    float t = clamp(along / max(u_shapeLength, 0.001), 0.0, 1.0);
+    float halfWidth = mix(u_shapeNearHalfWidth, u_shapeFarHalfWidth, t);
+    warped = vec2(across / max(halfWidth, 0.001), t * 2.0 - 1.0);
+  } else {
+    warped = (fragCoord - center) * 2.0 / u_resolution.y;
+  }
+  // u_fillScale riscala warped prima di passarlo a mainImage (1.0 =
+  // nessun cambiamento): questi shader sono stati scritti per un bagliore
+  // radiale che si spegne ben prima di raggiungere ±1, quindi senza
+  // questo riscalo anche la parte "srotolata" della sagoma (o, su
+  // Cubo/Sfera, la sagoma reale) resterebbe scura vicino al proprio
+  // bordo. Vedi AoeShaderLayer.render per come viene calcolato, e il
+  // commento su fillScale:false di web_area per l'unica eccezione.
+  vec2 scaledFragCoord = center + warped * u_fillScale * u_resolution.y * 0.5;
+  vec4 col;
+  mainImage(col, scaledFragCoord);
+  // gl_FragCoord ha origine in basso a sinistra (y cresce verso l'alto);
+  // u_maskPoints è top-down (y cresce verso il basso, stesso sistema di
+  // aoeShapePointsPx/aoeOutlinePoints) -- va invertito solo per il test di
+  // ritaglio, mai per mainImage che resta nella convenzione originale di
+  // ciascun autore. Il ritaglio usa sempre la posizione FISICA reale
+  // (fragCoord, non scaledFragCoord): è la sagoma vera dell'AoE, non deve
+  // scalare con fillScale.
+  vec2 topDown = vec2(fragCoord.x, u_resolution.y - fragCoord.y);
+  fragColor = aoeMaskContains(topDown) ? col : vec4(0.0);
+}
+`;
+}
+
+// Registro degli shader "ad area" selezionabili per un'AoE lanciata (vedi
+// aoe.cast in control.js) -- 4 abbinati 1:1 a un colore della palette
+// esistente (AOE_COLOR_TO_SHADER in media.js: rosso/verde/bianco/giallo)
+// più 3 extra nel menu "···" (AOE_SHADER_OVERRIDE_IDS: zona ragnatela,
+// fumo circolare, Viola Cornelia). Le 3 varianti "cerchio d'evocazione"
+// del repo sorgente sono multi-pass (fluid sim: uFluid/uRune/uDye su più
+// framebuffer) e non rientrano nella pipeline a singolo pass qui sotto --
+// restano un lavoro futuro, vedi Piano di lavoro in CLAUDE.md.
+const AOE_SHADER_EFFECTS = {
+  red_fire: {
+    label: 'Cerchio di fuoco (rosso)',
+    fragmentSrc: aoeEffectFragmentSrc(`
+// ---- Hash / Noise (procedural-noise technique) ----
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float noise(vec2 x) {
+    vec2 p = floor(x);
+    vec2 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(p + vec2(0.0, 0.0));
+    float b = hash(p + vec2(1.0, 0.0));
+    float c = hash(p + vec2(0.0, 1.0));
+    float d = hash(p + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+const mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+float fbm(vec2 p) {
+    float f = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        f += a * noise(p);
+        p = m * p;
+        a *= 0.5;
+    }
+    return f;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    float t = u_time;
+
+    float rad = length(p);
+
+    // cartesian domain warp for organic turbulence — built only from p
+    // and time (no angle, no radial-line sampling), so it never seams
+    // and never collapses into a "sunburst"/pinwheel near the center
+    vec2 q = p * 2.4;
+    vec2 warpA = vec2(fbm(q + vec2(0.0, -t * 0.35)), fbm(q + vec2(5.1, t * 0.28)));
+    vec2 warped = q + (warpA - 0.5) * 1.6;
+
+    float flame = fbm(warped * 1.7);
+    flame = mix(flame, fbm(warped * 3.0 + warpA * 1.8), 0.35);
+    flame = clamp(flame * 1.15, 0.0, 1.0);
+
+    // traveling ring wave: phase depends on (radius - time), so rings of
+    // brightness continuously expand from the center outward — this is
+    // what actually reads as "flames flowing from the center to the rim"
+    float ring = 0.5 + 0.5 * sin(rad * 10.0 - t * 3.0 + flame * 4.0);
+    flame = mix(flame, clamp(flame * 0.6 + ring * 0.7, 0.0, 1.0), 0.6);
+
+    // soft, feathered falloff instead of a hard circle edge — the shape
+    // dissolves gradually into transparency (top-down brazier glow).
+    // Opacity comes mostly from this shape term, only lightly touched by
+    // the flame noise, so the fire never breaks up into dark "holes".
+    float baseRadius = 0.48;
+    float feather = 0.4;
+    float radialFalloff = 1.0 - smoothstep(baseRadius - feather, baseRadius + feather, rad);
+    float density = radialFalloff * (0.75 + 0.25 * flame);
+    density = clamp(density, 0.0, 1.0);
+
+    // brightness never drops to black — it only ranges from a dim green
+    // glow up to a hot flare, so it always reads as fire, never as smoke
+    float heat = mix(0.3, 0.85, flame);
+
+    // small, soft ember glow right at the center — a brightness boost,
+    // not a flat white disc, so the flame texture stays visible
+    float core = smoothstep(0.24, 0.0, rad);
+    heat = clamp(heat + core * core * 0.35, 0.0, 1.0);
+
+    // red fire palette: deep red base -> vivid red-orange -> pale yellow hot spots
+    vec3 col;
+    col.r = 0.32 + heat * 0.68;
+    col.g = pow(heat, 2.4) * 0.55;
+    col.b = pow(heat, 4.0) * 0.16;
+    col = clamp(col, 0.0, 1.0);
+
+    float alpha = density;
+    fragColor = vec4(col * alpha, alpha);
+}
+`)
+  },
+  green_fire: {
+    label: 'Cerchio di fuoco (verde)',
+    fragmentSrc: aoeEffectFragmentSrc(`
+// ---- Hash / Noise (procedural-noise technique) ----
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float noise(vec2 x) {
+    vec2 p = floor(x);
+    vec2 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(p + vec2(0.0, 0.0));
+    float b = hash(p + vec2(1.0, 0.0));
+    float c = hash(p + vec2(0.0, 1.0));
+    float d = hash(p + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+const mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+float fbm(vec2 p) {
+    float f = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        f += a * noise(p);
+        p = m * p;
+        a *= 0.5;
+    }
+    return f;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    float t = u_time;
+
+    float rad = length(p);
+
+    // cartesian domain warp for organic turbulence — built only from p
+    // and time (no angle, no radial-line sampling), so it never seams
+    // and never collapses into a "sunburst"/pinwheel near the center
+    vec2 q = p * 2.4;
+    vec2 warpA = vec2(fbm(q + vec2(0.0, -t * 0.35)), fbm(q + vec2(5.1, t * 0.28)));
+    vec2 warped = q + (warpA - 0.5) * 1.6;
+
+    float flame = fbm(warped * 1.7);
+    flame = mix(flame, fbm(warped * 3.0 + warpA * 1.8), 0.35);
+    flame = clamp(flame * 1.15, 0.0, 1.0);
+
+    // traveling ring wave: phase depends on (radius - time), so rings of
+    // brightness continuously expand from the center outward — this is
+    // what actually reads as "flames flowing from the center to the rim"
+    float ring = 0.5 + 0.5 * sin(rad * 10.0 - t * 3.0 + flame * 4.0);
+    flame = mix(flame, clamp(flame * 0.6 + ring * 0.7, 0.0, 1.0), 0.6);
+
+    // soft, feathered falloff instead of a hard circle edge — the shape
+    // dissolves gradually into transparency (top-down brazier glow).
+    // Opacity comes mostly from this shape term, only lightly touched by
+    // the flame noise, so the fire never breaks up into dark "holes".
+    float baseRadius = 0.48;
+    float feather = 0.4;
+    float radialFalloff = 1.0 - smoothstep(baseRadius - feather, baseRadius + feather, rad);
+    float density = radialFalloff * (0.75 + 0.25 * flame);
+    density = clamp(density, 0.0, 1.0);
+
+    // brightness never drops to black — it only ranges from a dim green
+    // glow up to a hot flare, so it always reads as fire, never as smoke
+    float heat = mix(0.3, 0.85, flame);
+
+    // small, soft ember glow right at the center — a brightness boost,
+    // not a flat white disc, so the flame texture stays visible
+    float core = smoothstep(0.24, 0.0, rad);
+    heat = clamp(heat + core * core * 0.35, 0.0, 1.0);
+
+    // green fire palette: deep green base -> vivid green -> pale yellow-green hot spots
+    vec3 col;
+    col.r = pow(heat, 2.2) * 0.45;
+    col.g = 0.26 + heat * 0.85;
+    col.b = pow(heat, 3.2) * 0.22;
+    col = clamp(col, 0.0, 1.0);
+
+    float alpha = density;
+    fragColor = vec4(col * alpha, alpha);
+}
+`)
+  },
+  purple_fire: {
+    label: 'Viola Cornelia',
+    fragmentSrc: aoeEffectFragmentSrc(`
+// ---- Hash / Noise (procedural-noise technique) ----
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float noise(vec2 x) {
+    vec2 p = floor(x);
+    vec2 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(p + vec2(0.0, 0.0));
+    float b = hash(p + vec2(1.0, 0.0));
+    float c = hash(p + vec2(0.0, 1.0));
+    float d = hash(p + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+const mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+float fbm(vec2 p) {
+    float f = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        f += a * noise(p);
+        p = m * p;
+        a *= 0.5;
+    }
+    return f;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    float t = u_time;
+
+    float rad = length(p);
+
+    // cartesian domain warp for organic turbulence — built only from p
+    // and time (no angle, no radial-line sampling), so it never seams
+    // and never collapses into a "sunburst"/pinwheel near the center
+    vec2 q = p * 2.4;
+    vec2 warpA = vec2(fbm(q + vec2(0.0, -t * 0.35)), fbm(q + vec2(5.1, t * 0.28)));
+    vec2 warped = q + (warpA - 0.5) * 1.6;
+
+    float flame = fbm(warped * 1.7);
+    flame = mix(flame, fbm(warped * 3.0 + warpA * 1.8), 0.35);
+    flame = clamp(flame * 1.15, 0.0, 1.0);
+
+    // traveling ring wave: phase depends on (radius - time), so rings of
+    // brightness continuously expand from the center outward — this is
+    // what actually reads as "flames flowing from the center to the rim"
+    float ring = 0.5 + 0.5 * sin(rad * 10.0 - t * 3.0 + flame * 4.0);
+    flame = mix(flame, clamp(flame * 0.6 + ring * 0.7, 0.0, 1.0), 0.6);
+
+    // soft, feathered falloff instead of a hard circle edge — the shape
+    // dissolves gradually into transparency (top-down brazier glow).
+    // Opacity comes mostly from this shape term, only lightly touched by
+    // the flame noise, so the fire never breaks up into dark "holes".
+    float baseRadius = 0.48;
+    float feather = 0.4;
+    float radialFalloff = 1.0 - smoothstep(baseRadius - feather, baseRadius + feather, rad);
+    float density = radialFalloff * (0.75 + 0.25 * flame);
+    density = clamp(density, 0.0, 1.0);
+
+    // brightness never drops to black — it only ranges from a dim green
+    // glow up to a hot flare, so it always reads as fire, never as smoke
+    float heat = mix(0.3, 0.85, flame);
+
+    // small, soft ember glow right at the center — a brightness boost,
+    // not a flat white disc, so the flame texture stays visible
+    float core = smoothstep(0.24, 0.0, rad);
+    heat = clamp(heat + core * core * 0.35, 0.0, 1.0);
+
+    // Viola Cornelia palette: indaco profondo -> viola pieno -> lilla
+    // chiaro nei punti caldi -- il blu resta sempre nettamente dominante
+    // sul rosso (rapporto ~2:1 al picco), non paritario come nella prima
+    // versione, apposta per leggersi come viola vero e non come
+    // magenta/rosa (richiesta esplicita dell'utente: "più viola e meno
+    // rosa").
+    vec3 col;
+    col.r = 0.18 + heat * 0.32;
+    col.g = pow(heat, 3.6) * 0.20;
+    col.b = 0.42 + heat * 0.58;
+    col = clamp(col, 0.0, 1.0);
+
+    float alpha = density;
+    fragColor = vec4(col * alpha, alpha);
+}
+`)
+  },
+  moonbeam: {
+    label: 'Moonbeam',
+    fragmentSrc: aoeEffectFragmentSrc(`
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+// Procedural water caustics (classic "interfering sines" form). The
+// magic constants here (the -250 offset, inten=0.005, 1.17/1.4/8) are a
+// matched set tuned for p living at a large-magnitude offset — changing
+// the coordinate scale without keeping the offset breaks the balance and
+// the whole field saturates to one flat value (learned this the hard way).
+float caustics(vec2 uv, float time) {
+    const float TAU = 6.28318530718;
+    vec2 p = mod(uv * TAU, TAU) - 250.0;
+    vec2 i = p;
+    float c = 1.0;
+    const float inten = 0.005;
+    for (int n = 0; n < 5; n++) {
+        float t = time * (1.0 - (3.5 / float(n + 1)));
+        i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
+        vec2 denom = vec2(sin(i.x + t), cos(i.y + t)) / inten;
+        c += 1.0 / length(vec2(p.x, p.y) / denom);
+    }
+    c /= 5.0;
+    c = 1.17 - pow(c, 1.4);
+    return clamp(pow(abs(c), 8.0), 0.0, 1.0);
+}
+
+// Soft round twinkling highlight per jittered cell (the photo's bokeh glints)
+float bokeh(vec2 p, float scale, float time) {
+    vec2 gp = p * scale;
+    vec2 n = floor(gp);
+    vec2 f = fract(gp);
+    float best = 0.0;
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+            vec2 g = vec2(float(i), float(j));
+            vec2 o = vec2(hash(n + g), hash(n + g + 17.3));
+            float twinkle = 0.5 + 0.5 * sin(time * 2.2 + hash(n + g + 4.1) * 30.0);
+            float d = length(f - g - o);
+            float spot = smoothstep(0.22, 0.0, d) * pow(twinkle, 3.0);
+            best = max(best, spot);
+        }
+    }
+    return best;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    float t = u_time;
+    float rad = length(p);
+
+    // gentle wave distortion so the whole caustic field drifts like a
+    // real water surface instead of just cycling in place
+    vec2 wp = p * 2.6 + vec2(sin(t * 0.15), cos(t * 0.12)) * 0.3;
+    float causticPattern = caustics(wp, t * 0.6);
+    causticPattern = pow(causticPattern, 0.7); // widen the bright filaments
+
+    float glints = max(bokeh(p, 3.2, t), bokeh(p + 5.3, 6.5, t * 1.3) * 0.8);
+
+    float pattern = clamp(causticPattern * 1.1 + glints * 0.9, 0.0, 1.0);
+
+    // soft circular falloff, brightest toward the center
+    float baseRadius = 0.5;
+    float feather = 0.42;
+    float falloff = 1.0 - smoothstep(baseRadius - feather, baseRadius + feather, rad);
+
+    // white & silver only — a cool light-grey base rising to pure white
+    // at the brightest caustic filaments/glints, no blue tint
+    vec3 col = mix(vec3(0.62, 0.63, 0.66), vec3(1.0), pattern);
+
+    float baseGlow = 0.68;
+    float alpha = clamp((baseGlow + pattern * 0.45) * falloff, 0.0, 0.95);
+    fragColor = vec4(col * alpha, alpha);
+}
+`)
+  },
+  web_area: {
+    label: 'Zona ragnatela',
+    // Unico shader ad area che già riempie da solo tutta la sagoma (la
+    // propria areaMask interna arriva fino a edgeDist 0.95, vedi
+    // `main()` qui sotto): il riscalo generico di AoeShaderLayer.render
+    // (vedi fillScale) andrebbe a tagliarlo via il mascheramento poligonale
+    // prima ancora che la sua dissolvenza morbida entri in azione, quindi
+    // resta escluso -- unico shader con questo flag a false.
+    fillScale: false,
+    fragmentSrc: aoeEffectFragmentSrc(`
+vec2 hash22(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+// F1/F2 Voronoi — jittered cell centers, gently swaying over time
+vec2 voronoiF1F2(vec2 p, float t, float swaySpeed) {
+    vec2 n = floor(p);
+    vec2 f = fract(p);
+    float f1 = 8.0, f2 = 8.0;
+
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+            vec2 g = vec2(float(i), float(j));
+            vec2 o = hash22(n + g);
+            o = 0.5 + 0.4 * sin(t * swaySpeed + 6.2831 * o);
+            vec2 r = g + o - f;
+            float d = dot(r, r);
+            if (d < f1) { f2 = f1; f1 = d; }
+            else if (d < f2) { f2 = d; }
+        }
+    }
+    return vec2(sqrt(f1), sqrt(f2));
+}
+
+float strands(vec2 p, float scale, float thickness, float t, float swaySpeed) {
+    vec2 fg = voronoiF1F2(p * scale, t, swaySpeed);
+    float edge = fg.y - fg.x;
+    return exp(-edge * thickness);
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    float t = u_time;
+
+    // three overlaid scales (coarse/medium/fine) so the webbing reads as a
+    // dense tangled mass rather than a few sparse lines
+    float coarse = strands(p, 2.4, 9.0, t, 0.2);
+    float main = strands(p, 4.5, 11.0, t, 0.25) * 0.85;
+    float fine = strands(p, 9.0, 16.0, t, 0.4) * 0.6;
+    float mesh = clamp(coarse + main + fine, 0.0, 1.0);
+
+    // faint translucent haze everywhere in the area — the spell also
+    // "lightly obscures" the space, not just the strands themselves.
+    // No per-block density modulation here: that created visible darker
+    // patches instead of a uniformly opaque web.
+    mesh = clamp(mesh + 0.16, 0.0, 1.0);
+
+    // square-ish area (the spell fills a cube), soft feathered edge
+    vec2 ap = abs(p);
+    float edgeDist = max(ap.x, ap.y);
+    float areaMask = 1.0 - smoothstep(0.72, 0.95, edgeDist);
+
+    // pale, slightly grey-blue sticky webbing color
+    vec3 col = vec3(0.90, 0.93, 0.95);
+
+    float alpha = clamp(mesh * areaMask, 0.0, 1.0);
+    fragColor = vec4(col * alpha, alpha);
+}
+`)
+  },
+  circular_smoke: {
+    label: 'Fumo circolare',
+    fragmentSrc: aoeEffectFragmentSrc(`
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float noise(vec2 x) {
+    vec2 p = floor(x);
+    vec2 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(p + vec2(0.0, 0.0));
+    float b = hash(p + vec2(1.0, 0.0));
+    float c = hash(p + vec2(0.0, 1.0));
+    float d = hash(p + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+const mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+float fbm(vec2 p) {
+    float f = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        f += a * noise(p);
+        p = m * p;
+        a *= 0.5;
+    }
+    return f;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    float t = u_time;
+
+    float rad = length(p);
+
+    // gentle cartesian domain warp — much slower/softer than the fire
+    // shaders, for a misty, drifting moonlight feel instead of flicker
+    vec2 q = p * 1.6;
+    vec2 warpA = vec2(fbm(q + vec2(0.0, -t * 0.12)), fbm(q + vec2(5.1, t * 0.1)));
+    vec2 warped = q + (warpA - 0.5) * 0.8;
+
+    float mist = fbm(warped * 1.3);
+    mist = mix(mist, fbm(warped * 2.2 + warpA), 0.3);
+    mist = clamp(mist * 1.1, 0.0, 1.0);
+
+    // faint "ghostly flame" flicker: a slow traveling ring wave, much
+    // subtler than the fire variants' pulse
+    float ring = 0.5 + 0.5 * sin(rad * 7.0 - t * 0.9 + mist * 1.8);
+    mist = mix(mist, clamp(mist * 0.7 + ring * 0.5, 0.0, 1.0), 0.35);
+
+    // soft, wide, feathered falloff — dim light, no hard edge
+    float baseRadius = 0.55;
+    float feather = 0.4;
+    float radialFalloff = 1.0 - smoothstep(baseRadius - feather, baseRadius + feather, rad);
+
+    // "dim light" is a lore cue, not a rendering target — a VTT overlay
+    // still needs to read clearly, so brightness stays pale/soft but visible
+    float glow = mix(0.5, 0.9, mist);
+    float core = smoothstep(0.4, 0.0, rad);
+    glow = clamp(glow + core * core * 0.4, 0.0, 1.0);
+
+    // cool silvery-lavender moonlight palette
+    vec3 col;
+    col.r = 0.68 + glow * 0.30;
+    col.g = 0.72 + glow * 0.26;
+    col.b = 0.85 + glow * 0.15;
+    col = clamp(col, 0.0, 1.0);
+
+    // translucent but clearly visible — soft light, not a solid disc
+    float alpha = radialFalloff * (0.55 + 0.4 * mist);
+    alpha = clamp(alpha, 0.0, 0.92);
+
+    fragColor = vec4(col * alpha, alpha);
+}
+`)
+  },
+  gold_divine_light: {
+    label: 'Luce divina dorata',
+    fragmentSrc: aoeEffectFragmentSrc(`
+// ---- Hash / Noise (procedural-noise technique) ----
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float noise(vec2 x) {
+    vec2 p = floor(x);
+    vec2 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(p + vec2(0.0, 0.0));
+    float b = hash(p + vec2(1.0, 0.0));
+    float c = hash(p + vec2(0.0, 1.0));
+    float d = hash(p + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+const mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+float fbm(vec2 p) {
+    float f = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        f += a * noise(p);
+        p = m * p;
+        a *= 0.5;
+    }
+    return f;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    float t = u_time;
+
+    float rad = length(p);
+    float ang = atan(p.y, p.x);
+
+    // cartesian domain warp for organic turbulence — gentler and slower
+    // than the fire variants, for a calm radiant glow instead of chaotic flame
+    vec2 q = p * 1.8;
+    vec2 warpA = vec2(fbm(q + vec2(0.0, -t * 0.18)), fbm(q + vec2(5.1, t * 0.14)));
+    vec2 warped = q + (warpA - 0.5) * 0.9;
+
+    float flame = fbm(warped * 1.4);
+    flame = mix(flame, fbm(warped * 2.4 + warpA * 1.2), 0.3);
+    flame = clamp(flame * 1.1, 0.0, 1.0);
+
+    // traveling ring wave: soft pulses of light breathing outward from
+    // the center, slower and gentler than a fire flicker
+    float ring = 0.5 + 0.5 * sin(rad * 8.0 - t * 1.6 + flame * 2.5);
+    flame = mix(flame, clamp(flame * 0.65 + ring * 0.55, 0.0, 1.0), 0.5);
+
+    // holy rays: an integer number of beams radiating from the center,
+    // but twisted into a spiral — the twist grows with radius and drifts
+    // over time, and the flame noise adds an organic, tangled wobble.
+    // The twist depends only on rad/t/flame (never on ang itself), so
+    // cos(N*(ang+twist)) is still exactly 2*pi periodic in ang — the
+    // beams coil around each other with zero seam/discontinuity.
+    float twist = rad * 7.0 - t * 0.7 + (flame - 0.5) * 2.5;
+    float rays = pow(0.5 + 0.5 * cos((ang + twist) * 8.0), 3.0);
+    rays *= smoothstep(0.85, 0.1, rad);
+
+    // soft, feathered falloff instead of a hard circle edge — the shape
+    // dissolves gradually into transparency. Wider than the fire variants
+    // so the divine light reads as a broad radiant glow.
+    float baseRadius = 0.42;
+    float feather = 0.5;
+    float radialFalloff = 1.0 - smoothstep(baseRadius - feather, baseRadius + feather, rad);
+    float density = radialFalloff * (0.7 + 0.3 * flame) + rays * radialFalloff * 0.35;
+    density = clamp(density, 0.0, 1.0);
+
+    // brightness never drops low — divine light stays luminous throughout,
+    // only brightening further toward the core and along the rays
+    float heat = mix(0.55, 0.95, flame);
+    heat = clamp(heat + rays * 0.4, 0.0, 1.2);
+
+    // radiant white-gold core
+    float core = smoothstep(0.32, 0.0, rad);
+    heat = clamp(heat + core * core * 0.7, 0.0, 1.4);
+
+    // golden divine palette: warm gold base -> radiant amber -> white-gold hot core
+    vec3 col;
+    col.r = 0.45 + heat * 0.55;
+    col.g = 0.32 + heat * 0.58;
+    col.b = pow(heat, 2.6) * 0.42;
+    col = clamp(col, 0.0, 1.0);
+
+    float alpha = density;
+    fragColor = vec4(col * alpha, alpha);
+}
+`)
+  }
+};
+
+
 // Striscia luminosa del "ping" (gesto momentaneo del DM, tap o
 // trascinamento): un solo pass a schermo intero, non per-decorazione come il
 // Portale -- il percorso è una polilinea di lunghezza variabile, non un
@@ -733,4 +1457,199 @@ class PingLayer {
     gl.uniform1i(gl.getUniformLocation(program, 'u_noise'), 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
+}
+
+// Renderizza lo shader "lanciato" (vedi fulmine per pillola in control.js,
+// aoe.cast) di una o più AoE piazzate, ritagliato sulla vera sagoma di
+// ciascuna -- gemello di ShaderLayer per le decorazioni del Portale, ma con
+// geometria diversa: qui il rettangolo di rendering è il bounding box della
+// forma RUOTATA (mai allineato agli assi come le decorazioni, che non
+// ruotano), e il ritaglio poligonale extra (vedi aoeEffectFragmentSrc/
+// aoeShaderMaskRect) impedisce che lo shader riempia l'intero bbox invece
+// della sola sagoma. Riusato identico da /control e /display.
+class AoeShaderLayer {
+  constructor(canvasEl) {
+    this.canvas = canvasEl;
+    this.gl = canvasEl.getContext('webgl2');
+    this.programs = new Map(); // shaderId -> WebGLProgram
+    this.lastCssW = 0;
+    this.lastCssH = 0;
+  }
+
+  get available() {
+    return Boolean(this.gl);
+  }
+
+  getProgram(shaderId) {
+    if (this.programs.has(shaderId)) return this.programs.get(shaderId);
+    const def = AOE_SHADER_EFFECTS[shaderId];
+    if (!def) return null;
+    try {
+      const program = linkProgram(this.gl, SHADER_VERTEX_SRC, def.fragmentSrc);
+      this.programs.set(shaderId, program);
+      return program;
+    } catch (err) {
+      console.warn(`AoeShaderLayer: impossibile compilare/linkare lo shader "${shaderId}": ${err.message}`);
+      this.programs.set(shaderId, null);
+      return null;
+    }
+  }
+
+  syncCanvasSize() {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = Math.max(1, Math.round(this.canvas.clientWidth));
+    const cssH = Math.max(1, Math.round(this.canvas.clientHeight));
+    if (cssW === this.lastCssW && cssH === this.lastCssH) return;
+    this.lastCssW = cssW;
+    this.lastCssH = cssH;
+    this.canvas.width = Math.max(1, Math.round(cssW * dpr));
+    this.canvas.height = Math.max(1, Math.round(cssH * dpr));
+  }
+
+  // `aoes`: array di AoE con `shaderId` già risolto (vedi resolveAoeShaderId
+  // in media.js) -- solo quelle "lanciate" (cast === true); il chiamante
+  // filtra, qui non si controlla aoe.cast.
+  render(aoes, grid, naturalW, naturalH) {
+    if (!this.available || !naturalW || !naturalH) return;
+    const gl = this.gl;
+    this.syncCanvasSize();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    if (!aoes.length) return;
+
+    const time = performance.now() / 1000;
+    // Stesso rapporto per entrambi gli assi: naturalW/H -> canvas.width/
+    // height è sempre lo stesso fattore già usato per rectPct -> xPx/wPx
+    // qui sotto, quindi riusarlo diretto per i punti della maschera evita
+    // di ricalcolarlo (con un arrotondamento diverso) da wPx/hPx già
+    // arrotondati.
+    const scaleX = this.canvas.width / naturalW;
+    const scaleY = this.canvas.height / naturalH;
+
+    aoes.forEach((aoe) => {
+      if (!aoe.shaderId) return;
+      const program = this.getProgram(aoe.shaderId);
+      if (!program) return;
+      const { rectPct, maskPointsPx } = aoeShaderMaskRect(aoe, grid, naturalW, naturalH);
+
+      const xPx = (rectPct.leftPct / 100) * this.canvas.width;
+      const topPx = (rectPct.topPct / 100) * this.canvas.height;
+      const wPx = Math.max(1, Math.round((rectPct.widthPct / 100) * this.canvas.width));
+      const hPx = Math.max(1, Math.round((rectPct.heightPct / 100) * this.canvas.height));
+      // gl.viewport usa origine in basso a sinistra, la nostra percentuale
+      // è in alto a sinistra (come il DOM/CSS): l'asse Y va invertito,
+      // stesso motivo di ShaderLayer.render().
+      const yPx = Math.round(this.canvas.height - topPx - hPx);
+      const originXPx = Math.round(xPx);
+
+      gl.viewport(originXPx, yPx, wPx, hPx);
+      gl.useProgram(program);
+      gl.uniform1f(gl.getUniformLocation(program, 'u_time'), time);
+      gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), wPx, hPx);
+      gl.uniform2f(gl.getUniformLocation(program, 'u_viewportOrigin'), originXPx, yPx);
+
+      const maxPts = Math.min(maskPointsPx.length, 32);
+      const flat = new Float32Array(32 * 2);
+      // Punto più lontano dal centro del rettangolo, in "unità p" (stessa
+      // normalizzazione di ogni shader portato: p = (2*fragCoord-res.xy)/
+      // res.y, quindi 1 unità di p = hPx/2 pixel) -- usato solo per
+      // Cubo/Sfera (vedi shapeWarp sotto), Cono/Linea hanno un bersaglio
+      // costante perché passano per lo spazio "srotolato".
+      let maxReachP = 0;
+      for (let i = 0; i < maxPts; i++) {
+        const px = maskPointsPx[i][0] * scaleX;
+        const py = maskPointsPx[i][1] * scaleY;
+        flat[i * 2] = px;
+        flat[i * 2 + 1] = py;
+        const reach = Math.hypot(px - wPx / 2, py - hPx / 2) / (hPx / 2);
+        if (reach > maxReachP) maxReachP = reach;
+      }
+      gl.uniform2fv(gl.getUniformLocation(program, 'u_maskPoints'), flat);
+      gl.uniform1i(gl.getUniformLocation(program, 'u_maskCount'), maxPts);
+
+      // Questi shader portati spengono il proprio bagliore radiale ben
+      // prima del bordo del loro rettangolo "nativo" (un cerchio inscritto
+      // vicino al centro) -- su Cono/Linea questo lasciava gran parte della
+      // sagoma scura anche dentro il ritaglio poligonale (segnalato
+      // dall'utente: "quasi nessuno occupano tutto lo spazio"). Per queste
+      // due forme non basta un riscalo uniforme dal centro: il Cono si
+      // allarga dal vertice, la Linea è stretta e lunga -- entrambe vengono
+      // "srotolate" in un sistema di coordinate locale alla forma (vedi
+      // shapeWarp in aoeEffectFragmentSrc) PRIMA di applicare lo stesso
+      // riscalo, così il punto più lontano della sagoma vera coincide
+      // sempre con l'angolo di un quadrato unitario (raggio costante
+      // sqrt(2)), indipendentemente da quanto la forma reale sia allungata
+      // o stretta. Cubo/Sfera restano nello spazio reale (già un buon
+      // adattamento naturale: un cerchio dentro un quadrato/cerchio).
+      const def = AOE_SHADER_EFFECTS[aoe.shaderId];
+      const allowFillScale = !def || def.fillScale !== false;
+      const warp = allowFillScale ? aoeShapeWarpParams(aoe.shape, maskPointsPx, scaleX, scaleY, hPx) : null;
+      const maxReachForScale = warp ? Math.SQRT2 : maxReachP;
+      const fillScale = allowFillScale ? Math.min(1, AOE_FILL_TARGET_REACH / Math.max(maxReachForScale, 0.001)) : 1;
+      gl.uniform1f(gl.getUniformLocation(program, 'u_fillScale'), fillScale);
+      gl.uniform1i(gl.getUniformLocation(program, 'u_shapeWarp'), warp ? 1 : 0);
+      if (warp) {
+        gl.uniform2f(gl.getUniformLocation(program, 'u_shapeOrigin'), warp.origin[0], warp.origin[1]);
+        gl.uniform2f(gl.getUniformLocation(program, 'u_shapeAxis'), warp.axis[0], warp.axis[1]);
+        gl.uniform1f(gl.getUniformLocation(program, 'u_shapeLength'), warp.length);
+        gl.uniform1f(gl.getUniformLocation(program, 'u_shapeNearHalfWidth'), warp.nearHalfWidth);
+        gl.uniform1f(gl.getUniformLocation(program, 'u_shapeFarHalfWidth'), warp.farHalfWidth);
+      }
+
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    });
+  }
+}
+
+// Calcola il sistema di coordinate locale "srotolato" di Cono/Linea per lo
+// shapeWarp di aoeEffectFragmentSrc -- null per Cubo/Sfera (non ne hanno
+// bisogno, vedi sopra). `maskPointsPx` è lo stesso array di
+// aoeShaderMaskRect, in pixel reali dell'immagine, TOP-DOWN, relativo
+// all'angolo in alto a sinistra del bbox: per il Cono i punti sono
+// [vertice, baseSinistra, baseDestra] (ordine di aoeShapePointsPx), per la
+// Linea [vicinoSinistra, vicinoDestra, lontanoDestra, lontanoSinistra].
+// Restituisce origine/asse/lunghezza/semi-larghezze in pixel CANVAS,
+// convenzione bottom-up di gl_FragCoord (da qui il flip di Y: i punti in
+// ingresso sono top-down).
+function aoeShapeWarpParams(shape, maskPointsPx, scaleX, scaleY, hPx) {
+  const toGl = ([x, y]) => [x * scaleX, hPx - y * scaleY];
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
+  if (shape === 'cone' && maskPointsPx.length >= 3) {
+    const apex = toGl(maskPointsPx[0]);
+    const base1 = toGl(maskPointsPx[1]);
+    const base2 = toGl(maskPointsPx[2]);
+    const baseMid = mid(base1, base2);
+    const length = dist(apex, baseMid) || 1;
+    return {
+      origin: apex,
+      axis: [(baseMid[0] - apex[0]) / length, (baseMid[1] - apex[1]) / length],
+      length,
+      nearHalfWidth: 0,
+      farHalfWidth: dist(base1, base2) / 2
+    };
+  }
+
+  if (shape === 'line' && maskPointsPx.length >= 4) {
+    const near1 = toGl(maskPointsPx[0]);
+    const near2 = toGl(maskPointsPx[1]);
+    const far2 = toGl(maskPointsPx[2]);
+    const far1 = toGl(maskPointsPx[3]);
+    const nearMid = mid(near1, near2);
+    const farMid = mid(far1, far2);
+    const length = dist(nearMid, farMid) || 1;
+    const halfWidth = dist(near1, near2) / 2;
+    return {
+      origin: nearMid,
+      axis: [(farMid[0] - nearMid[0]) / length, (farMid[1] - nearMid[1]) / length],
+      length,
+      nearHalfWidth: halfWidth,
+      farHalfWidth: halfWidth
+    };
+  }
+
+  return null;
 }

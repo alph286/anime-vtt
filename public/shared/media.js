@@ -242,15 +242,20 @@ function renderGridSvg(svgEl, grid, naturalW, naturalH) {
 
 const AOE_METERS_PER_CELL = 1.5;
 
-// Palette fissa a 5 colori nominati (mai un color-picker libero): stesso
-// valore usato per riempimento cella e contorno di una stessa area, così
-// che scelga un solo colore e lo veda coerente ovunque. `red` è anche il
+// Palette a 5 colori nominati (mai un color-picker libero): stesso valore
+// usato per riempimento cella e contorno di una stessa area, così che
+// scelga un solo colore e lo veda coerente ovunque. `red` è anche il
 // fallback per un nome sconosciuto o mancante (aree salvate prima
-// dell'introduzione del colore).
+// dell'introduzione del colore). `blue` è diventato `white` (bianco,
+// abbinato al bagliore lunare -- richiesta esplicita dell'utente, prima
+// era un blu pieno) mantenendo lo stesso ruolo nella palette. `purple`
+// resta nella palette (serve ancora per l'evidenziazione di Viola
+// Cornelia, vedi AOE_SHADER_OVERRIDE_DEFAULT_COLOR sotto) ma non è più un
+// pulsante nella color bar -- vedi AOE_COLOR_CYCLE_NAMES.
 const AOE_COLORS = {
   red: '#d64545',
   green: '#3fa76a',
-  blue: '#3f7fd6',
+  white: '#f2f4fa',
   purple: '#8b5fd6',
   yellow: '#d6b83f'
 };
@@ -262,13 +267,64 @@ const AOE_COLORS = {
 const AOE_COLORS_DARK = {
   red: '#8b2d2d',
   green: '#296d45',
-  blue: '#29538b',
+  white: '#a7acc2',
   purple: '#5a3e8b',
   yellow: '#8b7829'
 };
 
 function aoeColorHex(name) {
   return AOE_COLORS[name] || AOE_COLORS.red;
+}
+
+// Sottoinsieme di AOE_COLORS mostrato come pulsanti nella color bar e
+// ciclato dal pulsante "cambia colore" del pad AOE (aoe-nudge-color) --
+// `purple` resta un colore valido (whitelist server, evidenziazione di
+// Viola Cornelia) ma non compare né come pulsante né nel ciclo: è una
+// scelta automatica legata a quello shader specifico, non un colore che
+// il DM sceglie di persona.
+const AOE_COLOR_CYCLE_NAMES = ['red', 'green', 'white', 'yellow'];
+
+// Ogni colore nominato ha uno shader "di fuoco"/elementale associato --
+// scelta fissa, non un menu a parte: il DM scopre lo shader scegliendo il
+// colore come già fa oggi, "Lancia incantesimo" (vedi aoe.cast in
+// control.js) sostituisce il riempimento flat con questo render.
+const AOE_COLOR_TO_SHADER = {
+  red: 'red_fire',
+  green: 'green_fire',
+  white: 'moonbeam',
+  yellow: 'gold_divine_light'
+};
+
+// Shader scelti dal menu "···" (non legati a un colore) -- whitelist
+// condivisa client/server, stesso ruolo di AOE_COLOR_NAMES. `purple_fire`
+// (rietichettato "Viola Cornelia" in AOE_SHADER_EFFECTS, ricolorato più
+// viola e meno rosa) è passato qui dalla color bar su richiesta
+// dell'utente. Le 3 varianti "cerchio d'evocazione" del repo
+// alph286/shaders sono multi-pass (fluid sim su più framebuffer:
+// uFluid/uRune/uDye) e non ancora portate nella pipeline a singolo pass
+// di AoeShaderLayer -- restano fuori da questa lista finché non arriva
+// una pipeline multi-pass dedicata, vedi Piano di lavoro in CLAUDE.md.
+const AOE_SHADER_OVERRIDE_IDS = ['web_area', 'circular_smoke', 'purple_fire'];
+
+// Colore di anteprima/evidenziazione celle assegnato automaticamente a
+// un'AoE quando si sceglie uno shader dal menu "···" (richiesta esplicita
+// dell'utente: bianco per default, viola solo per Viola Cornelia -- non
+// più il rosso usato in un primo momento). Il DM può comunque cambiarlo
+// in seguito col pulsante "cambia colore" del pad, che resta indipendente
+// dall'override scelto qui.
+const AOE_SHADER_OVERRIDE_DEFAULT_COLOR = {
+  web_area: 'white',
+  circular_smoke: 'white',
+  purple_fire: 'purple'
+};
+
+// Shader effettivo da renderizzare per un'AoE "lanciata" (aoe.cast===true):
+// l'override esplicito del menu "···" se presente, altrimenti quello
+// associato al colore corrente -- mai entrambi, l'override vince sempre
+// perché è una scelta più specifica.
+function resolveAoeShaderId(aoe) {
+  if (aoe.shaderOverride && AOE_SHADER_OVERRIDE_IDS.includes(aoe.shaderOverride)) return aoe.shaderOverride;
+  return AOE_COLOR_TO_SHADER[aoe.color] || AOE_COLOR_TO_SHADER.red;
 }
 
 function aoeColorDarkHex(name) {
@@ -468,6 +524,43 @@ function aoeOutlinePoints(aoe, grid, naturalW, naturalH) {
     const [rx, ry] = rotateVector(lx, ly, aoe.rotation || 0);
     return [aoe.x + (rx / naturalW) * 100, aoe.y + (ry / naturalH) * 100];
   });
+}
+
+// Rettangolo (in percentuale, stessa forma di shaderDecorationRectPercent)
+// più poligono di maschera per renderizzare uno shader ritagliato sulla vera
+// forma dell'AoE (cono/cubo/sfera/linea) invece che sul suo bounding box
+// intero -- a differenza delle decorazioni del Portale, l'AoE può essere
+// ruotata, quindi il bbox allineato agli assi è quasi sempre più grande del
+// poligono vero: senza un ritaglio, un cono ruotato mostrerebbe lo shader
+// riempire l'intero rettangolo che lo contiene, non la sagoma triangolare.
+// `maskPointsPx` sono gli stessi punti ruotati di aoeOutlinePoints ma in
+// pixel reali dell'immagine, RELATIVI all'angolo in alto a sinistra del
+// bbox (così il chiamante può scalarli 1:1 insieme al rettangolo, nello
+// stesso sistema top-down già usato da aoeShapePointsPx/rotateVector).
+function aoeShaderMaskRect(aoe, grid, naturalW, naturalH) {
+  const localPx = aoeShapePointsPx(aoe.shape, aoe.sizeM, aoe.widthM, grid);
+  const rotatedPx = localPx.map(([lx, ly]) => rotateVector(lx, ly, aoe.rotation || 0));
+  const xs = rotatedPx.map((p) => p[0]);
+  const ys = rotatedPx.map((p) => p[1]);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const centerPxX = (aoe.x / 100) * naturalW;
+  const centerPxY = (aoe.y / 100) * naturalH;
+  const leftPx = centerPxX + minX;
+  const topPx = centerPxY + minY;
+  const widthPx = Math.max(1, maxX - minX);
+  const heightPx = Math.max(1, maxY - minY);
+  return {
+    rectPct: {
+      leftPct: (leftPx / naturalW) * 100,
+      topPct: (topPx / naturalH) * 100,
+      widthPct: (widthPx / naturalW) * 100,
+      heightPct: (heightPx / naturalH) * 100
+    },
+    maskPointsPx: rotatedPx.map(([x, y]) => [x - minX, y - minY])
+  };
 }
 
 // Marker "+" sul punto d'origine: solo per Sfera e Cubo, le uniche due forme
@@ -686,6 +779,12 @@ if (typeof module !== 'undefined' && module.exports) {
     rectIntersectsPolygon,
     aoeAffectedCells,
     cellRectPercent,
-    shaderDecorationRectPercent
+    shaderDecorationRectPercent,
+    aoeShaderMaskRect,
+    AOE_COLOR_TO_SHADER,
+    AOE_COLOR_CYCLE_NAMES,
+    AOE_SHADER_OVERRIDE_IDS,
+    AOE_SHADER_OVERRIDE_DEFAULT_COLOR,
+    resolveAoeShaderId
   };
 }

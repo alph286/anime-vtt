@@ -453,6 +453,62 @@ h2 {
   border-color: var(--text-primary);
 }
 
+/* Non è un colore (niente --aoe-color inline da JS): sfondo di controllo
+   come gli altri pulsanti icona, icona centrata. Attivo = bordo ambra
+   invece del bordo chiaro di .aoe-color-btn.active -- stesso linguaggio
+   del fulmine nella pillola (The One Accent Rule: ambra solo su "live/
+   scelto"), per distinguerlo a colpo d'occhio da un colore selezionato. */
+.aoe-shader-menu-btn {
+  flex: 1;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid var(--border-control);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-control);
+  color: var(--text-secondary);
+}
+
+.aoe-shader-menu-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Elenco inline sotto la color bar (mai un overlay/sheet separato): stesso
+   bg-control dei controlli, righe da 40px icona+nome, riga attiva con lo
+   stesso sfondo ambra tenue delle pillole AoE selezionate. */
+.aoe-shader-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  background: var(--bg-control);
+}
+
+.aoe-shader-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.aoe-shader-menu-item.active {
+  background: var(--accent-bg-subtle);
+  color: var(--accent);
+}
+
 .aoe-size-row {
   display: flex;
   gap: 10px;
@@ -511,6 +567,30 @@ h2 {
 .aoe-chip-delete.confirm {
   background: var(--danger);
   color: #fff;
+}
+
+/* Stesso quadrato 44x44 della "✕", prima di lei nella pillola: "lancia
+   incantesimo" per QUESTA area (layout scelto dall'utente: un fulmine per
+   pillola, non un bottone globale, per lanciare/rilanciare più aree
+   indipendentemente). Ambra solo quando l'area è già "in onda" (The One
+   Accent Rule) -- spento (colore muto) prima del lancio, così lo sguardo
+   va dritto sulle aree già attive quando ce ne sono più di una in campo. */
+.aoe-chip-cast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--text-secondary);
+}
+
+.aoe-chip-cast.active {
+  color: var(--accent);
 }
 
 .aoe-chip.selected .aoe-chip-pill {

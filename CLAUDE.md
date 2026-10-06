@@ -378,3 +378,235 @@ il riquadro giallo quando i dati non ci sono, senza più toccare
 - Zoom locale centrato automaticamente sull'area PG all'ingresso in
   modalità zoom — **da rimuovere**, vedi punto 4 sopra: resta solo il
   pulsante manuale.
+
+## Shader sugli incantesimi AOE (fatto, parziale)
+
+Le aree d'effetto (box sotto la mappa, punto 5 sopra) ora possono mostrare
+uno shader animato invece del semplice riempimento flat colorato, portando
+gli shader di github.com/alph286/shaders (vedi anche memoria di sessione
+"alph286-shaders-repo"). Layout deciso con l'utente: **layout A**, un
+fulmine (lancia/rilancia) per ogni pillola della lista aree, non un
+bottone globale — ogni area si lancia indipendentemente dalle altre.
+
+**Decisioni chiave (confermate dall'utente in chat, non ovvie dal
+codice):**
+- Ogni colore della palette esistente (rosso/verde/blu/viola/giallo) è
+  abbinato 1:1 a uno shader fisso, non scelto dal DM: rosso→cerchio di
+  fuoco rosso, verde→cerchio di fuoco verde, viola→cerchio di fuoco viola,
+  giallo→cerchio di fuoco giallo, **blu→moonbeam** (unico shader
+  "freddo"/acqua portato finora — l'utente ha detto di procedere con
+  questo abbinamento sapendo che potrebbe cambiarlo in futuro).
+- Gli shader non abbinati a un colore vivono in un menu "···" (icona tre
+  puntini) in fondo alla color bar, che apre un elenco inline (mai un
+  overlay/sheet) sotto la color bar stessa: Zona ragnatela, Fumo
+  circolare, Luce divina dorata. Scegliere una voce è un toggle (riscelta
+  = torna a null) e forza il colore di anteprima a rosso -- da lì il DM lo
+  cicla a piacere col pulsante "cambia colore" del pad AOE
+  (`aoe-nudge-color`), che resta **indipendente** dall'eventuale override:
+  colore e override-shader sono due campi separati sull'AoE, non uno
+  deriva dall'altro.
+- Finché un'area non viene "lanciata" (fulmine sulla pillola, campo
+  `aoe.cast`), resta nel riempimento flat colorato di sempre -- serve a
+  leggere bene le celle colpite mentre si piazza/aggiusta l'area prima del
+  lancio drammatico vero e proprio.
+- **Le 3 varianti "cerchio d'evocazione" del repo sorgente sono rimaste
+  fuori**: sono shader multi-pass (fluid sim su più framebuffer:
+  uFluid/uRune/uDye), non compatibili con la pipeline a singolo pass degli
+  altri 8 (`AoeShaderLayer`/`aoeEffectFragmentSrc` in
+  shared/shader-effects.js). Portarle richiede una pipeline multi-pass
+  dedicata -- lavoro futuro, non ancora iniziato. Il menu "···" mostra
+  quindi 3 voci, non 6.
+
+**Come funziona l'adattamento alla forma (richiesta esplicita: "gli
+shaders devono essere adattati anche alle altre forme delle aoe"):** ogni
+shader ad area è stato scritto dall'autore originale per riempire un
+rettangolo/quadrato (uv centrata, spesso un cerchio/bagliore radiale che
+sfuma verso i bordi). Per farlo apparire ritagliato sulla vera sagoma di
+Cono/Cubo/Sfera/Linea (anche ruotata), `aoeShaderMaskRect` (shared/
+media.js) calcola il bounding box REALE della forma ruotata (mai
+allineato agli assi come il Portale, che non ruota mai) più i vertici del
+poligono vero in coordinate locali al rettangolo; `aoeEffectFragmentSrc`
+(shared/shader-effects.js) avvolge ogni shader portato con un ray-casting
+pari/dispari che azzera l'alpha fuori dal poligono, DOPO il colore finale
+restituito da ciascun effetto -- nessuna costante/raggio calibrato dagli
+autori originali è stata toccata. Verificato non solo visivamente ma per
+pixel (`gl.readPixels` dentro lo stesso frame rAF, altrimenti WebGL
+cancella implicitamente il draw buffer tra un frame e l'altro e la lettura
+risulta sempre vuota -- scoperto durante questa sessione, non un bug reale
+ma un artefatto del metodo di verifica): su un Cono ruotato di 45°, i 4
+angoli del bounding box risultano trasparenti (fuori dal triangolo) mentre
+il centro mostra il colore pieno dello shader.
+
+**Stato/rete**: nuovi campi persistiti sull'AoE, `cast` (bool) e
+`shaderOverride` (slug | null), stesso pattern find→valida→muta→salva→
+broadcast di tutti gli altri eventi `aoe:*` (server/index.js:
+`aoe:setCast`, `aoe:setShaderOverride`, whitelist server-side
+`AOE_SHADER_OVERRIDE_IDS` in shared/media.js, stesso ruolo di
+`AOE_COLOR_NAMES`). Migrazione in server/state.js backfilla le aree
+salvate prima di questa modifica (`cast:false`, `shaderOverride:null`).
+Zero validazione di formato sullo shader GLSL stesso, come già per le
+decorazioni Portale -- solo la whitelist dello slug.
+
+**Canvas**: nuovo `#map-aoe-shader-canvas`, gemello di `#map-shader-canvas`
+(Portale) ma con `AoeShaderLayer` invece di `ShaderLayer` (geometria
+diversa: viewport = bbox della forma RUOTATA, non un rettangolo fisso).
+Posizionato tra la griglia e `#map-aoe-svg` in entrambe le pagine, così il
+contorno dell'area (dentro `#map-aoe-svg`) resta sempre leggibile SOPRA lo
+shader. Stesso loop `requestAnimationFrame` di Portale/Ping
+(`stepShaderLayer`/`kickShaderLoop`), esteso a considerare anche le AoE
+con `cast:true` nella condizione che tiene vivo il loop.
+
+**Verificato in browser** (via socket diretto da console, non solo click):
+colore→shader per i 4 fuochi, cono ruotato correttamente ritagliato
+(pixel-check sopra), override "···" indipendente dal colore con fallback a
+rosso, toggle del fulmine per pillola, propagazione identica su
+`/control` e `/display`, nessun errore console, suite di test esistente
+(`node --test public/shared/media.test.js`, 38/38) ancora verde. Non
+ancora testato con la **Linea** (bbox non quadrato, caso che esercita di
+più lo stretch/mask) né con shader multipli attivi contemporaneamente su
+aree sovrapposte.
+
+**Noto, non risolto in questa sessione**: il pad di spostamento AOE
+(`aoe-nudge-overlay`, fisso in basso a destra) può coprire il pulsante
+"···" quando un'area è selezionata, a seconda della larghezza schermo --
+stesso tipo di sovrapposizione che il pad già fa con altri controlli per
+design (si sposta trascinando la maniglia), non una regressione di questa
+modifica ma degno di nota se diventa fastidioso in uso reale.
+
+**Ritocco (stessa sessione, su segnalazione dell'utente): riempimento
+pieno per ogni forma, non solo la Zona ragnatela.** Il primo giro sopra
+usava un riscalo UNIFORME dal centro del rettangolo (`u_fillScale`) per
+spingere la dissolvenza radiale di ogni shader verso il bordo del bbox --
+funzionava per Cubo/Sfera (bagliore circolare dentro una sagoma
+circolare/quadrata, un buon adattamento naturale) ma lasciava Cono e
+Linea chiaramente "vuoti" lontano dal centro (l'utente: "quasi nessuno
+tranne ragnatela occupano tutto lo spazio"), perché la distanza euclidea
+dal centro del bbox non ha alcuna relazione con quanto la vera sagoma di
+quelle due forme si estenda in quella direzione (es. gli angoli della
+base di un Cono sono fisicamente lontani dal centro del bbox quanto gli
+angoli di un Cubo, ma il Cono lì è comunque "dentro" la sua sagoma,
+mentre il Cubo ci arriva solo agli angoli).
+
+Scelta confermata con l'utente (AskUserQuestion, non assunta): **non**
+nuovi shader disegnati da zero per ogni combinazione forma+effetto (fino
+a 24 varianti, lavoro enorme, probabilmente da fare nelle sessioni
+dedicate di alph286/shaders), ma una **trasformazione geometrica diversa
+per forma**, riusando la stessa logica di rumore/colore già portata.
+Cono e Linea vengono "srotolati" (`aoeShapeWarpParams` in
+shared/shader-effects.js, nuovi uniform `u_shapeWarp`/`u_shapeOrigin`/
+`u_shapeAxis`/`u_shapeLength`/`u_shapeNear|FarHalfWidth`) in un sistema
+di coordinate locale alla forma PRIMA del riscalo: per il Cono,
+distanza-dal-vertice lungo l'asse (0=vertice, 1=base) e scarto laterale
+diviso per la semi-larghezza A QUELL'ALTEZZA (che cresce da 0 al vertice
+alla metà base alla base -- la stessa formula generica, con
+semi-larghezza vicina=lontana, gestisce anche la Linea senza bisogno di
+un ramo di codice separato). Il risultato è sempre nel range ±1 esatto
+sul bordo vero della sagoma lungo TUTTA la sua lunghezza, non solo vicino
+al centro del bbox -- quindi lo stesso riscalo verso un bersaglio
+costante (ora `sqrt(2)`, l'angolo di un quadrato unitario) funziona
+uniformemente. Cubo/Sfera restano nello spazio reale (`u_shapeWarp=0`),
+già un buon adattamento naturale, con il calcolo del punto-più-lontano
+dai vertici della maschera reale invariato da prima.
+
+Il ritaglio poligonale (`aoeMaskContains`) resta separato e invariato:
+usa sempre la posizione FISICA reale del pixel, mai quella srotolata --
+lo srotolamento serve solo a decidere QUANTO lo shader si "apre" verso i
+bordi, il ritaglio vero (bordo netto della sagoma) continua a venire dal
+vero poligono ruotato, indipendentemente da come lo shader interpreta le
+proprie coordinate interne.
+
+Anche il bersaglio di riscalo (`AOE_FILL_TARGET_REACH`) è stato rivisto:
+il primo tentativo (0.92) puntava a dove la dissolvenza di ogni shader
+tocca lo ZERO (`base+feather` nella formula
+`1-smoothstep(base-feather,base+feather,rad)` comune a quasi tutti) --
+sbagliato, perché il punto più lontano della sagoma finiva comunque
+scuro (al bersaglio la densità è già 0). Corretto a 0.55, media dei
+`base` calibrati dai vari autori (dove la densità è a MEZZA intensità,
+non zero): il punto più lontano resta visibilmente acceso invece di nero,
+con una dissolvenza morbida verso quel bordo.
+
+Verificato per pixel (non solo a occhio, stesso motivo del rendering
+sincrono-senza-rAF scoperto nel ritocco precedente): su una griglia di
+punti dentro la vera sagoma (poligono reale, test lato JS indipendente
+dallo shader), frazione di pixel "ancora scuri" (alpha<15) e alpha medio
+per tutte e 4 le forme, prima/dopo irrilevante -- solo il "dopo" qui
+sotto, il "prima" è quanto descritto dall'utente:
+
+| Forma | Alpha medio (0-255) | Frazione scura |
+|---|---|---|
+| Cubo | 183.7 | 0% |
+| Sfera | 148.9 | 1% |
+| Cono (ruotato 20°) | 178.6 | 7% |
+| Linea (ruotata 35°) | 185.5 | 1% |
+
+Confermato anche visivamente su `/control` e `/display` (screenshot):
+Cubo e Sfera riempiono il proprio riquadro/cerchio in modo solido, Cono e
+Linea riempiono l'intera sagoma triangolare/rettangolare ruotata, non più
+un piccolo bagliore scentrato. Suite di test esistente ancora verde
+(38/38) -- nessuna di queste modifiche tocca `media.test.js`.
+
+**Ritocco (stessa sessione, su richiesta dell'utente): ridisegno
+abbinamenti colore/menu, contorno vs evidenziazione celle, bug di
+selezione.** Cinque richieste distinte, tutte applicate insieme:
+
+1. **Contorno vs celle a shader attivo, invertito.** Prima: ad area
+   "lanciata" (`aoe.cast`) spariva il riempimento flat per cella, restava
+   il contorno netto. L'utente lo voleva al contrario: il contorno (la
+   sagoma triangolo/rettangolo/cerchio netta) sparisce a shader attivo
+   (ridondante con lo shader sopra), ma l'evidenziazione delle celle
+   colpite resta SEMPRE visibile (serve a leggere con precisione quali
+   celle sono colpite, specialmente proprio quando l'incantesimo è già in
+   scena). `renderAoeOverlays`/`renderAoe`: il blocco celle non ha più la
+   guardia `if (!aoe.cast)`; il contorno (e il marker "+" origine) usano
+   ora `outlineVisible = shapeVisible && !aoe.cast`. Il poligono resta nel
+   DOM anche con stroke "none" (serve ancora a trascinare l'area su
+   `/control`).
+2. **Blu → Bianco (bagliore lunare).** `AOE_COLORS.blue` rinominato
+   `white` (stesso ruolo nella palette, nuovo hex quasi-bianco
+   `#f2f4fa`/`#a7acc2` scuro) -- resta abbinato a `moonbeam`, solo il
+   colore del pulsante/dell'evidenziazione celle cambia. Migrazione in
+   server/state.js rinomina `color:'blue'` salvato in `'white'`.
+3. **Giallo → Luce divina dorata.** `AOE_COLOR_TO_SHADER.yellow` ora punta
+   a `gold_divine_light` (prima nel menu "···"); lo shader `yellow_fire`
+   (ormai irraggiungibile da nessuna parte dell'interfaccia) è stato
+   rimosso del tutto dal registro invece di lasciarlo come codice morto.
+4. **Viola → "Viola Cornelia" nel menu "···".** `purple_fire` è uscito
+   dalla color bar (bottone rimosso da index.html) ed è entrato nel menu
+   "···" con nuova etichetta "Viola Cornelia" e una nuova icona dedicata
+   (`#i-wizard-hat`, cappello da mago). La sua palette colore è stata
+   ricalcolata per leggersi come viola vero invece di magenta/rosa
+   (richiesta esplicita): prima R e B erano quasi alla pari (~0.79/0.88 al
+   picco, leggeva magenta), ora B resta nettamente dominante su R (rapporto
+   ~2:1), verificato per pixel (`gl.readPixels`: R122 G49 B245 al centro).
+   `purple` resta nella palette `AOE_COLORS` (serve ancora per
+   l'evidenziazione di Viola Cornelia, vedi punto 5) ma non è più un
+   pulsante né compare nel ciclo colore del pad -- nuova costante
+   `AOE_COLOR_CYCLE_NAMES = ['red','green','white','yellow']`, usata sia
+   per il ciclo (`aoeNudgeColor`) sia implicitamente dalla color bar (4
+   pulsanti invece di 5).
+5. **Colore di evidenziazione di default per il menu "···", bianco non più
+   rosso.** Nuova mappa `AOE_SHADER_OVERRIDE_DEFAULT_COLOR` in media.js:
+   `web_area`/`circular_smoke` → bianco, `purple_fire` → viola (unica
+   eccezione, coerente col nome dello shader). Sostituisce il vecchio
+   "usa sempre rosso" di una sessione precedente.
+6. **Bug "sembra di dover disattivare il menu per riusare i colori",
+   risolto.** Causa reale: scegliere un colore dalla color bar non
+   azzerava mai `shaderOverride` -- il pulsante del colore si illuminava
+   "attivo" ma lo shader lanciato restava comunque quello del menu
+   (`resolveAoeShaderId` fa sempre vincere l'override), un disallineamento
+   tra cosa mostra il pulsante e cosa viene davvero lanciato. Ora cliccare
+   un colore nella color bar azzera anche l'eventuale override attivo
+   (simmetrico a quanto le voci del menu "···" già facevano verso il
+   colore) -- color bar e menu "···" sono ora un unico gruppo mutuamente
+   esclusivo in entrambe le direzioni, non più due toggle indipendenti.
+   Verificato: selezionata "Viola Cornelia" su un'area (override
+   `purple_fire`, "···" con bordo ambra), poi cliccato "Verde" --
+   `shaderOverride` torna `null`, shader risolto torna `green_fire`,
+   bordo ambra sparisce dal "···".
+
+Verificato in browser (non solo a occhio): `resolveAoeShaderId` per
+giallo/bianco/Viola Cornelia risolve rispettivamente in
+`gold_divine_light`/`moonbeam`/`purple_fire`; il contorno sparisce (stroke
+"none" sul poligono) mentre 25 celle restano evidenziate su un'area
+lanciata; suite di test ancora verde (38/38, `AOE_COLORS.blue` rinominato
+`AOE_COLORS.white` anche nei test).
