@@ -108,6 +108,20 @@ button {
   overflow: hidden;
   background: var(--bg-canvas);
   border: 1px solid var(--border-control);
+  cursor: crosshair;
+}
+
+/* Senza questo, su touch il browser interpreta il trascinamento di
+   un'area come uno scroll/pan nativo dopo pochi pixel: interrompe la
+   pointer capture con un pointercancel e la forma smette di seguire il
+   dito, restando ferma sulla cella di partenza (sembra "un passo alla
+   volta" invece di un trascinamento fluido). Stessa regola di
+   control.css, lì condizionata a `.mode-aoe` perché lì l'AOE è una
+   modalità tra tante -- qui è l'unica cosa che la mappa fa, quindi vale
+   sempre, senza bisogno di una classe. */
+.map-preview,
+.map-preview * {
+  touch-action: none;
 }
 
 /* Riceve il transform di pan/zoom condiviso (stesso ruolo di #map-layer in
