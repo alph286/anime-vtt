@@ -4,6 +4,7 @@ const wifiDot = document.getElementById('wifi-dot');
 const locationNameEl = document.getElementById('location-name');
 
 const mapPreview = document.getElementById('map-preview');
+const mapLayer = document.getElementById('map-layer');
 const mapMediaWrap = document.getElementById('map-media-wrap');
 const mapFitBox = document.getElementById('map-fit-box');
 const mapImg = document.getElementById('map-img');
@@ -120,15 +121,25 @@ function render(state) {
   if (!state) return;
   const location = getActiveLocation(state);
   locationNameEl.textContent = location ? location.name : '';
-  renderMapPreview(location);
+  renderMapPreview(location, state.displayViewport);
   renderAoePanel();
 }
 
-// ---------- mappa (sola visualizzazione, nessun pan/zoom: sempre la mappa
-// intera, come la propria anteprima di /control -- non la vista live
-// condivisa di /display, che qui non serve: i PG devono vedere tutto il
-// campo di battaglia per piazzare un'area, non solo l'inquadratura che il
-// DM ha scelto per la TV) ----------
+// ---------- mappa (sola visualizzazione): segue l'inquadratura live che il
+// DM mostra su /display (stesso pan/zoom condiviso), non la propria mappa
+// intera -- richiesta esplicita dell'utente dopo aver provato la prima
+// versione. `state.displayViewport` (dimensioni reali dello schermo del
+// display, note solo dopo che un /display si è connesso almeno una volta)
+// è la chiave: il box qui viene fatto avere la STESSA proporzione dello
+// schermo del display (vedi --map-aspect sotto), così l'intero box è una
+// replica in scala di #viewport su /display -- la stessa identica
+// trasformazione CSS (translate+scale) applicata a #map-layer mostra
+// quindi esattamente la stessa porzione di mappa, solo più piccola.
+// Nessuno smoothing dell'animazione come in display.js: qui basta uno
+// scatto diretto ad ogni state:update, non serve un rAF dedicato per una
+// vista secondaria di lettura. Senza displayViewport (nessun /display mai
+// connesso), degrada al comportamento precedente: mappa intera, nessun
+// transform. ----------
 
 function renderFogOverlays(polygons) {
   mapFogLayer.innerHTML = '';
@@ -141,12 +152,18 @@ function renderFogOverlays(polygons) {
   });
 }
 
-function renderGrid(grid, naturalW, naturalH) {
+// `scale` è lo stesso fattore applicato a #map-layer (vedi
+// applyLiveTransform): la griglia va compensata per restare a spessore
+// costante sullo schermo quando il DM zooma, stessa correzione già fatta
+// da display.js per il proprio pan/zoom condiviso. Nessuna compensazione
+// equivalente per il contorno AOE: stessa scelta di display.js, che non
+// l'ha mai avuta.
+function renderGrid(grid, naturalW, naturalH, scale) {
   if (!grid) {
     mapGridSvg.innerHTML = '';
     return;
   }
-  renderGridSvg(mapGridSvg, grid, naturalW, naturalH);
+  renderGridSvg(mapGridSvg, { ...grid, lineWidth: (grid.lineWidth || 0.3) / Math.max(scale, 0.01) }, naturalW, naturalH);
 }
 
 const AOE_CELL_FILL_OPACITY = 0.35;
@@ -189,8 +206,39 @@ function renderAoeOverlays(aoes, grid, naturalW, naturalH) {
   });
 }
 
-function renderMapPreview(location) {
+// displayViewport note e valide (TV connessa almeno una volta): il box
+// assume la stessa proporzione del suo schermo, così k (fattore di scala
+// tra i pixel reali del box e quelli del display) è un unico numero
+// valido sia in larghezza che in altezza.
+function followsDisplay(displayViewport) {
+  return Boolean(displayViewport && displayViewport.width && displayViewport.height);
+}
+
+// Stessa formula di renderMap in display.js (scale = mapScale*live.scale,
+// offsetX/Y = live.offsetX/Y) -- l'unica differenza è che offsetX/Y sono
+// pixel nello spazio schermo della TV, mentre qui il box è k volte più
+// piccolo: vanno scalati di k, lo zoom (unitless) no. Senza una TV nota,
+// non c'è un k valido per interpretare quei pixel: meglio non spostare
+// nulla (transform:none, mappa intera come prima) che applicare un pan
+// a caso.
+function applyLiveTransform(location, displayViewport) {
+  if (!followsDisplay(displayViewport)) {
+    mapLayer.style.transform = 'none';
+    return 1;
+  }
+  const live = (location && location.map.liveView) || { scale: 1, offsetX: 0, offsetY: 0 };
+  const mapScale = (location && location.map.scale) || 1;
+  const scale = mapScale * (live.scale || 1);
+  const k = mapLayer.clientWidth / displayViewport.width;
+  const offsetX = (live.offsetX || 0) * k;
+  const offsetY = (live.offsetY || 0) * k;
+  mapLayer.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+  return scale;
+}
+
+function renderMapPreview(location, displayViewport) {
   const polygons = (location && location.map.polygons) || [];
+  const following = followsDisplay(displayViewport);
 
   if (location && location.map.file) {
     mapPlaceholder.hidden = true;
@@ -199,12 +247,17 @@ function renderMapPreview(location) {
       const nh = mediaH(activeMapEl);
       const rotation = computeTotalRotation(nw, nh, location.map.flip180, location.map.rotate90);
       const swapped = rotation === 90 || rotation === 270;
-      if (nw && nh) mapPreview.style.setProperty('--map-aspect', swapped ? `${nh} / ${nw}` : `${nw} / ${nh}`);
-      const effective = layoutMapWrap(mapPreview, mapMediaWrap, rotation);
+      if (following) {
+        mapPreview.style.setProperty('--map-aspect', `${displayViewport.width} / ${displayViewport.height}`);
+      } else if (nw && nh) {
+        mapPreview.style.setProperty('--map-aspect', swapped ? `${nh} / ${nw}` : `${nw} / ${nh}`);
+      }
+      const effective = layoutMapWrap(mapLayer, mapMediaWrap, rotation);
       const rect = fitRect(effective.width, effective.height, nw, nh);
       positionFitBox(mapFitBox, rect);
+      const scale = applyLiveTransform(location, displayViewport);
       renderFogOverlays(polygons);
-      renderGrid(location.map.grid, nw, nh);
+      renderGrid(location.map.grid, nw, nh, scale);
       renderAoeOverlays(location.map.aoes || [], location.map.grid, nw, nh);
       shaderLayer.render(location.map.shaders || [], location.map.grid, nw, nh);
     });
@@ -221,12 +274,17 @@ function renderMapPreview(location) {
       delete mapVideo.dataset.mapSrc;
     }
     mapPlaceholder.hidden = false;
-    mapPreview.style.removeProperty('--map-aspect');
-    const effective = layoutMapWrap(mapPreview, mapMediaWrap, 0);
+    if (following) {
+      mapPreview.style.setProperty('--map-aspect', `${displayViewport.width} / ${displayViewport.height}`);
+    } else {
+      mapPreview.style.removeProperty('--map-aspect');
+    }
+    const effective = layoutMapWrap(mapLayer, mapMediaWrap, 0);
     const rect = { left: 0, top: 0, width: effective.width, height: effective.height };
     positionFitBox(mapFitBox, rect);
+    const scale = applyLiveTransform(location, displayViewport);
     renderFogOverlays(polygons);
-    mapGridSvg.innerHTML = '';
+    renderGrid(location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl), scale);
     renderAoeOverlays((location && location.map.aoes) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
     shaderLayer.render((location && location.map.shaders) || [], location && location.map.grid, mediaW(activeMapEl), mediaH(activeMapEl));
   }

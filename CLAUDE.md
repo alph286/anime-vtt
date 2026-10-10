@@ -18,14 +18,37 @@ immagini, link editor).
   (non sola visualizzazione di quelle del DM) — stesso pannello di
   `/control` (forme, colori, menu "···", taglia/larghezza, lista pillole
   con fulmine/elimina, pad di nudge fisso in basso a destra).
-- La mappa è mostrata **intera** (come l'anteprima propria di `/control`),
-  non la vista live pan/zoom condivisa di `/display` — i giocatori devono
-  vedere tutto il campo di battaglia per piazzare un cono/linea/sfera, non
-  solo l'inquadratura che il DM ha scelto per la TV. Di conseguenza
-  nessuno zoom/pan, nessuna compensazione `scale` su griglia/contorno AOE
-  (semplicemente non serve: `/party` non ha alcun transform CSS sulla
-  mappa, a differenza sia di `/control` con lo zoom locale del DM sia di
-  `/display` col pan/zoom condiviso).
+- La mappa segue l'inquadratura live condivisa di `/display` (stesso
+  pan/zoom che il DM mostra sulla TV ai giocatori) — **non** la mappa
+  intera come la prima versione provata in sessione (vedi sotto). Il box
+  di `/party` assume la stessa proporzione dello schermo del display
+  (`state.displayViewport`, note solo dopo che un `/display` si è connesso
+  almeno una volta) tramite `--map-aspect`, così l'intero box è una
+  replica in scala di `#viewport` su `/display`: lo stesso transform CSS
+  (`translate+scale`, stessa formula di `renderMap` in `display.js`)
+  applicato a un nuovo `#map-layer` (nuovo livello nella gerarchia,
+  analogo a quello di `display.js` — prima mancava, il box mostrava
+  sempre la mappa fit intera come l'anteprima propria di `/control`)
+  mostra quindi esattamente la stessa porzione di mappa, solo più
+  piccola. Gli offset del pan (`live.offsetX/Y`, in pixel dello schermo
+  della TV) vengono scalati di `k = box.clientWidth / displayViewport.width`
+  prima di applicarli — lo zoom (`scale`, un rapporto, non un valore in
+  pixel) no. La griglia (non il contorno AOE, stessa scelta già fatta da
+  `display.js`) viene compensata dividendo `lineWidth` per quello stesso
+  `scale`, altrimenti si sarebbe ingrossata zoomando. **Senza
+  `displayViewport` noto** (nessun `/display` mai connesso): degrada alla
+  mappa intera, nessun transform — non esiste un `k` valido da applicare
+  a offset in pixel di uno schermo sconosciuto. Nessuno smoothing
+  dell'animazione come in `display.js` (quello ha un proprio loop rAF
+  dedicato per l'interpolazione): qui uno scatto diretto ad ogni
+  `state:update` è bastato, scelta deliberata per restare semplice su una
+  vista secondaria di lettura.
+  **Perché il cambio**: la primissima versione mostrava la mappa intera
+  (ragionamento: "i giocatori devono vedere tutto il campo di battaglia
+  per piazzare un cono/linea/sfera, non solo l'inquadratura scelta per la
+  TV"), ma dopo averla vista live al tavolo l'utente ha chiesto
+  esplicitamente il comportamento opposto: seguire l'inquadratura di
+  `/display`, non la mappa intera.
 - Griglia/fog/decorazioni (shader "Portale" ecc.) restano in sola lettura,
   stessa resa read-only già esistente in `display.js` (`renderFog`/
   `renderAoe` lì sono il modello diretto per le funzioni gemelle qui).
@@ -62,6 +85,24 @@ staccato dal DOM e un secondo `.click()` su di esso non fa nulla (non
 bubbla a un ancestor che non ha più). Non un bug dell'app, un'insidia del
 metodo di test — vedere anche la memoria di sessione
 `synthetic-pointer-events-testing`.
+
+**Incidente di test da NON ripetere**: per verificare il comportamento
+"segue /display" ho aperto una SECONDA tab su `/display` nel browser di
+test, mentre un display reale era connesso alla sessione live del
+progetto. Il server tiene **un solo** `displayViewport` globale (non uno
+per connessione — vedi `server/index.js`, variabile di modulo, non dentro
+`state`): la tab di test lo ha sovrascritto con le proprie dimensioni
+(1024×768) al posto di quelle vere (1745×872), sballando temporaneamente
+il rettangolo di inquadratura su `/control` e il crop su `/party` per la
+sessione reale in corso. Risolto chiedendo all'utente di ricaricare il
+display vero (basta un reload: `reportViewport()` scatta su ogni
+`connect`). **Lezione per sessioni future**: mai aprire una tab di test su
+`/display` (né su `/control`, che emette `hello role:'control'`) quando
+potrebbe esistere una sessione reale in corso — verificare prima se è così
+(es. `display:status`/`control:status` via socket), e se serve davvero
+confrontare il crop con l'inquadratura reale, farlo leggendo
+`location.map.liveView`/`state.displayViewport` dallo stato (sola
+lettura) invece di connettersi come un client display/control vero.
 
 ## Box sotto la mappa: contenuto diverso per modalità (fatto)
 

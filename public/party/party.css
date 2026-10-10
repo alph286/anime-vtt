@@ -110,6 +110,20 @@ button {
   border: 1px solid var(--border-control);
 }
 
+/* Riceve il transform di pan/zoom condiviso (stesso ruolo di #map-layer in
+   display.css): quando --map-aspect segue l'inquadratura della TV
+   (displayViewport, vedi party.js), questo box è una replica in scala di
+   #viewport su /display, e il transform qui applicato mostra esattamente
+   la stessa porzione di mappa -- vedi applyLiveTransform in party.js per i
+   conti. Quando la TV non è mai stata nota, resta a transform:none e
+   --map-aspect torna all'aspect-ratio della mappa intera (comportamento
+   precedente). */
+#map-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: center center;
+}
+
 .map-preview .media-wrap,
 .map-preview .fit-box {
   position: absolute;
