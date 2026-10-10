@@ -17,7 +17,9 @@ body {
 
 .topbar {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
   padding: 14px 24px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
@@ -138,10 +140,12 @@ h2 {
   margin-bottom: 0;
 }
 
-/* Riga a sé sopra le due colonne (grid-column: span totale), non più dentro
-   la colonna mappa -- con flex-wrap va a capo su più righe quando lo spazio
-   non basta, invece di scorrere orizzontalmente fuori vista. */
-.toolbar {
+/* Striscia opzioni sotto la barra dei menù (grid-column: span totale, come
+   il vecchio .toolbar che sostituisce) -- equivalente della "options bar"
+   di Photoshop: solo le azioni che servono un click immediato durante un
+   gesto in corso restano qui sempre visibili, il resto vive nei menù a
+   tendina della topbar. */
+.options-bar {
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
@@ -153,7 +157,7 @@ h2 {
   padding: 8px;
 }
 
-.toolbar-group {
+.options-group {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -215,27 +219,162 @@ h2 {
   color: var(--accent);
 }
 
-.icon-num {
+/* I pulsanti passano da quadrati icon-only a pillole icona+testo, ma solo
+   quelli marcati .icon-btn-labeled (quelli con uno .btn-label dentro) --
+   .icon-btn resta quadrato ovunque altro (sidebar-tabs, "+" location,
+   ordina/elimina della sidebar), nessuna regressione lì. */
+.icon-btn-labeled {
+  width: auto;
+  padding: 0 12px 0 10px;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.icon-btn-labeled .btn-label {
+  font-size: 13px;
+}
+
+/* Pulsanti della barra dei menù (Mappa/Griglia/Bussola/Vista/File orfani/
+   Esporta-Importa/Opzioni, più "Decorazioni" che non apre nulla): stessa
+   pillola icona+testo, ma più piatta e con la freccina di un vero menù a
+   tendina. */
+.menu-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 36px;
-  padding: 0 10px 0 8px;
+  height: 40px;
+  padding: 0 12px 0 12px;
   border-radius: 8px;
   border: 1px solid var(--border-control);
   background: var(--bg-control);
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.icon-num input[type="number"] {
+.menu-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.menu-btn .caret {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+}
+
+.menu-btn.tool.active,
+/* Un menù resta "spento" alla chiusura ma deve restare leggibile se uno
+   strumento al suo interno è attivo (es. "Allinea alla griglia" selezionato
+   col menù Griglia richiuso) -- altrimenti lo stato si perderebbe alla
+   vista non appena il pannello si chiude. */
+.menu-wrap:has(.dropdown-menu .active) > .menu-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.menu-btn[aria-expanded="true"] {
+  background: var(--accent-bg-subtle);
+  border-color: var(--accent);
+}
+
+/* Voce di menù icona+testo dentro un .dropdown-menu (diversa da
+   .dropdown-item, testo puro, già usata da "Cerca file orfani" ecc.):
+   stessa riga larga quanto il pannello, icona a sinistra, mai a capo. */
+.dropdown-item-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
   border: none;
-  padding: 0;
-  height: auto;
-  width: 46px;
+  background: none;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dropdown-item-icon .icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.dropdown-item-icon:hover:not(:disabled) {
+  background: var(--bg-control);
+}
+
+.dropdown-item-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.dropdown-item-icon.tool.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* Sottomenù a comparsa (es. "Portali" dentro il menù Shaders), stile
+   Photoshop: si apre di lato invece che sotto, sulla stessa riga verticale
+   della voce che lo apre. .dropdown-submenu-panel riusa .dropdown-menu
+   (stesso sfondo/bordo/ombra) solo riposizionato a destra del genitore. */
+.dropdown-submenu {
+  position: relative;
+}
+
+.dropdown-submenu-toggle .caret-right {
+  transform: rotate(-90deg);
+}
+
+.dropdown-menu.dropdown-submenu-panel {
+  top: -4px;
+  left: 100%;
+  margin-left: 4px;
+}
+
+/* Applicata via JS quando aprire a destra farebbe uscire il sottomenù
+   dalla viewport (es. "Shaders" vicino al bordo destro della topbar). */
+.dropdown-menu.dropdown-submenu-panel.flip-left {
+  left: auto;
+  right: 100%;
+  margin-left: 0;
+  margin-right: 4px;
+}
+
+/* Riga "etichetta + campo" per le impostazioni numeriche/colore dentro un
+   .dropdown-menu (divisioni griglia, scala mappa, rotazione bussola...):
+   stesso pattern di .num-row della sidebar, qui con l'etichetta a sinistra
+   e il campo allineato a destra, come le righe di un vero menù opzioni. */
+.dropdown-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+}
+
+.dropdown-field .field-label {
+  font-size: 13px;
   color: var(--text-primary);
 }
 
-.icon-num .unit {
+.dropdown-field .field-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.dropdown-field .field-control input[type="number"] {
+  height: 30px;
+  width: 56px;
+}
+
+.dropdown-field .field-control .unit {
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -308,11 +447,6 @@ button:active:not(:disabled),
 .icon-btn:active:not(:disabled),
 .file-btn:active {
   background: var(--accent-bg-subtle);
-}
-
-.zoom-readout {
-  font-size: 13px;
-  color: var(--text-secondary);
 }
 
 .opacity-inline {
@@ -976,6 +1110,33 @@ button.confirm {
   background: var(--accent-bg-subtle);
   pointer-events: none;
   z-index: 5;
+}
+
+/* Maniglie agli angoli per ridimensionare una decorazione shader selezionata
+   trascinando, come lo strumento Trasforma di Photoshop -- quadrate (non
+   tonde come .vertex-handle dei poligoni) per distinguerle a colpo d'occhio
+   da quelle, e con cursore di ridimensionamento per coppia di angoli
+   opposti. Niente pointer-events:none (a differenza di .shader-box): sono
+   l'unico modo di avviare il ridimensionamento. */
+.shader-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border: 2px solid #fff;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  touch-action: none;
+}
+
+.shader-handle-nw,
+.shader-handle-se {
+  cursor: nwse-resize;
+}
+
+.shader-handle-ne,
+.shader-handle-sw {
+  cursor: nesw-resize;
 }
 
 .shader-row {

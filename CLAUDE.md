@@ -1,3 +1,227 @@
+## Menù "Shaders" con sottomenù + trasforma ad angoli stile Photoshop (fatto)
+
+Tre richieste distinte nella stessa sessione, sul menù "Decorazioni" appena
+creato sopra:
+
+1. **Rinominato "Decorazioni" → "Shaders"**, da pulsante diretto a vero menù
+   a tendina con un sottomenù a comparsa "Portali" (Blu/Rosso/Verde — i 3
+   shaderId esistenti in `SHADER_EFFECTS`: `portal`, `portal_red`,
+   `green_fire`). Il sottomenù si apre di LATO (flyout), non sotto, stile
+   Photoshop — non un semplice accordion: `.dropdown-submenu-panel` riusa
+   `.dropdown-menu` posizionato a `left:100%` del genitore. **Bordo
+   schermo**: vicino al bordo destro della topbar (dove "Shaders" vive) il
+   flyout a destra usciva dalla viewport (scrollbar orizzontale indesiderata
+   apparsa durante la verifica) — risolto misurando `getBoundingClientRect()`
+   dopo l'apertura e aggiungendo una classe `.flip-left` che lo riapre a
+   sinistra quando eccede `window.innerWidth`, invece di una posizione
+   fissa assunta a priori.
+2. **Click su una voce del sottomenù fa due cose in un solo gesto**:
+   seleziona il tipo da piazzare (`selectedShaderType`, prima era
+   `shaderTypeSelect.value` di un `<select>` nella sidebar, ora rimosso) E
+   attiva subito la modalità di piazzamento (prima richiedeva due passaggi
+   separati: scegliere dal select + cliccare il pulsante "tool-shader").
+   Scelta deliberata, non assunta in silenzio: piazzare più copie dello
+   stesso tipo di fila richiede ora riaprire il menù ogni volta — stesso
+   identico compromesso già esistente per lo strumento "Disegna area" (che
+   torna da sola in modalità selezione dopo ogni poligono finito), quindi
+   nessuna incoerenza nuova introdotta.
+3. **Click sul pulsante "Shaders▾" stesso (non solo sulle voci) cambia
+   anche la scheda attiva della colonna destra a "Shaders attivi"**,
+   mostrando la lista delle decorazioni piazzate sulla location corrente —
+   richiesta esplicita dell'utente ("quando clicco il pulsante shaders,
+   voglio mi venga mostrata la lista degli shaders attivi"). La sidebar
+   mostra SOLO la lista ora (rimosso il `<select>` di scelta tipo, che
+   viveva lì prima e duplicava la scelta ora fatta dal menù Shaders —
+   richiesta esplicita "non voglio poterli scegliere da qui").
+
+**Bug pre-esistente trovato e corretto incidentalmente**: i gestori click
+di "Seleziona"/"Disegna area"/"Allinea alla griglia" non rimuovevano mai
+la classe `active` dal vecchio pulsante "tool-shader" quando si cambiava
+strumento senza prima completare un piazzamento — invisibile prima (un
+pulsante isolato rimaneva acceso), ma sarebbe diventato vistoso ora che
+l'evidenziazione risale al genitore "Shaders▾" tramite `:has()` (tutto il
+menù sarebbe rimasto acceso in ambra indefinitamente). Aggiunta
+`setActiveShaderPick(null)` ai tre gestori per chiudere il buco.
+
+**Generalizzazione del sistema menù** (stesso file della sessione
+precedente): `closeMenuEntry()` ora chiude anche ogni
+`.dropdown-submenu-panel` annidato dentro il pannello che sta chiudendo —
+generico su qualunque sottomenù futuro, non cablato su "Portali". Il
+wiring apri/chiudi dei sottomenù stesso è anch'esso generico
+(`document.querySelectorAll('.dropdown-submenu')`), zero codice
+specifico per Shaders al di fuori della lista `shaderPickButtons`.
+
+4. **Trasforma ad angoli stile Photoshop** per ridimensionare una
+   decorazione shader selezionata: 4 maniglie quadrate (`.shader-handle`,
+   distinte dai tondi `.vertex-handle` dei poligoni) agli angoli del
+   riquadro tratteggiato di selezione, trascinabili. Trascinare un angolo
+   ridimensiona ANCORANDO l'angolo OPPOSTO (fermo), esattamente come lo
+   strumento Trasforma di Photoshop — non dal centro. Riusa gli eventi
+   socket `shader:move`/`shader:resize` già esistenti (usati da trascina-
+   sposta e dagli stepper +/- della lista), emessi insieme sul pointerup
+   (un angolo trascinato cambia sia il centro che le dimensioni). Stessa
+   convenzione già in uso nel file: aggiornamento locale ottimistico ad
+   ogni pointermove (nessun round-trip socket durante il trascinamento),
+   emit solo al rilascio — nessun pushHistory (il resize via stepper e lo
+   spostamento via trascinamento non ne avevano già prima, comportamento
+   invariato, non una scelta nuova di questa sessione).
+   **Insidia scoperta e NON risolta (accettata come limite noto)**: la
+   mappa può essere ruotata (`rotate90`/`flip180`, applicati come
+   trasformazione CSS su un antenato di `#overlay-box`, mai su di esso
+   direttamente). Le maniglie sono posizionate in spazio "base" non
+   ruotato (stessa convenzione di `.shader-box`/`.vertex-handle`, che
+   quindi appaiono comunque nel posto visivamente corretto grazie alla
+   rotazione ereditata dall'antenato) — ma l'ETICHETTA semantica
+   dell'angolo (nw/ne/se/sw) e il relativo cursore CSS (`nwse-resize` vs
+   `nesw-resize`) restano quelli dello spazio base, non ruotati: su una
+   location con `rotate90` attivo, l'angolo che appare visivamente in alto
+   a sinistra sullo schermo può essere internamente etichettato "se" e
+   mostrare il cursore diagonale sbagliato. Il ridimensionamento stesso
+   FUNZIONA correttamente (stessa coerenza di spazio usata ovunque nel
+   file per i trascinamenti), è solo il cursore mostrato a poter risultare
+   nella diagonale "sbagliata" su mappe ruotate — verificato esplicitamente
+   durante questa sessione su una location con `rotate90` attivo
+   (coordinate reali lette via `getBoundingClientRect`, non assunte): il
+   drag ha comunque prodotto un resize corretto (3,899×3,899m →
+   5,069×5,848m). Non corretto in questa sessione: richiederebbe calcolare
+   il cursore e l'etichetta dell'angolo "fisico" a partire da
+   `currentRotation`, lavoro non richiesto e rimandabile a quando/se
+   risultasse fastidioso in uso reale.
+
+Verificato end-to-end in browser (socket reale, non un fixture separato,
+sulla location "Taverna" del progetto): piazzamento di una nuova
+decorazione rossa via menù→sottomenù→drag sulla mappa, selezione con
+comparsa delle 4 maniglie, drag di una maniglia con ridimensionamento
+confermato per lettura diretta dei valori (non solo a occhio), persistenza
+dopo un reload completo della pagina, poi decorazione di test eliminata e
+ri-confermata assente dopo un secondo reload (nessun dato di test lasciato
+nella location reale). Nessun errore console in nessun passaggio. Suite
+di test esistente ancora verde (`node --test public/shared/media.test.js`,
+38/38 — nessuna di queste modifiche tocca `media.test.js`).
+
+## Barra strumenti /editor: icona+testo (fatto)
+
+Richiesta utente: "sulla barra non si capisce niente", voleva "un menù come
+quello di un'app vera e propria... con icona + testo". Toccava sia la
+topbar (location/orfani/esporta-importa/opzioni) sia la toolbar sotto di
+essa (mappa/disegno/griglia/decorazioni/bussola/vista/storia) — tutta
+icon-only con solo `title` come tooltip, e alcuni campi (divisioni griglia,
+spessore, colore, rotazione bussola) senza NESSUNA icona né etichetta.
+
+**Decisione presa (chiesto "dimmi tu", nessuna domanda di chiarimento):**
+ogni `.toolbar-group` ora ha un'etichetta di sezione sopra (MAPPA, DISEGNO,
+GRIGLIA, DECORAZIONI, BUSSOLA, VISTA, STORIA) e ogni pulsante/campo dentro
+mostra testo oltre all'icona — pattern ribbon/toolbar di un'app desktop
+vera (Figma/Office), non un menu a tendina: i controlli restano tutti
+raggiungibili con un click solo, niente nascosti dietro sottomenu (l'editor
+è usato dal DM con mouse, non in sessione live come /control o /party, ma
+comunque va usato spesso mentre si prepara una location).
+
+Nuova classe `.icon-btn-labeled` (non un cambio globale a `.icon-btn`, che
+resta quadrato icon-only ovunque altro non toccato: "+" location,
+sidebar-tabs, ordina/elimina della sidebar — nessuna regressione lì).
+**Insidia incontrata**: il primo tentativo di CSS non si vedeva affatto
+(pulsanti rimanevano quadrati, testo sovrapposto) perché il blocco
+`.icon-btn-labeled` era scritto PRIMA di `.icon-btn` nel foglio di stile:
+stessa specificità (una sola classe ciascuna), quindi vinceva l'ultima
+regola in ordine di sorgente (`.icon-btn` con `width:36px` fisso) a
+prescindere da quale classe sembrasse "più specifica" nell'intento.
+Risolto spostando `.icon-btn-labeled` dopo l'intero blocco `.icon-btn`
+nel file.
+
+Zero modifiche a `editor.js`: solo markup (nuovi `<span class="btn-label">`/
+`toolbar-group-label`/`icon-num-label`, nuova classe `icon-btn-labeled`) e
+CSS, tutti gli id restano identici. Verificato in browser (server locale
+porta 3000, dati reali, location "Taverna"): toggle strumenti (select/disegna,
+griglia on/off) funzionano, nessun errore console, nessuna sovrapposizione
+dopo il fix dell'ordine CSS.
+
+**Superato nella stessa sessione, vedi sotto**: l'utente ha chiarito che il
+risultato sopra (gruppi etichettati sempre visibili) non era quello che
+intendeva — voleva un vero menù a tendina stile Photoshop. Il markup/CSS
+qui sopra (`.toolbar`, `.toolbar-group*`) è stato rimosso e sostituito.
+
+## Barra strumenti /editor: menù a tendina stile Photoshop (fatto)
+
+Correzione della richiesta precedente: "non hai capito forse la mia
+richiesta: vorrei un menù come un'applicazione vera e propria. hai presente
+photoshop? una cosa del genere." — il tentativo coi gruppi etichettati
+sempre visibili non si leggeva come "un menù", restava "una barra".
+
+**Architettura scelta (decisione presa, non richiesta all'utente — stesso
+principio di Photoshop, non solo il suo aspetto):** Photoshop ha due righe
+distinte, non una sola — una barra dei MENÙ (File/Edit/Image...) che apre
+pannelli a tendina a comando, e sotto una "options bar" sempre visibile coi
+controlli dello strumento attivo. Le ho riprodotte entrambe:
+- **Barra dei menù** (dentro `.topbar`, insieme a location-select/opzioni):
+  Mappa▾, Griglia▾, Decorazioni (azione diretta, nessun sottomenu — una sola
+  voce non merita una tendina), Bussola▾, Vista▾, più i due menù già
+  esistenti File orfani▾/Esporta-Importa▾ e Opzioni. Ogni ▾ è un
+  `.menu-wrap`/`.dropdown-menu` (stesso pattern già usato da File
+  orfani/Esporta-Importa prima di questa sessione — riusato, non reinventato)
+  con dentro righe `.dropdown-item-icon` (azioni/toggle, icona+testo) o
+  `.dropdown-field` (etichetta+campo, per scala/divisioni/colore/spessore/
+  opacità/rotazione — i controlli che prima non avevano NESSUNA icona né
+  testo, causa diretta del "non si capisce niente" originale).
+- **Striscia opzioni** (`.options-bar`, sotto la barra dei menù, sempre
+  visibile): SOLO i controlli che servono un click immediato durante un
+  gesto in corso — Seleziona/Disegna area, Termina/Annulla poligono (che
+  appaiono a metà disegno), Elimina area, Annulla/Ripeti (undo/redo globale).
+  **Perché NON sono finiti dentro un menù**: nascondere "Termina"/"Annulla"
+  dietro una tendina chiusa li avrebbe resi irraggiungibili proprio a metà
+  disegno (il primo click per piazzare un vertice è "fuori" dal pannello e
+  lo avrebbe chiuso) — stesso ragionamento per cui Photoshop stesso non
+  nasconde gli strumenti dietro i menù File/Edit, ma li tiene nella propria
+  options bar sempre a vista.
+
+**Generalizzazione della logica apri/chiudi (in `editor.js`)**: prima
+c'erano due funzioni quasi identiche copia-incolla per File orfani ed
+Esporta/Importa (`closeBackupMenu`/`closeOrphansMenu`, cablate a mano).
+Con 6 menù a tendina (Mappa/Griglia/Bussola/Vista + i 2 esistenti) la
+duplicazione sarebbe diventata insostenibile — sostituita con un array
+`menuEntries` di coppie `[toggle, panel]` e due funzioni generiche
+(`closeMenuEntry`, `closeAllMenusExcept`). Comportamento INVARIATO
+rispetto a prima: un solo pannello aperto alla volta, click fuori li
+chiude tutti tranne File orfani (eccezione voluta: può contenere una
+scansione in corso, si perderebbe al primo click distratto — stessa
+ragione di prima, solo generalizzata invece che hardcoded).
+
+**Indicatore di stato senza toccare JS sparso**: molti pulsanti dentro i
+nuovi menù (Ruota 180°, Allinea alla griglia, Mostra griglia, Bussola...)
+hanno la loro classe `active` impostata in una dozzina di punti sparsi nel
+file (`toolSelectBtn.classList.add('active')` eccetera, ~15 occorrenze).
+Invece di toccare ognuno di quei punti per "far sapere" al pulsante-menù
+genitore che qualcosa al suo interno è attivo (es. tenere "Griglia▾"
+evidenziata anche a menù chiuso se la griglia è accesa), uso CSS puro:
+`.menu-wrap:has(.dropdown-menu .active) > .menu-btn` — zero modifiche a
+JS, funziona automaticamente con qualsiasi punto del codice che aggiunga/
+rimuova `.active` su un discendente, presente o futuro. Richiede
+`:has()` (supportato da tutti i browser desktop moderni correnti; questo
+è un tool locale per il DM, non una pagina pubblica — rischio
+compatibilità accettato).
+
+Zero validazione di formato toccata, zero modifiche alla logica di
+disegno/griglia/bussola/zoom stessa — solo dove vivono i controlli nel DOM
+e come si aprono/chiudono. Tutti gli id restano identici (`editor.js` li
+referenzia solo per id, mai per struttura DOM circostante), quindi nessuna
+riga di logica applicativa è stata toccata oltre al blocco menù stesso.
+
+Verificato in browser (server locale, dati reali, location "Taverna"):
+ogni menù si apre/chiude correttamente, un solo pannello aperto alla
+volta, click fuori chiude (File orfani escluso come da design), il
+pulsante "Bussola▾" risulta evidenziato in ambra anche a menù chiuso
+perché la bussola della location è già attiva (conferma che `:has()`
+funziona), "Disegna area" nella striscia opzioni si attiva immediatamente
+senza aprire alcun menù, nessun errore console. Suite di test esistente
+ancora verde (`node --test public/shared/media.test.js`, 38/38 — nessuna
+di queste modifiche tocca logica testata).
+
+**Nota per sessioni future**: l'utente aveva notato di preferire lavorare
+su un branch diverso per questo genere di modifiche ("avrei preferito
+lavorassi su un altro branch ma va bene così per questa volta") — per la
+prossima richiesta di questo tipo, proporre esplicitamente un branch
+dedicato prima di iniziare invece di assumere il branch corrente.
+
 # Piano di lavoro
 
 Elenco delle cose da fare sul progetto, aggiornato man mano che si procede.

@@ -14,7 +14,11 @@ let shaderPlaceDrag = null;
 let selectedShaderId = null;
 let draggingShader = null;
 let selectedShaderBoxEl = null;
+let selectedShaderHandleEls = {};
+let resizingShader = null;
 const SHADER_MIN_M = 0.5;
+const SHADER_HANDLE_CORNERS = ['nw', 'ne', 'se', 'sw'];
+const SHADER_HANDLE_OPPOSITE = { nw: 'se', ne: 'sw', se: 'nw', sw: 'ne' };
 let compassDragging = false;
 let compassDragPos = null;
 let currentImageRect = null;
@@ -63,16 +67,18 @@ const redoBtn = document.getElementById('redo-btn');
 const gridToggleBtn = document.getElementById('grid-toggle');
 const gridAlignToolBtn = document.getElementById('grid-align-tool');
 const gridAlignSquareBtn = document.getElementById('grid-align-square');
-const toolShaderBtn = document.getElementById('tool-shader');
 const mapShaderCanvas = document.getElementById('map-shader-canvas');
 const shaderList = document.getElementById('shader-list');
 const deleteShaderBtn = document.getElementById('delete-shader');
-const shaderTypeSelect = document.getElementById('shader-type-select');
+const shaderMenuToggle = document.getElementById('shader-menu-toggle');
+const shaderMenu = document.getElementById('shader-menu');
+// Voci "Blu"/"Rosso"/"Verde" dentro il sottomenù "Portali" (e qualunque
+// futuro sottomenù con lo stesso attributo): niente id individuali, un
+// solo selettore generico così aggiungere un nuovo shader o gruppo in HTML
+// basta da solo, senza toccare anche questo elenco.
+const shaderPickButtons = Array.from(document.querySelectorAll('#shader-menu [data-shader-id]'));
+let selectedShaderType = 'portal';
 const shaderLayer = new ShaderLayer(mapShaderCanvas);
-
-shaderTypeSelect.innerHTML = Object.entries(SHADER_EFFECTS)
-  .map(([id, def]) => `<option value="${id}">${escapeHtml(def.label)}</option>`)
-  .join('');
 const gridDivisionsNum = document.getElementById('grid-divisions-num');
 let gridSquareConstrain = false;
 const gridSizeNum = document.getElementById('grid-size-num');
@@ -233,7 +239,7 @@ const lightboxCloseBtn = document.getElementById('lightbox-close');
 const LOCATION_DEPENDENT_CONTROLS = [
   mapUpload, removeMapBtn, flip180Btn, rotate90Btn, mapScaleNum,
   toolSelectBtn, toolDrawBtn, drawFinishBtn, drawCancelBtn, deletePolygonBtn, polygonSortAzBtn, fogOpacityNum,
-  toolShaderBtn, deleteShaderBtn, shaderTypeSelect,
+  deleteShaderBtn, ...shaderPickButtons,
   gridToggleBtn, gridAlignToolBtn, gridAlignSquareBtn, gridDivisionsNum, gridColorInput, gridWidthNum, gridOpacityNum,
   gridSizeNum, gridOffsetXNum, gridOffsetYNum, gridSavePresetBtn, gridApplyPresetBtn,
   imageUpload
@@ -762,6 +768,32 @@ document.addEventListener('pointermove', (e) => {
     deco.y = Math.min(100, Math.max(0, draggingShader.originalY + dy));
     syncSelectedShaderBox();
   }
+
+  // Trascinamento di una maniglia d'angolo: l'angolo opposto (fissato in
+  // startShaderResize) resta fermo, quello trascinato insegue il puntatore
+  // -- stesso spazio percentuale "base" (non ruotato) di draggingShader
+  // qui sopra, dato che deco.x/y e il rettangolo di shaderDecorationRectPercent
+  // vivono entrambi lì.
+  if (resizingShader) {
+    const location = getActiveLocation();
+    if (!location) return;
+    const deco = location.map.shaders.find((s) => s.id === resizingShader.id);
+    if (!deco) return;
+    const current = basePointFromClientXY(e.clientX, e.clientY);
+    const { fixedX, fixedY } = resizingShader;
+    const leftPct = Math.min(current[0], fixedX);
+    const topPct = Math.min(current[1], fixedY);
+    const widthPct = Math.abs(current[0] - fixedX);
+    const heightPct = Math.abs(current[1] - fixedY);
+    const nw = mediaW(activeMapEl);
+    const nh = mediaH(activeMapEl);
+    const ppm = aoePixelsPerMeter(location.map.grid);
+    deco.widthM = Math.max(SHADER_MIN_M, ((widthPct / 100) * nw) / ppm);
+    deco.heightM = Math.max(SHADER_MIN_M, ((heightPct / 100) * nh) / ppm);
+    deco.x = Math.min(100, Math.max(0, leftPct + widthPct / 2));
+    deco.y = Math.min(100, Math.max(0, topPct + heightPct / 2));
+    syncSelectedShaderBox();
+  }
 });
 
 document.addEventListener('pointerup', () => {
@@ -795,7 +827,7 @@ document.addEventListener('pointerup', () => {
     if (end) applyShaderPlacement(start, end);
     mode = 'select';
     toolSelectBtn.classList.add('active');
-    toolShaderBtn.classList.remove('active');
+    setActiveShaderPick(null);
     return;
   }
 
@@ -853,6 +885,20 @@ document.addEventListener('pointerup', () => {
       socket.emit('shader:move', { locationId: location.id, id: deco.id, x: deco.x, y: deco.y });
     }
   }
+
+  if (resizingShader) {
+    const location = getActiveLocation();
+    const deco = location?.map.shaders.find((s) => s.id === resizingShader.id);
+    resizingShader = null;
+    if (deco) {
+      // Sia la posizione che le dimensioni sono cambiate (un angolo
+      // trascinato sposta anche il centro, vedi pointermove sopra) --
+      // stessi due eventi già usati separatamente da trascinamento e
+      // stepper +/-, solo emessi insieme qui.
+      socket.emit('shader:move', { locationId: location.id, id: deco.id, x: deco.x, y: deco.y });
+      socket.emit('shader:resize', { locationId: location.id, id: deco.id, widthM: deco.widthM, heightM: deco.heightM });
+    }
+  }
 });
 
 document.addEventListener('pointercancel', () => {
@@ -868,7 +914,10 @@ document.addEventListener('pointercancel', () => {
     shaderPlaceDrag = null;
     mode = 'select';
     toolSelectBtn.classList.add('active');
-    toolShaderBtn.classList.remove('active');
+    setActiveShaderPick(null);
+  }
+  if (resizingShader) {
+    resizingShader = null;
   }
   draggingIndex = null;
   draggingPolygon = null;
@@ -939,7 +988,7 @@ function applyShaderPlacement(start, end) {
   const centerYPct = topPct + heightPct / 2;
   socket.emit('shader:place', {
     locationId: location.id,
-    shaderId: shaderTypeSelect.value || 'portal',
+    shaderId: selectedShaderType || 'portal',
     x: centerXPct,
     y: centerYPct,
     widthM,
@@ -953,6 +1002,7 @@ toolSelectBtn.addEventListener('click', () => {
   toolSelectBtn.classList.add('active');
   toolDrawBtn.classList.remove('active');
   gridAlignToolBtn.classList.remove('active');
+  setActiveShaderPick(null);
   renderPolygonsSvg();
 });
 
@@ -962,6 +1012,7 @@ toolDrawBtn.addEventListener('click', () => {
   toolDrawBtn.classList.add('active');
   toolSelectBtn.classList.remove('active');
   gridAlignToolBtn.classList.remove('active');
+  setActiveShaderPick(null);
   renderPolygonsSvg();
   renderPolygonList(getActiveLocation());
 });
@@ -976,15 +1027,37 @@ gridAlignToolBtn.addEventListener('click', () => {
   gridAlignToolBtn.classList.add('active');
   toolSelectBtn.classList.remove('active');
   toolDrawBtn.classList.remove('active');
+  setActiveShaderPick(null);
 });
 
-toolShaderBtn.addEventListener('click', () => {
-  mode = 'shader-place';
-  resetDrawingPoints();
-  toolSelectBtn.classList.remove('active');
-  toolDrawBtn.classList.remove('active');
-  gridAlignToolBtn.classList.remove('active');
-  toolShaderBtn.classList.add('active');
+// Evidenzia nel sottomenù "Portali" quale tipo è quello scelto per il
+// prossimo piazzamento -- da qui risale anche al pulsante "Shaders▾" della
+// topbar tramite la regola CSS generica `.menu-wrap:has(.active)`, nessuna
+// logica aggiuntiva serve per quello.
+function setActiveShaderPick(shaderId) {
+  shaderPickButtons.forEach((btn) => {
+    btn.classList.toggle('active', shaderId !== null && btn.dataset.shaderId === shaderId);
+  });
+}
+
+// Scegliere un tipo dal sottomenù "Portali" fa due cose in un solo click
+// (come il tasto "tool-shader" + il select del tipo facevano prima insieme,
+// solo che ora sono un unico controllo): seleziona il tipo da piazzare e
+// attiva subito la modalità di piazzamento, poi richiude tutto il menù
+// (incluso il sottomenù) -- stesso comportamento di "Disegna poligono",
+// che dopo aver finito un'area torna da sola in modalità selezione.
+shaderPickButtons.forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    selectedShaderType = btn.dataset.shaderId;
+    mode = 'shader-place';
+    resetDrawingPoints();
+    toolSelectBtn.classList.remove('active');
+    toolDrawBtn.classList.remove('active');
+    gridAlignToolBtn.classList.remove('active');
+    setActiveShaderPick(selectedShaderType);
+    closeMenuEntry([shaderMenuToggle, shaderMenu]);
+  });
 });
 
 drawFinishBtn.addEventListener('click', () => {
@@ -1052,6 +1125,64 @@ deletePolygonBtn.addEventListener('click', () => {
 // visibile solo nella lista laterale, in contraddizione con la verifica
 // manuale del brief ("si evidenzia (bordo tratteggiato)"). Aggiunta minima,
 // stessa conversione percentuale->pixel di updateShaderPlaceBox.
+function removeSelectedShaderHandles() {
+  Object.values(selectedShaderHandleEls).forEach((el) => el.remove());
+  selectedShaderHandleEls = {};
+}
+
+// Maniglie agli angoli stile "Trasforma" di Photoshop: create una sola
+// volta per angolo e poi solo riposizionate -- l'handler di pointerdown
+// rilegge `selectedShaderId` dal vivo invece di catturarlo in chiusura,
+// altrimenti selezionare un'altra decorazione senza passare da "nessuna
+// selezionata" (il percorso normale quando si clicca direttamente
+// un'altra decorazione sulla mappa) lascerebbe le maniglie riusate legate
+// all'id sbagliato.
+function syncSelectedShaderHandles(leftPx, topPx, widthPx, heightPx) {
+  const corners = {
+    nw: [leftPx, topPx],
+    ne: [leftPx + widthPx, topPx],
+    se: [leftPx + widthPx, topPx + heightPx],
+    sw: [leftPx, topPx + heightPx]
+  };
+  SHADER_HANDLE_CORNERS.forEach((corner) => {
+    let handle = selectedShaderHandleEls[corner];
+    if (!handle) {
+      handle = document.createElement('div');
+      handle.className = `shader-handle shader-handle-${corner}`;
+      handle.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        startShaderResize(corner);
+      });
+      overlayBox.appendChild(handle);
+      selectedShaderHandleEls[corner] = handle;
+    }
+    const [x, y] = corners[corner];
+    handle.style.left = `${x}px`;
+    handle.style.top = `${y}px`;
+  });
+}
+
+function startShaderResize(corner) {
+  const location = getActiveLocation();
+  const deco = location && selectedShaderId ? (location.map.shaders || []).find((s) => s.id === selectedShaderId) : null;
+  if (!deco) return;
+  const nw = mediaW(activeMapEl);
+  const nh = mediaH(activeMapEl);
+  const rect = shaderDecorationRectPercent(deco, location.map.grid, nw, nh);
+  const corners = {
+    nw: [rect.leftPct, rect.topPct],
+    ne: [rect.leftPct + rect.widthPct, rect.topPct],
+    se: [rect.leftPct + rect.widthPct, rect.topPct + rect.heightPct],
+    sw: [rect.leftPct, rect.topPct + rect.heightPct]
+  };
+  // L'angolo OPPOSTO a quello trascinato resta fermo -- lo stesso
+  // comportamento del riquadro di trasformazione di Photoshop, dove
+  // trascinare un angolo ridimensiona attorno a quello opposto, non al
+  // centro.
+  const [fixedX, fixedY] = corners[SHADER_HANDLE_OPPOSITE[corner]];
+  resizingShader = { id: deco.id, locationId: location.id, fixedX, fixedY };
+}
+
 function syncSelectedShaderBox() {
   const location = getActiveLocation();
   const deco = location && selectedShaderId ? (location.map.shaders || []).find((s) => s.id === selectedShaderId) : null;
@@ -1060,6 +1191,7 @@ function syncSelectedShaderBox() {
       selectedShaderBoxEl.remove();
       selectedShaderBoxEl = null;
     }
+    removeSelectedShaderHandles();
     return;
   }
   if (!selectedShaderBoxEl) {
@@ -1070,10 +1202,15 @@ function syncSelectedShaderBox() {
   const nw = mediaW(activeMapEl);
   const nh = mediaH(activeMapEl);
   const rect = shaderDecorationRectPercent(deco, location.map.grid, nw, nh);
-  selectedShaderBoxEl.style.left = `${(rect.leftPct / 100) * currentImageRect.width}px`;
-  selectedShaderBoxEl.style.top = `${(rect.topPct / 100) * currentImageRect.height}px`;
-  selectedShaderBoxEl.style.width = `${(rect.widthPct / 100) * currentImageRect.width}px`;
-  selectedShaderBoxEl.style.height = `${(rect.heightPct / 100) * currentImageRect.height}px`;
+  const leftPx = (rect.leftPct / 100) * currentImageRect.width;
+  const topPx = (rect.topPct / 100) * currentImageRect.height;
+  const widthPx = (rect.widthPct / 100) * currentImageRect.width;
+  const heightPx = (rect.heightPct / 100) * currentImageRect.height;
+  selectedShaderBoxEl.style.left = `${leftPx}px`;
+  selectedShaderBoxEl.style.top = `${topPx}px`;
+  selectedShaderBoxEl.style.width = `${widthPx}px`;
+  selectedShaderBoxEl.style.height = `${heightPx}px`;
+  syncSelectedShaderHandles(leftPx, topPx, widthPx, heightPx);
 }
 
 function renderShaderList(location) {
@@ -2002,33 +2139,85 @@ orphansPurgeBtn.addEventListener('click', async () => {
   orphansList.innerHTML = `cancellati ${data.deleted.length} file.`;
 });
 
-// Un solo menu a tendina aperto alla volta: aprirne uno chiude l'altro,
-// invece di lasciarli sovrapposti. Il menu orfani fa eccezione al click
-// fuori (vedi sotto): può contenere una scansione in corso che si perderebbe
-// al primo click distratto altrove nella pagina.
-function closeBackupMenu() { backupMenu.hidden = true; }
-function closeOrphansMenu() { orphansMenu.hidden = true; }
+// Barra dei menù stile app desktop (Mappa/Griglia/Bussola/Vista in cima
+// alla mappa, più File orfani/Esporta-Importa nella topbar): un solo
+// pannello aperto alla volta, click fuori lo chiude -- tranne il menu file
+// orfani, che può contenere una scansione in corso e la perderebbe al primo
+// click distratto altrove nella pagina (unica eccezione, come prima di
+// generalizzare questa logica ai nuovi menù).
+const menuEntries = [
+  [document.getElementById('map-menu-toggle'), document.getElementById('map-menu')],
+  [document.getElementById('grid-menu-toggle'), document.getElementById('grid-menu')],
+  [shaderMenuToggle, shaderMenu],
+  [document.getElementById('compass-menu-toggle'), document.getElementById('compass-menu')],
+  [document.getElementById('view-menu-toggle'), document.getElementById('view-menu')],
+  [backupMenuToggle, backupMenu],
+  [orphansMenuToggle, orphansMenu],
+];
 
-document.addEventListener('click', closeBackupMenu);
-backupMenu.addEventListener('click', (e) => e.stopPropagation());
-orphansMenu.addEventListener('click', (e) => e.stopPropagation());
+// Un pannello può contenere un sottomenù a comparsa (es. "Portali" dentro
+// Shaders): chiuderlo deve chiudere anche quello, altrimenti riaprendo lo
+// stesso menù in seguito lo si ritroverebbe già espanso senza averlo
+// chiesto. Generico su qualunque `.dropdown-submenu-panel` dentro, non
+// cablato sul solo caso Shaders, così un futuro sottomenù in un altro menù
+// funziona senza bisogno di toccare anche questa funzione.
+function closeMenuEntry([toggle, panel]) {
+  panel.hidden = true;
+  toggle.setAttribute('aria-expanded', 'false');
+  panel.querySelectorAll('.dropdown-submenu-panel').forEach((sub) => { sub.hidden = true; });
+  panel.querySelectorAll('.dropdown-submenu-toggle').forEach((t) => t.setAttribute('aria-expanded', 'false'));
+}
 
-backupMenuToggle.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const willOpen = backupMenu.hidden;
-  closeOrphansMenu();
-  backupMenu.hidden = !willOpen;
+function closeAllMenusExcept(exceptPanel) {
+  menuEntries.forEach(([toggle, panel]) => {
+    if (panel !== exceptPanel && panel !== orphansMenu) closeMenuEntry([toggle, panel]);
+  });
+}
+
+document.addEventListener('click', () => closeAllMenusExcept(null));
+
+menuEntries.forEach(([toggle, panel]) => {
+  panel.addEventListener('click', (e) => e.stopPropagation());
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = panel.hidden;
+    menuEntries.forEach(([t, p]) => { if (p !== panel) closeMenuEntry([t, p]); });
+    panel.hidden = !willOpen;
+    toggle.setAttribute('aria-expanded', String(willOpen));
+    // Aprire Shaders▾ mostra anche la lista degli shaders piazzati nella
+    // colonna di destra, senza dover cliccare separatamente la scheda --
+    // richiesta esplicita dell'utente.
+    if (toggle === shaderMenuToggle && willOpen) setActiveSidebarTab('shader');
+  });
 });
 
-// Resta aperto finché non lo richiudi tu stesso (di nuovo su questa icona,
-// o aprendo il menu esporta/importa) -- mai per un click fuori qualsiasi,
-// altrimenti i risultati di una scansione appena fatta sparirebbero al primo
-// click distratto sul resto della pagina prima di aver confermato o meno.
-orphansMenuToggle.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const willOpen = orphansMenu.hidden;
-  closeBackupMenu();
-  orphansMenu.hidden = !willOpen;
+// Sottomenù a comparsa generico (qualunque `.dropdown-submenu-toggle` più
+// il suo `.dropdown-submenu-panel` fratello, non solo "Portali"): click
+// apre/chiude senza richiudere il pannello genitore (stopPropagation),
+// click dentro il pannello del sottomenù non lo richiude da solo.
+document.querySelectorAll('.dropdown-submenu').forEach((wrap) => {
+  const subToggle = wrap.querySelector(':scope > .dropdown-submenu-toggle');
+  const subPanel = wrap.querySelector(':scope > .dropdown-submenu-panel');
+  if (!subToggle || !subPanel) return;
+  subPanel.addEventListener('click', (e) => e.stopPropagation());
+  subToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = subPanel.hidden;
+    subPanel.hidden = !willOpen;
+    subToggle.setAttribute('aria-expanded', String(willOpen));
+    // Il sottomenù si apre di default a destra del genitore (stile
+    // Photoshop); ma un menù vicino al bordo destro della finestra (es.
+    // "Shaders" nella topbar) lo spingerebbe fuori dalla viewport -- una
+    // volta visibile se ne misura il bordo reale e, solo se eccede, si
+    // passa ad aprirlo a sinistra invece.
+    if (willOpen) {
+      subPanel.classList.remove('flip-left');
+      const rect = subPanel.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        subPanel.classList.add('flip-left');
+      }
+    }
+  });
 });
 
 // Le cinque schede della colonna destra sono un cambio di composizione, non
@@ -2047,17 +2236,17 @@ sidebarTabBar.addEventListener('click', (e) => {
 
 exportLocationBtn.addEventListener('click', () => {
   if (!state.activeLocationId) return;
-  backupMenu.hidden = true;
+  closeMenuEntry([backupMenuToggle, backupMenu]);
   window.location.href = `/api/export/location/${state.activeLocationId}`;
 });
 
 exportBackupBtn.addEventListener('click', () => {
-  backupMenu.hidden = true;
+  closeMenuEntry([backupMenuToggle, backupMenu]);
   window.location.href = '/api/export/backup';
 });
 
 importBtn.addEventListener('click', () => {
-  backupMenu.hidden = true;
+  closeMenuEntry([backupMenuToggle, backupMenu]);
   importFileInput.value = '';
   importFileInput.click();
 });

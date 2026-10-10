@@ -39,8 +39,18 @@
   <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7c1.6 0 3 .3 4.2.8M22 12s-1.6 2.8-4.2 4.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1M18.5 18.5l-2.1-2.1M7.6 7.6 5.5 5.5"/></symbol>
   <symbol id="i-shader" viewBox="0 0 24 24"><path d="M12 3l2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4z"/></symbol>
+  <symbol id="i-caret-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
 </svg>
 
+<!-- Barra dei menù, stile applicazione desktop (Photoshop/Office): ogni
+     categoria è un pulsante icona+testo che apre un pannello a tendina con
+     i controlli veri, invece di mostrarli tutti insieme in permanenza. I
+     controlli che servono un click immediato durante un gesto in corso
+     (selezionare/disegnare un poligono, terminare/annullare, annulla/ripeti)
+     restano fuori dai menù, nella striscia opzioni sotto la mappa -- stesso
+     principio della "options bar" di Photoshop, sempre visibile sotto la
+     barra dei menù, a differenza dei menù File/Edit/Image che si aprono a
+     comando. -->
 <header class="topbar">
   <select id="location-select" class="select-primary"></select>
   <button id="location-create" class="icon-btn" title="Nuova location">
@@ -50,8 +60,159 @@
   <div class="toolbar-sep"></div>
 
   <div class="menu-wrap">
-    <button id="orphans-menu-toggle" class="icon-btn" title="Pulisci file orfani">
-      <svg class="icon"><use href="#i-trash"></use></svg>
+    <button id="map-menu-toggle" class="menu-btn" title="Mappa" aria-haspopup="true" aria-expanded="false">
+      <svg class="icon" aria-hidden="true"><use href="#i-upload"></use></svg>
+      <span class="btn-label">Mappa</span>
+      <svg class="icon caret" aria-hidden="true"><use href="#i-caret-down"></use></svg>
+    </button>
+    <div id="map-menu" class="dropdown-menu" hidden>
+      <label class="dropdown-item-icon" title="Carica mappa">
+        <svg class="icon" aria-hidden="true"><use href="#i-upload"></use></svg>
+        <span>Carica mappa</span>
+        <input type="file" id="map-upload" accept="image/*,video/*" hidden>
+      </label>
+      <button id="remove-map" class="dropdown-item-icon" title="Rimuovi mappa">
+        <svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg>
+        <span>Rimuovi mappa</span>
+      </button>
+      <button id="flip-180" class="dropdown-item-icon tool" title="Ruota mappa 180°">
+        <svg class="icon" aria-hidden="true"><use href="#i-rotate"></use></svg>
+        <span>Ruota 180°</span>
+      </button>
+      <button id="rotate-90" class="dropdown-item-icon tool" title="Ruota mappa 90°">
+        <svg class="icon" aria-hidden="true"><use href="#i-rotate-90"></use></svg>
+        <span>Ruota 90°</span>
+      </button>
+      <label class="dropdown-field" title="Scala mappa">
+        <span class="field-label">Scala</span>
+        <span class="field-control">
+          <input type="number" id="map-scale-num" min="25" max="1000" value="100">
+          <span class="unit">%</span>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <div class="menu-wrap">
+    <button id="grid-menu-toggle" class="menu-btn" title="Griglia" aria-haspopup="true" aria-expanded="false">
+      <svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>
+      <span class="btn-label">Griglia</span>
+      <svg class="icon caret" aria-hidden="true"><use href="#i-caret-down"></use></svg>
+    </button>
+    <div id="grid-menu" class="dropdown-menu" hidden>
+      <button id="grid-toggle" class="dropdown-item-icon tool" title="Mostra/nascondi griglia">
+        <svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>
+        <span>Mostra griglia</span>
+      </button>
+      <button id="grid-align-tool" class="dropdown-item-icon tool" title="Allinea alla griglia della mappa">
+        <svg class="icon" aria-hidden="true"><use href="#i-align"></use></svg>
+        <span>Allinea alla griglia</span>
+      </button>
+      <button id="grid-align-square" class="dropdown-item-icon tool" title="Vincola il trascinamento a un quadrato perfetto">
+        <svg class="icon" aria-hidden="true"><use href="#i-square-lock"></use></svg>
+        <span>Vincola a quadrato</span>
+      </button>
+      <label class="dropdown-field" title="Dividi la cella tracciata in N parti">
+        <span class="field-label">Divisioni</span>
+        <span class="field-control"><input type="number" id="grid-divisions-num" min="1" max="20" step="1" value="1"></span>
+      </label>
+      <label class="dropdown-field" title="Colore griglia">
+        <span class="field-label">Colore</span>
+        <span class="field-control"><input type="color" id="grid-color" class="color-swatch" value="#ffffff"></span>
+      </label>
+      <label class="dropdown-field" title="Spessore tratto griglia">
+        <span class="field-label">Spessore</span>
+        <span class="field-control"><input type="number" id="grid-width-num" min="0.2" max="5" step="0.1" value="0.3"></span>
+      </label>
+      <label class="dropdown-field" title="Opacità griglia">
+        <span class="field-label">Opacità</span>
+        <span class="field-control">
+          <input type="number" id="grid-opacity-num" min="0" max="100" step="10" value="100">
+          <span class="unit">%</span>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <div class="menu-wrap">
+    <button id="shader-menu-toggle" class="menu-btn" title="Shaders" aria-haspopup="true" aria-expanded="false">
+      <svg class="icon" aria-hidden="true"><use href="#i-shader"></use></svg>
+      <span class="btn-label">Shaders</span>
+      <svg class="icon caret" aria-hidden="true"><use href="#i-caret-down"></use></svg>
+    </button>
+    <div id="shader-menu" class="dropdown-menu" hidden>
+      <div class="dropdown-submenu">
+        <button type="button" class="dropdown-item-icon dropdown-submenu-toggle" aria-haspopup="true" aria-expanded="false">
+          <svg class="icon" aria-hidden="true"><use href="#i-shader"></use></svg>
+          <span>Portali</span>
+          <svg class="icon caret caret-right" aria-hidden="true"><use href="#i-caret-down"></use></svg>
+        </button>
+        <div class="dropdown-menu dropdown-submenu-panel" hidden>
+          <button type="button" class="dropdown-item-icon tool" data-shader-id="portal">
+            <svg class="icon" aria-hidden="true"><use href="#i-shader"></use></svg>
+            <span>Blu</span>
+          </button>
+          <button type="button" class="dropdown-item-icon tool" data-shader-id="portal_red">
+            <svg class="icon" aria-hidden="true"><use href="#i-shader"></use></svg>
+            <span>Rosso</span>
+          </button>
+          <button type="button" class="dropdown-item-icon tool" data-shader-id="green_fire">
+            <svg class="icon" aria-hidden="true"><use href="#i-shader"></use></svg>
+            <span>Verde</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="menu-wrap">
+    <button id="compass-menu-toggle" class="menu-btn" title="Bussola" aria-haspopup="true" aria-expanded="false">
+      <svg class="icon" aria-hidden="true"><use href="#i-compass"></use></svg>
+      <span class="btn-label">Bussola</span>
+      <svg class="icon caret" aria-hidden="true"><use href="#i-caret-down"></use></svg>
+    </button>
+    <div id="compass-menu" class="dropdown-menu" hidden>
+      <button id="compass-toggle" class="dropdown-item-icon tool" title="Mostra/nascondi rosa dei venti">
+        <svg class="icon" aria-hidden="true"><use href="#i-compass"></use></svg>
+        <span>Mostra rosa dei venti</span>
+      </button>
+      <label class="dropdown-field" title="Rotazione rosa dei venti">
+        <span class="field-label">Rotazione</span>
+        <span class="field-control">
+          <input type="number" id="compass-rotation-num" min="0" max="359" step="1" value="0">
+          <span class="unit">°</span>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <div class="menu-wrap">
+    <button id="view-menu-toggle" class="menu-btn" title="Vista" aria-haspopup="true" aria-expanded="false">
+      <svg class="icon" aria-hidden="true"><use href="#i-zoom-reset"></use></svg>
+      <span class="btn-label">Vista</span>
+      <svg class="icon caret" aria-hidden="true"><use href="#i-caret-down"></use></svg>
+    </button>
+    <div id="view-menu" class="dropdown-menu" hidden>
+      <button id="editor-zoom-reset" class="dropdown-item-icon" title="Reset zoom">
+        <svg class="icon" aria-hidden="true"><use href="#i-zoom-reset"></use></svg>
+        <span>Reset zoom (<span id="editor-zoom-readout">100%</span>)</span>
+      </button>
+      <label class="dropdown-field" title="Opacità fog (solo anteprima editor)">
+        <span class="field-label">Opacità fog</span>
+        <span class="field-control">
+          <input type="number" id="fog-opacity-num" min="0" max="100" value="45">
+          <span class="unit">%</span>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <div class="toolbar-sep"></div>
+
+  <div class="menu-wrap">
+    <button id="orphans-menu-toggle" class="menu-btn" title="Pulisci file orfani" aria-haspopup="true" aria-expanded="false">
+      <svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg>
+      <span class="btn-label">File orfani</span>
     </button>
     <div id="orphans-menu" class="dropdown-menu" hidden>
       <button id="orphans-scan-btn" class="dropdown-item">Cerca file orfani</button>
@@ -63,8 +224,9 @@
   </div>
 
   <div class="menu-wrap">
-    <button id="backup-menu-toggle" class="icon-btn" title="Esporta / importa">
-      <svg class="icon"><use href="#i-more"></use></svg>
+    <button id="backup-menu-toggle" class="menu-btn" title="Esporta / importa" aria-haspopup="true" aria-expanded="false">
+      <svg class="icon" aria-hidden="true"><use href="#i-more"></use></svg>
+      <span class="btn-label">Esporta/Importa</span>
     </button>
     <div id="backup-menu" class="dropdown-menu" hidden>
       <button id="export-location-btn" class="dropdown-item">Esporta «<span id="export-location-name"></span>»</button>
@@ -73,8 +235,9 @@
     </div>
   </div>
 
-  <a href="/opzioni" class="icon-btn" title="Opzioni">
-    <svg class="icon"><use href="#i-gear"></use></svg>
+  <a href="/opzioni" class="menu-btn" title="Opzioni">
+    <svg class="icon" aria-hidden="true"><use href="#i-gear"></use></svg>
+    <span class="btn-label">Opzioni</span>
   </a>
 
   <input type="file" id="import-file-input" accept=".vttlocation,.vttbackup" hidden>
@@ -91,117 +254,48 @@
 </div>
 
 <main class="editor-layout">
-  <div class="toolbar">
-      <div class="toolbar-group">
-        <label class="icon-btn" title="Carica mappa">
-          <svg class="icon"><use href="#i-upload"></use></svg>
-          <input type="file" id="map-upload" accept="image/*,video/*" hidden>
-        </label>
-        <button id="remove-map" class="icon-btn" title="Rimuovi mappa">
-          <svg class="icon"><use href="#i-trash"></use></svg>
-        </button>
-        <button id="flip-180" class="icon-btn tool" title="Ruota mappa 180°">
-          <svg class="icon"><use href="#i-rotate"></use></svg>
-        </button>
-        <button id="rotate-90" class="icon-btn tool" title="Ruota mappa 90°">
-          <svg class="icon"><use href="#i-rotate-90"></use></svg>
-        </button>
-        <label class="icon-num" title="Scala mappa">
-          <svg class="icon"><use href="#i-scale"></use></svg>
-          <input type="number" id="map-scale-num" min="25" max="1000" value="100">
-          <span class="unit">%</span>
-        </label>
-      </div>
+  <!-- Striscia opzioni, sempre visibile sotto la barra dei menù (equivalente
+       della "options bar" di Photoshop): solo i controlli che servono un
+       click immediato durante un gesto in corso -- selezionare/disegnare,
+       terminare/annullare un poligono a metà, eliminare la selezione,
+       annulla/ripeti. Tutto il resto (impostazioni mappa/griglia/bussola/
+       vista) vive nei menù a tendina della topbar qui sopra. -->
+  <div class="options-bar">
+    <div class="options-group">
+      <button id="tool-select" class="icon-btn icon-btn-labeled tool active" title="Seleziona">
+        <svg class="icon" aria-hidden="true"><use href="#i-select"></use></svg>
+        <span class="btn-label">Seleziona</span>
+      </button>
+      <button id="tool-draw" class="icon-btn icon-btn-labeled tool" title="Nuovo poligono">
+        <svg class="icon" aria-hidden="true"><use href="#i-polygon"></use></svg>
+        <span class="btn-label">Disegna area</span>
+      </button>
+      <button id="draw-finish" class="icon-btn icon-btn-labeled" hidden title="Termina poligono">
+        <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>
+        <span class="btn-label">Termina</span>
+      </button>
+      <button id="draw-cancel" class="icon-btn icon-btn-labeled" hidden title="Annulla disegno">
+        <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+        <span class="btn-label">Annulla</span>
+      </button>
+      <button id="delete-polygon" class="icon-btn icon-btn-labeled" disabled title="Elimina selezionato">
+        <svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg>
+        <span class="btn-label">Elimina area</span>
+      </button>
+    </div>
 
-      <div class="toolbar-sep"></div>
+    <div class="toolbar-sep"></div>
 
-      <div class="toolbar-group">
-        <button id="tool-select" class="icon-btn tool active" title="Seleziona">
-          <svg class="icon"><use href="#i-select"></use></svg>
-        </button>
-        <button id="tool-draw" class="icon-btn tool" title="Nuovo poligono">
-          <svg class="icon"><use href="#i-polygon"></use></svg>
-        </button>
-        <button id="draw-finish" class="icon-btn" hidden title="Termina poligono">
-          <svg class="icon"><use href="#i-check"></use></svg>
-        </button>
-        <button id="draw-cancel" class="icon-btn" hidden title="Annulla disegno">
-          <svg class="icon"><use href="#i-x"></use></svg>
-        </button>
-        <button id="delete-polygon" class="icon-btn" disabled title="Elimina selezionato">
-          <svg class="icon"><use href="#i-trash"></use></svg>
-        </button>
-        <label class="icon-num" title="Opacità fog (solo anteprima editor)">
-          <svg class="icon"><use href="#i-fog"></use></svg>
-          <input type="number" id="fog-opacity-num" min="0" max="100" value="45">
-          <span class="unit">%</span>
-        </label>
-      </div>
-
-      <div class="toolbar-sep"></div>
-
-      <div class="toolbar-group">
-        <button id="grid-toggle" class="icon-btn tool" title="Mostra/nascondi griglia">
-          <svg class="icon"><use href="#i-grid"></use></svg>
-        </button>
-        <button id="grid-align-tool" class="icon-btn tool" title="Allinea alla griglia della mappa">
-          <svg class="icon"><use href="#i-align"></use></svg>
-        </button>
-        <button id="grid-align-square" class="icon-btn tool" title="Vincola il trascinamento a un quadrato perfetto">
-          <svg class="icon"><use href="#i-square-lock"></use></svg>
-        </button>
-        <label class="icon-num" title="Dividi la cella tracciata in N parti">
-          <input type="number" id="grid-divisions-num" min="1" max="20" step="1" value="1">
-        </label>
-        <input type="color" id="grid-color" class="color-swatch" value="#ffffff" title="Colore griglia">
-        <label class="icon-num" title="Spessore tratto griglia">
-          <input type="number" id="grid-width-num" min="0.2" max="5" step="0.1" value="0.3">
-        </label>
-        <label class="icon-num" title="Opacità griglia">
-          <input type="number" id="grid-opacity-num" min="0" max="100" step="10" value="100">
-          <span class="unit">%</span>
-        </label>
-      </div>
-
-      <div class="toolbar-sep"></div>
-
-      <div class="toolbar-group">
-        <button id="tool-shader" class="icon-btn tool" title="Piazza decorazione shader">
-          <svg class="icon"><use href="#i-shader"></use></svg>
-        </button>
-      </div>
-
-      <div class="toolbar-sep"></div>
-
-      <div class="toolbar-group">
-        <button id="compass-toggle" class="icon-btn tool" title="Mostra/nascondi rosa dei venti">
-          <svg class="icon"><use href="#i-compass"></use></svg>
-        </button>
-        <label class="icon-num" title="Rotazione rosa dei venti">
-          <input type="number" id="compass-rotation-num" min="0" max="359" step="1" value="0">
-          <span class="unit">°</span>
-        </label>
-      </div>
-
-      <div class="toolbar-sep"></div>
-
-      <div class="toolbar-group">
-        <button id="editor-zoom-reset" class="icon-btn" title="Reset zoom">
-          <svg class="icon"><use href="#i-zoom-reset"></use></svg>
-        </button>
-        <span id="editor-zoom-readout" class="zoom-readout">100%</span>
-      </div>
-
-      <div class="toolbar-sep"></div>
-
-      <div class="toolbar-group">
-        <button id="undo-btn" class="icon-btn" title="Annulla" disabled>
-          <svg class="icon"><use href="#i-undo"></use></svg>
-        </button>
-        <button id="redo-btn" class="icon-btn" title="Ripeti" disabled>
-          <svg class="icon"><use href="#i-redo"></use></svg>
-        </button>
-      </div>
+    <div class="options-group">
+      <button id="undo-btn" class="icon-btn icon-btn-labeled" title="Annulla" disabled>
+        <svg class="icon" aria-hidden="true"><use href="#i-undo"></use></svg>
+        <span class="btn-label">Annulla</span>
+      </button>
+      <button id="redo-btn" class="icon-btn icon-btn-labeled" title="Ripeti" disabled>
+        <svg class="icon" aria-hidden="true"><use href="#i-redo"></use></svg>
+        <span class="btn-label">Ripeti</span>
+      </button>
+    </div>
   </div>
 
   <section class="col col-map">
@@ -285,12 +379,14 @@
 
       <section class="tab-panel panel" data-tab="shader">
         <div class="section-header">
-          <h2>Shader</h2>
+          <h2>Shaders attivi</h2>
           <button id="delete-shader" class="icon-btn" disabled title="Elimina selezionato">
             <svg class="icon"><use href="#i-trash"></use></svg>
           </button>
         </div>
-        <select id="shader-type-select" class="select-primary"></select>
+        <!-- Solo lista: la scelta del tipo da piazzare vive ora nel menù
+             "Shaders" della topbar (con sottomenù "Portali"), non più qui --
+             richiesta esplicita dell'utente. -->
         <div id="shader-list" class="list"></div>
       </section>
 
