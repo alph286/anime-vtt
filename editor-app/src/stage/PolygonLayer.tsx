@@ -39,8 +39,8 @@ export function PolygonLayer() {
                 key={`${poly.id}-${index}`}
                 className="vertex-handle"
                 style={{ left: px(x, rect.width), top: px(y, rect.height) }}
-                onPointerDown={(e) => { e.stopPropagation(); dragState.vertexIndex = index; }}
-                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); removeVertexWithHistory(poly.id, index); }}
+                onPointerDown={(e) => { e.stopPropagation(); if (e.button !== 0) return; dragState.vertexIndex = index; }}
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); dragState.vertexIndex = null; removeVertexWithHistory(poly.id, index); }}
               />
             ))
           )}

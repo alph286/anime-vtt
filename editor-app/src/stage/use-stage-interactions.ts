@@ -201,9 +201,10 @@ export function useStageInteractions(mediaRef: React.MutableRefObject<MapMedia |
 
       const loc = selectActiveLocation(s);
 
-      if (dragState.vertexIndex !== null && s.selectedPolygonId) {
+      if (dragState.vertexIndex !== null) {
+        const hadSelection = s.selectedPolygonId;
         dragState.vertexIndex = null;
-        const poly = loc?.map.polygons.find((p) => p.id === s.selectedPolygonId);
+        const poly = hadSelection ? loc?.map.polygons.find((p) => p.id === hadSelection) : undefined;
         if (loc && poly) socket.emit('polygon:update', { locationId: loc.id, polygonId: poly.id, points: poly.points });
       }
 
@@ -261,6 +262,8 @@ export function useStageInteractions(mediaRef: React.MutableRefObject<MapMedia |
     document.addEventListener('pointercancel', onCancel);
     return () => {
       unsubscribe();
+      dragState.vertexIndex = null;
+      dragState.shaderResize = null;
       overlay.removeEventListener('click', onClick);
       overlay.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('pointermove', onPointerMove);
