@@ -28,7 +28,7 @@ const MAX_AOE_SIZE_M = 300;
 // /editor. Il registro con lo shader GLSL vero vive lato client
 // (public/shared/shader-effects.js) -- il server valida solo che la
 // stringa sia una di queste, mai il contenuto GLSL.
-const SHADER_IDS = ['portal', 'portal_red'];
+const SHADER_IDS = ['portal', 'portal_red', 'green_fire'];
 const SHADER_MIN_SIZE_M = 0.5;
 const AOE_COLOR_NAMES = Object.keys(AOE_COLORS);
 

@@ -120,6 +120,39 @@ void main() {
 `;
 }
 
+// Avvolge un mainImage "autosufficiente" (alpha già calcolato nel colore
+// finale premoltiplicato -- stesso stile dei fuochi già portati per le
+// AoE in AOE_SHADER_EFFECTS più sotto, dove `fragColor = vec4(col*alpha,
+// alpha)` arriva già scritto dentro il mainImage stesso) per una
+// decorazione rettangolare piazzata da /editor. Più semplice di
+// portalFragmentSrc: niente texture di rumore, niente edge-fade
+// aggiuntivo -- la dissolvenza radiale del fuoco stesso arriva già vicino
+// a zero prima del bordo del rettangolo, quindi non serve nasconderlo di
+// nuovo. Stesso adattamento "si allunga seguendo la forma" già scelto per
+// il Portale: un rettangolo non quadrato stira il cerchio invece di
+// restare sempre circolare, comportamento voluto (vedi commento in
+// portalFragmentSrc).
+function decorationFragmentSrc(mainImageGlsl) {
+  return `#version 300 es
+precision highp float;
+
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_viewportOrigin;
+
+out vec4 fragColor;
+
+${mainImageGlsl}
+
+void main() {
+  vec2 fragCoord = gl_FragCoord.xy - u_viewportOrigin;
+  vec4 col;
+  mainImage(col, fragCoord);
+  fragColor = col;
+}
+`;
+}
+
 const SHADER_EFFECTS = {
   portal: {
     label: 'Portale',
@@ -130,6 +163,97 @@ const SHADER_EFFECTS = {
     label: 'Portale (rosso)',
     usesNoiseTexture: true,
     fragmentSrc: portalFragmentSrc('vec3(.4,0.1,0.1)')
+  },
+  // Stesso mainImage del fuoco verde già portato per le AoE (vedi
+  // AOE_SHADER_EFFECTS.green_fire più sotto) -- qui wrappato per una
+  // decorazione rettangolare fissa invece che per una sagoma AoE
+  // ritagliata, richiesta esplicita dell'utente per riusare uno shader
+  // già fatto invece di portarne uno nuovo dal repo sorgente.
+  green_fire: {
+    label: 'Fuoco verde',
+    fragmentSrc: decorationFragmentSrc(`
+// ---- Hash / Noise (procedural-noise technique) ----
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float noise(vec2 x) {
+    vec2 p = floor(x);
+    vec2 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(p + vec2(0.0, 0.0));
+    float b = hash(p + vec2(1.0, 0.0));
+    float c = hash(p + vec2(0.0, 1.0));
+    float d = hash(p + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+const mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+float fbm(vec2 p) {
+    float f = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        f += a * noise(p);
+        p = m * p;
+        a *= 0.5;
+    }
+    return f;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    float t = u_time;
+
+    float rad = length(p);
+
+    // cartesian domain warp for organic turbulence — built only from p
+    // and time (no angle, no radial-line sampling), so it never seams
+    // and never collapses into a "sunburst"/pinwheel near the center
+    vec2 q = p * 2.4;
+    vec2 warpA = vec2(fbm(q + vec2(0.0, -t * 0.35)), fbm(q + vec2(5.1, t * 0.28)));
+    vec2 warped = q + (warpA - 0.5) * 1.6;
+
+    float flame = fbm(warped * 1.7);
+    flame = mix(flame, fbm(warped * 3.0 + warpA * 1.8), 0.35);
+    flame = clamp(flame * 1.15, 0.0, 1.0);
+
+    // traveling ring wave: phase depends on (radius - time), so rings of
+    // brightness continuously expand from the center outward — this is
+    // what actually reads as "flames flowing from the center to the rim"
+    float ring = 0.5 + 0.5 * sin(rad * 10.0 - t * 3.0 + flame * 4.0);
+    flame = mix(flame, clamp(flame * 0.6 + ring * 0.7, 0.0, 1.0), 0.6);
+
+    // soft, feathered falloff instead of a hard circle edge — the shape
+    // dissolves gradually into transparency (top-down brazier glow).
+    // Opacity comes mostly from this shape term, only lightly touched by
+    // the flame noise, so the fire never breaks up into dark "holes".
+    float baseRadius = 0.48;
+    float feather = 0.4;
+    float radialFalloff = 1.0 - smoothstep(baseRadius - feather, baseRadius + feather, rad);
+    float density = radialFalloff * (0.75 + 0.25 * flame);
+    density = clamp(density, 0.0, 1.0);
+
+    // brightness never drops to black — it only ranges from a dim green
+    // glow up to a hot flare, so it always reads as fire, never as smoke
+    float heat = mix(0.3, 0.85, flame);
+
+    // small, soft ember glow right at the center — a brightness boost,
+    // not a flat white disc, so the flame texture stays visible
+    float core = smoothstep(0.24, 0.0, rad);
+    heat = clamp(heat + core * core * 0.35, 0.0, 1.0);
+
+    // green fire palette: deep green base -> vivid green -> pale yellow-green hot spots
+    vec3 col;
+    col.r = pow(heat, 2.2) * 0.45;
+    col.g = 0.26 + heat * 0.85;
+    col.b = pow(heat, 3.2) * 0.22;
+    col = clamp(col, 0.0, 1.0);
+
+    float alpha = density;
+    fragColor = vec4(col * alpha, alpha);
+}
+`)
   }
 };
 
