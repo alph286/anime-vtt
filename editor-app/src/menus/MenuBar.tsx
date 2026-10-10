@@ -1,7 +1,7 @@
 import { useRef } from 'react';
-import { Compass as CompassIcon, Crosshair, Grid3x3, Maximize, RotateCcw, RotateCw, Square, Trash2, Upload, ZoomIn } from 'lucide-react';
+import { Compass as CompassIcon, Crosshair, Grid3x3, Maximize, RotateCcw, RotateCw, Sparkles, Square, Trash2, Upload, ZoomIn } from 'lucide-react';
 import {
-  Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, MenubarTrigger,
+  Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, MenubarSub, MenubarSubContent, MenubarSubTrigger, MenubarTrigger,
 } from '@/components/ui/menubar';
 import { NumberField } from '@/components/NumberField';
 import { useArmConfirm } from '@/hooks/use-arm-confirm';
@@ -20,6 +20,7 @@ export function MenuBar() {
   const fogOpacity = useEditorStore((s) => s.fogOpacity);
   const setSidebarTab = useEditorStore((s) => s.setSidebarTab);
   const mode = useEditorStore((s) => s.mode);
+  const selectedShaderType = useEditorStore((s) => s.selectedShaderType);
   const squareConstrain = useEditorStore((s) => s.gridSquareConstrain);
   const colorPicking = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -173,7 +174,31 @@ export function MenuBar() {
           </MenubarContent>
         </MenubarMenu>
 
-        {/* Shaders: task 11 */}
+        <MenubarMenu value="shaders">
+          <MenubarTrigger className={triggerClass} data-active={mode === 'shader-place'}>
+            <Sparkles className="size-4" /> Shaders
+          </MenubarTrigger>
+          <MenubarContent>
+            <MenubarSub>
+              <MenubarSubTrigger disabled={disabled}><Sparkles /> Portali</MenubarSubTrigger>
+              <MenubarSubContent>
+                {[
+                  { id: 'portal', label: 'Blu' },
+                  { id: 'portal_red', label: 'Rosso' },
+                  { id: 'green_fire', label: 'Verde' },
+                ].map((s) => (
+                  <MenubarCheckboxItem
+                    key={s.id}
+                    checked={mode === 'shader-place' && selectedShaderType === s.id}
+                    onCheckedChange={() => useEditorStore.getState().chooseShaderTool(s.id)}
+                  >
+                    <Sparkles /> {s.label}
+                  </MenubarCheckboxItem>
+                ))}
+              </MenubarSubContent>
+            </MenubarSub>
+          </MenubarContent>
+        </MenubarMenu>
 
         <MenubarMenu value="bussola">
           <MenubarTrigger className={triggerClass} data-active={Boolean(location?.map.compass?.visible)}>

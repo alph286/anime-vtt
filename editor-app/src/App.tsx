@@ -9,6 +9,9 @@ import { GridPanel } from '@/sidebar/GridPanel';
 import { MapStage, type MapMedia } from '@/stage/MapStage';
 import { CompassHandle } from '@/stage/CompassHandle';
 import { PolygonLayer } from '@/stage/PolygonLayer';
+import { ShaderSelection } from '@/stage/ShaderSelection';
+import { ShaderPanel } from '@/sidebar/ShaderPanel';
+import { useShaderLoop } from '@/stage/use-shader-loop';
 import { useStageInteractions } from '@/stage/use-stage-interactions';
 import { MenuBar } from '@/menus/MenuBar';
 import type { VttState } from '@/types';
@@ -16,6 +19,7 @@ import type { VttState } from '@/types';
 export default function App() {
   const mediaRef = useRef<MapMedia | null>(null);
   useStageInteractions(mediaRef);
+  useShaderLoop(mediaRef);
   useEffect(() => {
     const onConnect = () => socket.emit('hello', { role: 'editor' });
     const onState = (s: VttState) => useEditorStore.getState().receiveState(s);
@@ -50,8 +54,9 @@ export default function App() {
       <main className="flex min-h-0 flex-1">
         <MapStage mediaRef={mediaRef} wrapChildren={<CompassHandle />}>
           <PolygonLayer />
+          <ShaderSelection />
         </MapStage>
-        <Sidebar panels={{ fog: <FogPanel />, grid: <GridPanel /> }} />
+        <Sidebar panels={{ fog: <FogPanel />, grid: <GridPanel />, shader: <ShaderPanel /> }} />
       </main>
     </div>
   );
