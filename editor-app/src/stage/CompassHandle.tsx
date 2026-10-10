@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { clamp } from '@/lib/numbers';
 import { socket } from '@/lib/socket';
 import { selectActiveLocation, useEditorStore } from '@/store/editor-store';
@@ -11,6 +11,8 @@ export function CompassHandle() {
   const compass = location?.map.compass;
   const [dragPos, setDragPos] = useState<Point | null>(null);
   const latest = useRef<Point | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cleanupRef.current?.(), []);
   if (!location || !compass) return null;
 
   const x = dragPos?.[0] ?? compass.x;
@@ -26,6 +28,7 @@ export function CompassHandle() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
+    cleanupRef.current?.();
     const locationId = location.id;
     const move = (ev: PointerEvent) => {
       const p = toPercent(ev.clientX, ev.clientY);
@@ -33,6 +36,7 @@ export function CompassHandle() {
       setDragPos(p);
     };
     const cleanup = () => {
+      cleanupRef.current = null;
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
       document.removeEventListener('pointercancel', cancel);
@@ -44,6 +48,7 @@ export function CompassHandle() {
       setDragPos(null);
     };
     const cancel = () => { cleanup(); latest.current = null; setDragPos(null); };
+    cleanupRef.current = cleanup;
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
     document.addEventListener('pointercancel', cancel);
