@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  color-scheme: dark;
+  --bg-page: #16181d;
+  --bg-panel: #1f232b;
+  --bg-control: #262b34;
+  --bg-canvas: #0e1014;
+  --grid-line: #20242c;
+  --text-primary: #cfd6e0;
+  --text-secondary: #8a93a3;
+  --vtt-accent: #c9822c;
+  --accent-text: #1a1a1a;
+  --accent-bg-subtle: rgba(201, 130, 44, 0.15);
+  --danger: #a32d2d;
+  --danger-bg: #3a1f1f;
+  --danger-border: #5a2c2c;
+  --danger-text: #e08a86;
+  --border-control: #333947;
+
+  --background: var(--bg-page);
+  --foreground: var(--text-primary);
+  --card: var(--bg-panel);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-panel);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--vtt-accent);
+  --primary-foreground: var(--accent-text);
+  --secondary: var(--bg-control);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--bg-control);
+  --muted-foreground: var(--text-secondary);
+  --accent: #2c313b;
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--danger);
+  --border: #2c313b;
+  --input: var(--border-control);
+  --ring: var(--vtt-accent);
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; margin: 0; font-family: system-ui, sans-serif; }
+  [hidden] { display: none !important; }
+}
