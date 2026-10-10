@@ -6,11 +6,14 @@ import { OptionsBar } from '@/toolbar/OptionsBar';
 import { Sidebar } from '@/sidebar/Sidebar';
 import { MapStage, type MapMedia } from '@/stage/MapStage';
 import { CompassHandle } from '@/stage/CompassHandle';
+import { PolygonLayer } from '@/stage/PolygonLayer';
+import { useStageInteractions } from '@/stage/use-stage-interactions';
 import { MenuBar } from '@/menus/MenuBar';
 import type { VttState } from '@/types';
 
 export default function App() {
   const mediaRef = useRef<MapMedia | null>(null);
+  useStageInteractions(mediaRef);
   useEffect(() => {
     const onConnect = () => socket.emit('hello', { role: 'editor' });
     const onState = (s: VttState) => useEditorStore.getState().receiveState(s);
@@ -43,7 +46,9 @@ export default function App() {
       <Header menus={<MenuBar />} />
       <OptionsBar />
       <main className="flex min-h-0 flex-1">
-        <MapStage mediaRef={mediaRef} wrapChildren={<CompassHandle />} />
+        <MapStage mediaRef={mediaRef} wrapChildren={<CompassHandle />}>
+          <PolygonLayer />
+        </MapStage>
         <Sidebar panels={{}} />
       </main>
     </div>
