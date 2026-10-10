@@ -19,5 +19,5 @@ export default defineConfig({
       '/shared': BACKEND,
     },
   },
-  test: { environment: 'node', include: ['src/**/*.test.{ts,tsx}'] },
+  test: { environment: 'node', include: ['src/**/*.test.{ts,tsx}'], setupFiles: ['src/test-setup.ts'] },
 });
