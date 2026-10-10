@@ -4,6 +4,7 @@ import { useEditorStore } from '@/store/editor-store';
 import { Header } from '@/toolbar/Header';
 import { OptionsBar } from '@/toolbar/OptionsBar';
 import { Sidebar } from '@/sidebar/Sidebar';
+import { FogPanel } from '@/sidebar/FogPanel';
 import { MapStage, type MapMedia } from '@/stage/MapStage';
 import { CompassHandle } from '@/stage/CompassHandle';
 import { PolygonLayer } from '@/stage/PolygonLayer';
@@ -49,7 +50,7 @@ export default function App() {
         <MapStage mediaRef={mediaRef} wrapChildren={<CompassHandle />}>
           <PolygonLayer />
         </MapStage>
-        <Sidebar panels={{}} />
+        <Sidebar panels={{ fog: <FogPanel /> }} />
       </main>
     </div>
   );
