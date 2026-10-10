@@ -1,12 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { socket } from '@/lib/socket';
 import { useEditorStore } from '@/store/editor-store';
 import { Header } from '@/toolbar/Header';
 import { OptionsBar } from '@/toolbar/OptionsBar';
 import { Sidebar } from '@/sidebar/Sidebar';
+import { MapStage, type MapMedia } from '@/stage/MapStage';
+import { MenuBar } from '@/menus/MenuBar';
 import type { VttState } from '@/types';
 
 export default function App() {
+  const mediaRef = useRef<MapMedia | null>(null);
   useEffect(() => {
     const onConnect = () => socket.emit('hello', { role: 'editor' });
     const onState = (s: VttState) => useEditorStore.getState().receiveState(s);
@@ -36,10 +39,10 @@ export default function App() {
 
   return (
     <div className="flex h-dvh flex-col">
-      <Header menus={null} />
+      <Header menus={<MenuBar />} />
       <OptionsBar />
       <main className="flex min-h-0 flex-1">
-        <section className="relative min-h-0 flex-1" id="stage-slot" />
+        <MapStage mediaRef={mediaRef} />
         <Sidebar panels={{}} />
       </main>
     </div>

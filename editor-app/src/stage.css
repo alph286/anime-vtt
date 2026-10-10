@@ -1,0 +1,252 @@
+.map-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: min(62vh, 640px);
+  min-height: 360px;
+  margin-bottom: 10px;
+}
+
+.map-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-canvas);
+  border-radius: 8px;
+  overflow: auto;
+  /* Lo scroll resta funzionante (serve per pan/zoom) ma la barra visibile
+     no: a qualunque livello di zoom oltre il 100% il contenuto eccede
+     sempre il riquadro, quindi la barra sarebbe comunque presente in
+     permanenza -- puro rumore visivo, il trascinamento/rotellina bastano. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.map-canvas::-webkit-scrollbar {
+  display: none;
+}
+
+.map-canvas-zoom {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.media-wrap {
+  position: absolute;
+}
+
+.map-canvas-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  -webkit-user-drag: none;
+  user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.map-canvas-placeholder {
+  position: absolute;
+  inset: 0;
+  background-color: var(--bg-canvas);
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 19px, var(--grid-line) 19px 20px),
+    repeating-linear-gradient(90deg, transparent 0 19px, var(--grid-line) 19px 20px);
+  z-index: 1;
+}
+
+.overlay-box {
+  position: absolute;
+  cursor: crosshair;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+
+.overlay-box svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#grid-svg {
+  z-index: 2;
+}
+
+#polygon-svg {
+  z-index: 3;
+}
+
+.vertex-handle,
+.draw-point {
+  z-index: 4;
+}
+
+.grid-align-box {
+  z-index: 5;
+}
+
+/* Il fog of war resta nero puro: è lo stato "sconosciuto ai giocatori",
+   un significato semantico distinto dai colori dell'interfaccia — non
+   va tokenizzato (vedi Global Constraints). */
+.fog-poly {
+  fill: #000;
+  stroke: none;
+}
+
+.fog-poly.revealed {
+  fill: none;
+  stroke: var(--vtt-accent);
+  stroke-opacity: 0.6;
+  stroke-width: 0.6;
+  stroke-dasharray: 2 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.fog-poly.selected {
+  fill: var(--vtt-accent);
+  fill-opacity: 0.35;
+  stroke: var(--vtt-accent);
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.draw-line {
+  fill: none;
+  stroke: var(--vtt-accent);
+  stroke-width: 0.6;
+  stroke-dasharray: 1.5 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.vertex-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--vtt-accent);
+  border: 2px solid #fff;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+}
+
+.draw-point {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vtt-accent);
+  transform: translate(-50%, -50%);
+}
+
+.grid-align-box {
+  position: absolute;
+  border: 1.5px dashed var(--vtt-accent);
+  background: var(--accent-bg-subtle);
+  pointer-events: none;
+}
+
+.compass-drag {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+  z-index: 6;
+}
+
+.compass-drag:active {
+  cursor: grabbing;
+}
+
+.compass-drag svg {
+  width: 100%;
+  height: 100%;
+}
+
+.compass-drag-star {
+  fill: var(--vtt-accent);
+}
+
+.compass-drag-hub {
+  fill: var(--bg-canvas);
+  stroke: var(--vtt-accent);
+  stroke-width: 2;
+}
+
+.compass-drag text {
+  fill: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Rosa dei venti spenta: resta trascinabile/regolabile in anticipo, ma
+   visivamente distinta dallo stato "attiva" mostrato ai giocatori. */
+.compass-drag.off {
+  opacity: 0.5;
+}
+
+.compass-drag.off .compass-drag-star {
+  fill: none;
+  stroke: var(--text-primary);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+#map-shader-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Stesso trattamento visivo di .grid-align-box (tratteggio ambra), sia per
+   il rettangolo mentre lo si disegna sia per marcare quale decorazione
+   piazzata è attualmente selezionata. */
+.shader-box {
+  position: absolute;
+  border: 1.5px dashed var(--vtt-accent);
+  background: var(--accent-bg-subtle);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Maniglie agli angoli per ridimensionare una decorazione shader selezionata
+   trascinando, come lo strumento Trasforma di Photoshop -- quadrate (non
+   tonde come .vertex-handle dei poligoni) per distinguerle a colpo d'occhio
+   da quelle, e con cursore di ridimensionamento per coppia di angoli
+   opposti. Niente pointer-events:none (a differenza di .shader-box): sono
+   l'unico modo di avviare il ridimensionamento. */
+.shader-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--vtt-accent);
+  border: 2px solid #fff;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  touch-action: none;
+}
+
+.shader-handle-nw,
+.shader-handle-se {
+  cursor: nwse-resize;
+}
+
+.shader-handle-ne,
+.shader-handle-sw {
+  cursor: nesw-resize;
+}
+
