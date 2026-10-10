@@ -569,30 +569,6 @@ h2 {
   color: #fff;
 }
 
-/* Stesso quadrato 44x44 della "✕", prima di lei nella pillola: "lancia
-   incantesimo" per QUESTA area (layout scelto dall'utente: un fulmine per
-   pillola, non un bottone globale, per lanciare/rilanciare più aree
-   indipendentemente). Ambra solo quando l'area è già "in onda" (The One
-   Accent Rule) -- spento (colore muto) prima del lancio, così lo sguardo
-   va dritto sulle aree già attive quando ce ne sono più di una in campo. */
-.aoe-chip-cast {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: none;
-  color: var(--text-secondary);
-}
-
-.aoe-chip-cast.active {
-  color: var(--accent);
-}
-
 .aoe-chip.selected .aoe-chip-pill {
   border-color: var(--accent);
   background: var(--accent-bg-subtle);
@@ -659,15 +635,13 @@ h2 {
 }
 
 /* Riga finale a tutta larghezza (grid-column: 1/-1), sotto le 4 righe di
-   celle 44x44 del pad: stesso linguaggio delle pillole della lista aree
-   (fulmine="lancia"), qui come scorciatoia rapida mentre si sta già
-   modificando un'area col pad, senza dover scendere fino alla lista.
-   Rosso pieno sempre (non solo quando attivo, a differenza di
-   .aoe-chip-cast.active che resta muta finché non lanciata): qui è un
-   pulsante d'azione dedicato, non un indicatore di stato, quindi il
-   colore non deve "accendersi" -- lo stato lanciato/non lanciato si legge
-   comunque dal resto dell'interfaccia (contorno/shader sulla mappa,
-   pillola nella lista). */
+   celle 44x44 del pad: unico punto da cui lanciare/interrompere un
+   incantesimo (il fulmine nella pillola della lista è stato rimosso,
+   ridondante con questo). Rosso quando l'area non è ancora lanciata
+   ("FIRE", azione da compiere); grigio neutro con etichetta "UN-FIRE"
+   quando è già attiva (azione per interromperla) -- il colore e il testo
+   cambiano insieme, non solo uno dei due, altrimenti "FIRE" in grigio
+   leggerebbe come disattivato invece che come "sta già succedendo". */
 .aoe-nudge-overlay .aoe-nudge-fire {
   grid-column: 1 / -1;
   width: auto;
@@ -679,11 +653,10 @@ h2 {
   letter-spacing: 0.04em;
 }
 
-/* Area già lanciata: un bordo più chiaro basta a far capire che il
-   prossimo tap interrompe invece di lanciare, senza bisogno di cambiare
-   l'etichetta "FIRE". */
 .aoe-nudge-overlay .aoe-nudge-fire.active {
-  border-color: #fff;
+  background: var(--bg-control);
+  border-color: var(--border-control);
+  color: var(--text-secondary);
 }
 
 .icon {

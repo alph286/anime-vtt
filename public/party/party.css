@@ -396,24 +396,6 @@ button {
   color: #fff;
 }
 
-.aoe-chip-cast {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: none;
-  color: var(--text-secondary);
-}
-
-.aoe-chip-cast.active {
-  color: var(--accent);
-}
-
 .aoe-chip.selected .aoe-chip-pill {
   border-color: var(--accent);
   background: var(--accent-bg-subtle);
@@ -470,13 +452,12 @@ button {
   cursor: grabbing;
 }
 
-/* Riga finale a tutta larghezza, stessa funzione del fulmine "Lancia
-   incantesimo" nella pillola della lista, qui raggiungibile senza dover
-   scendere fino alla lista mentre si sta già modificando un'area col pad.
-   Rosso pieno sempre (non solo quando attivo): è un pulsante d'azione
-   dedicato, non un indicatore di stato -- lo stato lanciato/non lanciato
-   si legge dal resto dell'interfaccia (contorno/shader sulla mappa,
-   pillola nella lista). */
+/* Riga finale a tutta larghezza: unico punto da cui lanciare/interrompere
+   un incantesimo (il fulmine nella pillola della lista è stato rimosso,
+   ridondante con questo). Rosso quando l'area non è ancora lanciata
+   ("FIRE", azione da compiere); grigio neutro con etichetta "UN-FIRE"
+   quando è già attiva (azione per interromperla) -- colore e testo
+   cambiano insieme, non solo uno dei due. */
 .aoe-nudge-overlay .aoe-nudge-fire {
   grid-column: 1 / -1;
   width: auto;
@@ -489,7 +470,9 @@ button {
 }
 
 .aoe-nudge-overlay .aoe-nudge-fire.active {
-  border-color: #fff;
+  background: var(--bg-control);
+  border-color: var(--border-control);
+  color: var(--text-secondary);
 }
 
 /* ---------- generico ---------- */

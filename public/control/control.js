@@ -934,6 +934,8 @@ function renderAoeNudgeOverlay(editingAoe, grid) {
 
   aoeNudgeColor.style.background = aoeColorHex(editingAoe.color);
   aoeNudgeFire.classList.toggle('active', Boolean(editingAoe.cast));
+  aoeNudgeFire.textContent = editingAoe.cast ? 'UN-FIRE' : 'FIRE';
+  aoeNudgeFire.title = editingAoe.cast ? 'Interrompi incantesimo' : 'Lancia incantesimo';
 }
 
 function aoeShapeLabel(shape) {
@@ -962,9 +964,6 @@ function renderAoeChipList(aoes) {
         <div class="aoe-chip ${selected ? 'selected' : ''}" data-id="${aoe.id}">
           <div class="aoe-chip-pill">
             <span class="aoe-chip-label">${escapeHtml(aoeShapeLabel(aoe.shape))} ${sizeText}m</span>
-            <button class="aoe-chip-cast ${aoe.cast ? 'active' : ''}" title="${aoe.cast ? 'Interrompi incantesimo' : 'Lancia incantesimo'}">
-              <svg class="icon"><use href="#i-bolt"></use></svg>
-            </button>
             <button class="aoe-chip-delete ${armed ? 'confirm' : ''}" title="${armed ? 'Tocca di nuovo per confermare' : 'Rimuovi'}">✕</button>
           </div>
         </div>
@@ -1374,16 +1373,6 @@ fowList.addEventListener('click', (e) => {
 });
 
 aoeChipList.addEventListener('click', (e) => {
-  const castBtn = e.target.closest('.aoe-chip-cast');
-  if (castBtn) {
-    const chip = castBtn.closest('.aoe-chip');
-    const aoeId = chip.dataset.id;
-    const previewLocation = getPreviewLocation();
-    const aoe = previewLocation && previewLocation.map.aoes.find((a) => a.id === aoeId);
-    if (!aoe) return;
-    socket.emit('aoe:setCast', { locationId: previewLocationId, aoeId, cast: !aoe.cast });
-    return;
-  }
   const deleteBtn = e.target.closest('.aoe-chip-delete');
   if (deleteBtn) {
     const chip = deleteBtn.closest('.aoe-chip');
