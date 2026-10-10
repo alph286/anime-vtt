@@ -17,6 +17,10 @@ import { AudioPanel } from '@/sidebar/AudioPanel';
 import { useShaderLoop } from '@/stage/use-shader-loop';
 import { useStageInteractions } from '@/stage/use-stage-interactions';
 import { MenuBar } from '@/menus/MenuBar';
+import { OrphansPopover } from '@/menus/OrphansPopover';
+import { ImportExportMenu } from '@/menus/ImportExportMenu';
+import { Settings } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import type { VttState } from '@/types';
 
 export default function App() {
@@ -52,7 +56,14 @@ export default function App() {
 
   return (
     <div className="flex h-dvh flex-col">
-      <Header menus={<MenuBar />} />
+      <Header menus={
+          <>
+            <MenuBar />
+            <OrphansPopover />
+            <ImportExportMenu />
+            <Button asChild variant="ghost" size="sm"><a href="/opzioni"><Settings /> Opzioni</a></Button>
+          </>
+        } />
       <OptionsBar />
       <main className="flex min-h-0 flex-1">
         <MapStage mediaRef={mediaRef} wrapChildren={<CompassHandle />}>
