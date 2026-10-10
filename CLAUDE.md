@@ -5,6 +5,64 @@ Va tenuto aggiornato ad ogni sessione: spuntare i completati, aggiungere
 nuovi punti quando emergono, annotare qui decisioni o vincoli scoperti
 strada facendo (non solo nella chat, che si perde).
 
+## Nuova vista /party per i giocatori (fatto, branch `party-controller`)
+
+Nuova pagina `public/party/`, pensata per essere data in mano al tavolo
+(uno smartphone a testa, o uno condiviso): **solo** visualizzazione della
+mappa e pannello AOE, nessun altro controllo del DM raggiungibile da lì
+(niente location-select, pan, fog editing, ping, zoom locale, audio,
+immagini, link editor).
+
+**Decisioni chiave (confermate dall'utente in chat):**
+- I giocatori stessi piazzano/modificano/lanciano le proprie aree AOE
+  (non sola visualizzazione di quelle del DM) — stesso pannello di
+  `/control` (forme, colori, menu "···", taglia/larghezza, lista pillole
+  con fulmine/elimina, pad di nudge fisso in basso a destra).
+- La mappa è mostrata **intera** (come l'anteprima propria di `/control`),
+  non la vista live pan/zoom condivisa di `/display` — i giocatori devono
+  vedere tutto il campo di battaglia per piazzare un cono/linea/sfera, non
+  solo l'inquadratura che il DM ha scelto per la TV. Di conseguenza
+  nessuno zoom/pan, nessuna compensazione `scale` su griglia/contorno AOE
+  (semplicemente non serve: `/party` non ha alcun transform CSS sulla
+  mappa, a differenza sia di `/control` con lo zoom locale del DM sia di
+  `/display` col pan/zoom condiviso).
+- Griglia/fog/decorazioni (shader "Portale" ecc.) restano in sola lettura,
+  stessa resa read-only già esistente in `display.js` (`renderFog`/
+  `renderAoe` lì sono il modello diretto per le funzioni gemelle qui).
+- Nessuna modifica al server oltre alla route statica
+  (`app.use('/party', ...)` in `server/index.js`): gli eventi socket
+  `aoe:*` erano già generici, non legati al ruolo del client (`hello` con
+  `role:'party'` inviato per simmetria con control/display, ma il server
+  non lo usa per nient'altro che i due contatori control/display status).
+- Nessuna nozione di utente/proprietario per area: più giocatori su
+  `/party` contemporaneamente condividono la stessa lista di aree, chi
+  modifica/elimina per ultimo vince — stesso comportamento implicito che
+  ha già oggi `/control` con un solo DM, nessun lucchetto per-utente
+  aggiunto (assunzione esplicitata con l'utente, non richiesta).
+- Chiave `localStorage` per la posizione del pad di nudge AOE dedicata
+  (`partyAoeNudgeOverlayPos`, non quella di `/control`): stessa origine,
+  pagine diverse — condividere la chiave avrebbe fatto trascinare il pad
+  su un dispositivo che apre entrambe le pagine.
+- Home (`public/home/index.html`) ha ora una quarta voce "Party" accanto
+  a Display/Control/Editor.
+
+**Verificato in browser** (server locale, porta 3102, dati reali del
+progetto — non un fixture separato): pannello AOE e mappa si renderizzano
+correttamente con un'area reale già presente (location "Taverna", un
+Cono), piazzamento di una nuova area via tap, lista/eliminazione
+funzionanti end-to-end sul socket vero. **Nota per sessioni future**: il
+flusso arma-poi-conferma dell'eliminazione (`armedRemoveAoeId`, timeout
+2,5s) richiede che i DUE click arrivino nella stessa finestra di tempo —
+testando da fuori browser (tool esterni, round-trip di rete tra una
+chiamata e l'altra) il timeout scade facilmente tra un click e l'altro, e
+soprattutto **va ri-interrogato il DOM ad ogni click**: dopo il primo
+click il pannello si ri-renderizza (`aoeChipList.innerHTML = ...`), quindi
+un riferimento a un bottone preso prima del primo click è ormai un nodo
+staccato dal DOM e un secondo `.click()` su di esso non fa nulla (non
+bubbla a un ancestor che non ha più). Non un bug dell'app, un'insidia del
+metodo di test — vedere anche la memoria di sessione
+`synthetic-pointer-events-testing`.
+
 ## Box sotto la mappa: contenuto diverso per modalità (fatto)
 
 Oggi alcuni controlli vivono sopra la mappa, altri in una sezione fissa
