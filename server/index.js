@@ -411,6 +411,39 @@ function broadcastState() {
   io.emit('state:update', { ...state, displayViewport });
 }
 
+// Un trascinamento (pan della mappa, spostamento di un'AoE o di una
+// decorazione) emette un evento per ogni pixel di movimento del dito:
+// senza un limite, ognuno di questi scriveva l'intero state.json su disco
+// in modo sincrono (saveState usa fs.writeFileSync) E lo ritrasmetteva per
+// intero a OGNI socket connesso (DM, display, ogni telefono su /party) --
+// decine di volte al secondo durante un trascinamento fluido. Qui si
+// limita a un salvataggio+broadcast ogni SAVE_BROADCAST_THROTTLE_MS al
+// massimo, a trailing edge: la posizione intermedia più recente è sempre
+// quella salvata/trasmessa (mai un salto all'indietro), e l'ultima
+// posizione del gesto arriva sempre entro quell'intervallo anche se il
+// dito si ferma esattamente a metà di una finestra di throttle.
+const SAVE_BROADCAST_THROTTLE_MS = 60;
+let saveBroadcastTimer = null;
+let lastSaveBroadcastAt = 0;
+
+function scheduleSaveAndBroadcast() {
+  const now = Date.now();
+  const elapsed = now - lastSaveBroadcastAt;
+  if (elapsed >= SAVE_BROADCAST_THROTTLE_MS) {
+    lastSaveBroadcastAt = now;
+    saveState(state);
+    broadcastState();
+    return;
+  }
+  if (saveBroadcastTimer) return;
+  saveBroadcastTimer = setTimeout(() => {
+    saveBroadcastTimer = null;
+    lastSaveBroadcastAt = Date.now();
+    saveState(state);
+    broadcastState();
+  }, SAVE_BROADCAST_THROTTLE_MS - elapsed);
+}
+
 function broadcastControlStatus() {
   io.emit('control:status', { connected: controlSockets.size > 0 });
 }
@@ -656,16 +689,14 @@ io.on('connection', (socket) => {
     if (!location) return;
     location.map.liveView.offsetX += dx;
     location.map.liveView.offsetY += dy;
-    saveState(state);
-    broadcastState();
+    scheduleSaveAndBroadcast();
   });
 
   socket.on('view:zoom', ({ locationId, scale }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     location.map.liveView.scale = scale;
-    saveState(state);
-    broadcastState();
+    scheduleSaveAndBroadcast();
   });
 
   socket.on('view:reset', ({ locationId }) => {
@@ -843,8 +874,7 @@ io.on('connection', (socket) => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     aoe.x = x;
     aoe.y = y;
-    saveState(state);
-    broadcastState();
+    scheduleSaveAndBroadcast();
   });
 
   // x/y arrivano già ricalcolati dal client (snapAoeOrigin con la NUOVA
@@ -964,8 +994,7 @@ io.on('connection', (socket) => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     deco.x = x;
     deco.y = y;
-    saveState(state);
-    broadcastState();
+    scheduleSaveAndBroadcast();
   });
 
   socket.on('shader:resize', ({ locationId, id, widthM, heightM }) => {
