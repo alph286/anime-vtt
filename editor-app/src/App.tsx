@@ -13,6 +13,7 @@ import { PolygonLayer } from '@/stage/PolygonLayer';
 import { ShaderSelection } from '@/stage/ShaderSelection';
 import { ImagePanel } from '@/sidebar/ImagePanel';
 import { ShaderPanel } from '@/sidebar/ShaderPanel';
+import { AudioPanel } from '@/sidebar/AudioPanel';
 import { useShaderLoop } from '@/stage/use-shader-loop';
 import { useStageInteractions } from '@/stage/use-stage-interactions';
 import { MenuBar } from '@/menus/MenuBar';
@@ -58,7 +59,7 @@ export default function App() {
           <PolygonLayer />
           <ShaderSelection />
         </MapStage>
-        <Sidebar panels={{ location: <LocationPanel />, fog: <FogPanel />, grid: <GridPanel />, shader: <ShaderPanel />, immagini: <ImagePanel /> }} />
+        <Sidebar panels={{ location: <LocationPanel />, fog: <FogPanel />, grid: <GridPanel />, shader: <ShaderPanel />, immagini: <ImagePanel />, audio: <AudioPanel /> }} />
       </main>
     </div>
   );
