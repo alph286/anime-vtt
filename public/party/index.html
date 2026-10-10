@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Anime VTT — Party</title>
+<link rel="stylesheet" href="/shared/theme.css">
+<link rel="stylesheet" href="party.css">
+</head>
+<body>
+<svg style="display:none">
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></symbol>
+  <symbol id="i-shape-cone" viewBox="0 0 24 24"><path d="M12 3 21 20H3Z"/></symbol>
+  <symbol id="i-shape-cube" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/></symbol>
+  <symbol id="i-shape-sphere" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></symbol>
+  <symbol id="i-shape-line" viewBox="0 0 24 24"><path d="M4 20 20 4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+  <symbol id="i-smoke" viewBox="0 0 24 24"><path d="M8 20c-2 0-3-1.3-3-3s1.3-3 3-2.4c-.5-1.6.6-3.6 2.6-3.6 1.4 0 2.6.9 3 2.1.5-.4 1.1-.6 1.9-.6 2 0 3.5 1.5 3.5 3.5S17.5 19 15.5 19"/></symbol>
+  <symbol id="i-web" viewBox="0 0 24 24"><path d="M12 2v20M3 8l18 8M21 8 3 16M4.5 4.5l15 15M19.5 4.5l-15 15"/><circle cx="12" cy="12" r="9"/></symbol>
+  <symbol id="i-wizard-hat" viewBox="0 0 24 24"><path d="M12 2 7 17h10L12 2Z"/><path d="M3 19c3 2 15 2 18 0"/><path d="M17 5v2.4M15.8 6.2h2.4"/></symbol>
+</svg>
+
+<div id="app">
+  <header id="status-bar" class="status-bar">
+    <div id="wifi-dot" class="bad">
+      <svg viewBox="0 0 24 24"><path d="M12 20a1.6 1.6 0 1 0 0-3.2A1.6 1.6 0 0 0 12 20Zm-6.4-6.2a9 9 0 0 1 12.8 0l-2 2a6.2 6.2 0 0 0-8.8 0l-2-2Zm-3.8-4a14 14 0 0 1 20.4 0l-2 2a11.2 11.2 0 0 0-16.4 0l-2-2Z"/></svg>
+    </div>
+    <span id="location-name" class="status-location-label"></span>
+  </header>
+
+  <div id="party-content">
+    <div id="map-column">
+      <div id="map-preview" class="map-preview">
+        <div class="media-wrap" id="map-media-wrap">
+          <div class="fit-box" id="map-fit-box">
+            <img id="map-img" class="media-img" draggable="false" hidden>
+            <video id="map-video" class="media-img" muted loop playsinline disablepictureinpicture hidden></video>
+            <div class="map-placeholder" id="map-placeholder" hidden></div>
+            <canvas id="map-shader-canvas" class="shader-layer"></canvas>
+            <div class="fog-layer" id="map-fog-layer"></div>
+            <svg id="map-grid-svg" class="grid-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+            <canvas id="map-aoe-shader-canvas" class="shader-layer aoe-shader-layer"></canvas>
+            <svg id="map-aoe-svg" class="aoe-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section id="aoe-panel" class="control-section">
+      <p id="aoe-editing-label" class="hint" hidden></p>
+      <div id="aoe-shape-bar" class="aoe-shape-bar">
+        <button class="aoe-shape-btn" data-shape="cone" title="Cono">
+          <svg class="icon"><use href="#i-shape-cone"></use></svg>
+        </button>
+        <button class="aoe-shape-btn" data-shape="cube" title="Cubo">
+          <svg class="icon"><use href="#i-shape-cube"></use></svg>
+        </button>
+        <button class="aoe-shape-btn" data-shape="sphere" title="Sfera">
+          <svg class="icon"><use href="#i-shape-sphere"></use></svg>
+        </button>
+        <button class="aoe-shape-btn" data-shape="line" title="Linea">
+          <svg class="icon"><use href="#i-shape-line"></use></svg>
+        </button>
+      </div>
+      <div class="aoe-color-bar">
+        <button class="aoe-color-btn" data-color="red" title="Rosso"></button>
+        <button class="aoe-color-btn" data-color="green" title="Verde"></button>
+        <button class="aoe-color-btn" data-color="white" title="Bianco"></button>
+        <button class="aoe-color-btn" data-color="yellow" title="Giallo"></button>
+        <button id="aoe-shader-menu-btn" class="aoe-shader-menu-btn" title="Altri shader">
+          <svg class="icon"><use href="#i-more"></use></svg>
+        </button>
+      </div>
+      <div id="aoe-shader-menu" class="aoe-shader-menu" hidden>
+        <button class="aoe-shader-menu-item" data-shader="web_area">
+          <svg class="icon"><use href="#i-web"></use></svg>
+          <span>Zona ragnatela</span>
+        </button>
+        <button class="aoe-shader-menu-item" data-shader="circular_smoke">
+          <svg class="icon"><use href="#i-smoke"></use></svg>
+          <span>Fumo circolare</span>
+        </button>
+        <button class="aoe-shader-menu-item" data-shader="purple_fire">
+          <svg class="icon"><use href="#i-wizard-hat"></use></svg>
+          <span>Viola Cornelia</span>
+        </button>
+      </div>
+      <div class="aoe-size-row">
+        <div class="zoom">
+          <button id="aoe-size-out" title="Riduci taglia">−</button>
+          <span id="aoe-size-level">1,5 m</span>
+          <button id="aoe-size-in" title="Aumenta taglia">+</button>
+        </div>
+        <div id="aoe-width-row" class="zoom" hidden>
+          <button id="aoe-width-out" title="Riduci larghezza">−</button>
+          <span id="aoe-width-level">1,5 m</span>
+          <button id="aoe-width-in" title="Aumenta larghezza">+</button>
+        </div>
+      </div>
+      <div id="aoe-chip-list" class="aoe-chip-list"></div>
+    </section>
+  </div>
+
+  <div id="aoe-nudge-overlay" class="aoe-nudge-overlay" hidden>
+    <button id="aoe-rotate-ccw" title="Ruota in senso antiorario">↺</button>
+    <button id="aoe-nudge-up" title="Sposta su di una cella">▲</button>
+    <button id="aoe-rotate-cw" title="Ruota in senso orario">↻</button>
+    <button id="aoe-nudge-left" title="Sposta a sinistra di una cella">◀</button>
+    <button id="aoe-nudge-color" class="aoe-nudge-color" title="Cambia colore"></button>
+    <button id="aoe-nudge-right" title="Sposta a destra di una cella">▶</button>
+    <button id="aoe-nudge-size-up" title="Aumenta taglia">+</button>
+    <button id="aoe-nudge-down" title="Sposta giù di una cella">▼</button>
+    <button id="aoe-nudge-size-down" title="Riduci taglia">−</button>
+    <button id="aoe-nudge-width-up" title="Aumenta larghezza">+</button>
+    <button id="aoe-nudge-drag-handle" class="aoe-nudge-drag-handle" title="Trascina per spostare il pannello">
+      <svg class="icon"><use href="#i-move"></use></svg>
+    </button>
+    <button id="aoe-nudge-width-down" title="Riduci larghezza">−</button>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/shared/media.js"></script>
+<script src="/shared/shader-effects.js"></script>
+<script src="party.js"></script>
+</body>
+</html>
