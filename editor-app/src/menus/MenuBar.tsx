@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Maximize, RotateCcw, RotateCw, Trash2, Upload, ZoomIn } from 'lucide-react';
+import { Compass as CompassIcon, Maximize, RotateCcw, RotateCw, Trash2, Upload, ZoomIn } from 'lucide-react';
 import {
   Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, MenubarTrigger,
 } from '@/components/ui/menubar';
@@ -106,7 +106,36 @@ export function MenuBar() {
           </MenubarContent>
         </MenubarMenu>
 
-        {/* Griglia, Shaders, Bussola: task 7, 10, 11 */}
+        {/* Griglia, Shaders: task 10, 11 */}
+
+        <MenubarMenu value="bussola">
+          <MenubarTrigger className={triggerClass} data-active={Boolean(location?.map.compass?.visible)}>
+            <CompassIcon className="size-4" /> Bussola
+          </MenubarTrigger>
+          <MenubarContent>
+            <MenubarCheckboxItem
+              disabled={!location?.map.compass}
+              checked={Boolean(location?.map.compass?.visible)}
+              onSelect={(e) => e.preventDefault()}
+              onCheckedChange={() => socket.emit('compass:update', { locationId: location!.id, visible: !location!.map.compass!.visible })}
+            >
+              Mostra rosa dei venti
+            </MenubarCheckboxItem>
+            <MenuField label="Rotazione" title="Rotazione rosa dei venti">
+              <NumberField
+                aria-label="Rotazione rosa dei venti"
+                className="h-8 w-20"
+                min={0}
+                max={359}
+                step={1}
+                disabled={!location?.map.compass}
+                value={location?.map.compass?.rotation ?? 0}
+                onCommit={(v) => socket.emit('compass:update', { locationId: location!.id, rotation: Math.round(v) })}
+              />
+              <span className="text-xs text-muted-foreground">°</span>
+            </MenuField>
+          </MenubarContent>
+        </MenubarMenu>
 
         <MenubarMenu value="vista">
           <MenubarTrigger className={triggerClass}>

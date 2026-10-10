@@ -5,6 +5,7 @@ import { Header } from '@/toolbar/Header';
 import { OptionsBar } from '@/toolbar/OptionsBar';
 import { Sidebar } from '@/sidebar/Sidebar';
 import { MapStage, type MapMedia } from '@/stage/MapStage';
+import { CompassHandle } from '@/stage/CompassHandle';
 import { MenuBar } from '@/menus/MenuBar';
 import type { VttState } from '@/types';
 
@@ -42,7 +43,7 @@ export default function App() {
       <Header menus={<MenuBar />} />
       <OptionsBar />
       <main className="flex min-h-0 flex-1">
-        <MapStage mediaRef={mediaRef} />
+        <MapStage mediaRef={mediaRef} wrapChildren={<CompassHandle />} />
         <Sidebar panels={{}} />
       </main>
     </div>
