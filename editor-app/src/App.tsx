@@ -11,6 +11,7 @@ import { MapStage, type MapMedia } from '@/stage/MapStage';
 import { CompassHandle } from '@/stage/CompassHandle';
 import { PolygonLayer } from '@/stage/PolygonLayer';
 import { ShaderSelection } from '@/stage/ShaderSelection';
+import { ImagePanel } from '@/sidebar/ImagePanel';
 import { ShaderPanel } from '@/sidebar/ShaderPanel';
 import { useShaderLoop } from '@/stage/use-shader-loop';
 import { useStageInteractions } from '@/stage/use-stage-interactions';
@@ -57,7 +58,7 @@ export default function App() {
           <PolygonLayer />
           <ShaderSelection />
         </MapStage>
-        <Sidebar panels={{ location: <LocationPanel />, fog: <FogPanel />, grid: <GridPanel />, shader: <ShaderPanel /> }} />
+        <Sidebar panels={{ location: <LocationPanel />, fog: <FogPanel />, grid: <GridPanel />, shader: <ShaderPanel />, immagini: <ImagePanel /> }} />
       </main>
     </div>
   );
