@@ -5,6 +5,7 @@ import { Header } from '@/toolbar/Header';
 import { OptionsBar } from '@/toolbar/OptionsBar';
 import { Sidebar } from '@/sidebar/Sidebar';
 import { FogPanel } from '@/sidebar/FogPanel';
+import { GridPanel } from '@/sidebar/GridPanel';
 import { MapStage, type MapMedia } from '@/stage/MapStage';
 import { CompassHandle } from '@/stage/CompassHandle';
 import { PolygonLayer } from '@/stage/PolygonLayer';
@@ -50,7 +51,7 @@ export default function App() {
         <MapStage mediaRef={mediaRef} wrapChildren={<CompassHandle />}>
           <PolygonLayer />
         </MapStage>
-        <Sidebar panels={{ fog: <FogPanel /> }} />
+        <Sidebar panels={{ fog: <FogPanel />, grid: <GridPanel /> }} />
       </main>
     </div>
   );

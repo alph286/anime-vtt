@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Compass as CompassIcon, Maximize, RotateCcw, RotateCw, Trash2, Upload, ZoomIn } from 'lucide-react';
+import { Compass as CompassIcon, Crosshair, Grid3x3, Maximize, RotateCcw, RotateCw, Square, Trash2, Upload, ZoomIn } from 'lucide-react';
 import {
   Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, MenubarTrigger,
 } from '@/components/ui/menubar';
@@ -9,6 +9,7 @@ import { checkVideoSafe } from '@/lib/video-check';
 import { socket } from '@/lib/socket';
 import { stageRefs } from '@/stage/stage-refs';
 import { selectActiveLocation, useEditorStore } from '@/store/editor-store';
+import { ColorField } from './ColorField';
 import { MenuField } from './MenuField';
 
 const triggerClass = 'gap-1.5 data-[active=true]:text-primary';
@@ -18,6 +19,9 @@ export function MenuBar() {
   const editorZoom = useEditorStore((s) => s.editorZoom);
   const fogOpacity = useEditorStore((s) => s.fogOpacity);
   const setSidebarTab = useEditorStore((s) => s.setSidebarTab);
+  const mode = useEditorStore((s) => s.mode);
+  const squareConstrain = useEditorStore((s) => s.gridSquareConstrain);
+  const colorPicking = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const arm = useArmConfirm();
   const disabled = !location;
@@ -106,7 +110,70 @@ export function MenuBar() {
           </MenubarContent>
         </MenubarMenu>
 
-        {/* Griglia, Shaders: task 10, 11 */}
+        <MenubarMenu value="griglia">
+          <MenubarTrigger
+            className={triggerClass}
+            data-active={Boolean(location?.map.grid.enabled || mode === 'grid-align' || squareConstrain)}
+          >
+            <Grid3x3 className="size-4" /> Griglia
+          </MenubarTrigger>
+          <MenubarContent
+            onFocusOutside={(e) => { if (colorPicking.current) e.preventDefault(); }}
+            onInteractOutside={(e) => { if (colorPicking.current) e.preventDefault(); }}
+          >
+            <MenubarCheckboxItem
+              disabled={disabled}
+              checked={Boolean(location?.map.grid.enabled)}
+              onSelect={(e) => e.preventDefault()}
+              onCheckedChange={() => socket.emit('grid:update', { locationId: location!.id, enabled: !location!.map.grid.enabled })}
+            >
+              <Grid3x3 /> Mostra griglia
+            </MenubarCheckboxItem>
+            <MenubarCheckboxItem
+              disabled={disabled}
+              checked={mode === 'grid-align'}
+              onCheckedChange={() => useEditorStore.getState().chooseGridAlignTool()}
+            >
+              <Crosshair /> Allinea alla griglia
+            </MenubarCheckboxItem>
+            <MenubarCheckboxItem
+              disabled={disabled}
+              checked={squareConstrain}
+              onSelect={(e) => e.preventDefault()}
+              onCheckedChange={() => useEditorStore.getState().toggleSquareConstrain()}
+            >
+              <Square /> Vincola a quadrato
+            </MenubarCheckboxItem>
+            <MenuField label="Divisioni" title="Dividi la cella tracciata in N parti">
+              <NumberField aria-label="Divisioni" className="h-8 w-20" min={1} max={20} step={1} disabled={disabled}
+                value={location?.map.grid.divisions ?? 1}
+                onCommit={(v) => socket.emit('grid:update', { locationId: location!.id, divisions: v })} />
+            </MenuField>
+            <MenuField label="Colore" title="Colore griglia">
+              <div onPointerDown={() => { colorPicking.current = true; }} onBlur={() => { colorPicking.current = false; }}>
+                <ColorField
+                  disabled={disabled}
+                  value={location?.map.grid.color || '#ffffff'}
+                  onLive={(v) => useEditorStore.getState().mutateLocation((loc) => { loc.map.grid.color = v; })}
+                  onCommit={(v) => { colorPicking.current = false; socket.emit('grid:update', { locationId: location!.id, color: v }); }}
+                />
+              </div>
+            </MenuField>
+            <MenuField label="Spessore" title="Spessore tratto griglia">
+              <NumberField aria-label="Spessore griglia" className="h-8 w-20" min={0.2} max={5} step={0.1} disabled={disabled}
+                value={location?.map.grid.lineWidth || 0.3}
+                onCommit={(v) => socket.emit('grid:update', { locationId: location!.id, lineWidth: v })} />
+            </MenuField>
+            <MenuField label="Opacità" title="Opacità griglia">
+              <NumberField aria-label="Opacità griglia" className="h-8 w-20" min={0} max={100} step={10} disabled={disabled}
+                value={Math.round((location?.map.grid.opacity ?? 1) * 100)}
+                onCommit={(v) => socket.emit('grid:update', { locationId: location!.id, opacity: v / 100 })} />
+              <span className="text-xs text-muted-foreground">%</span>
+            </MenuField>
+          </MenubarContent>
+        </MenubarMenu>
+
+        {/* Shaders: task 11 */}
 
         <MenubarMenu value="bussola">
           <MenubarTrigger className={triggerClass} data-active={Boolean(location?.map.compass?.visible)}>
