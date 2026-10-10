@@ -427,7 +427,7 @@ button {
   bottom: calc(12px + env(safe-area-inset-bottom));
   display: grid;
   grid-template-columns: repeat(3, 44px);
-  grid-template-rows: repeat(4, 44px);
+  grid-template-rows: repeat(4, 44px) 36px;
   gap: 6px;
   background: rgba(31, 35, 43, 0.55);
   border: 1px solid var(--border-control);
@@ -468,6 +468,28 @@ button {
 
 .aoe-nudge-drag-handle:active {
   cursor: grabbing;
+}
+
+/* Riga finale a tutta larghezza, stessa funzione del fulmine "Lancia
+   incantesimo" nella pillola della lista, qui raggiungibile senza dover
+   scendere fino alla lista mentre si sta già modificando un'area col pad.
+   Rosso pieno sempre (non solo quando attivo): è un pulsante d'azione
+   dedicato, non un indicatore di stato -- lo stato lanciato/non lanciato
+   si legge dal resto dell'interfaccia (contorno/shader sulla mappa,
+   pillola nella lista). */
+.aoe-nudge-overlay .aoe-nudge-fire {
+  grid-column: 1 / -1;
+  width: auto;
+  height: 36px;
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.aoe-nudge-overlay .aoe-nudge-fire.active {
+  border-color: #fff;
 }
 
 /* ---------- generico ---------- */

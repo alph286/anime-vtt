@@ -145,6 +145,7 @@ const aoeNudgeSizeDown = document.getElementById('aoe-nudge-size-down');
 const aoeNudgeWidthUp = document.getElementById('aoe-nudge-width-up');
 const aoeNudgeWidthDown = document.getElementById('aoe-nudge-width-down');
 const aoeNudgeDragHandle = document.getElementById('aoe-nudge-drag-handle');
+const aoeNudgeFire = document.getElementById('aoe-nudge-fire');
 const mapAoeSvg = document.getElementById('map-aoe-svg');
 const mapGridSvg = document.getElementById('map-grid-svg');
 const mapShaderCanvas = document.getElementById('map-shader-canvas');
@@ -392,6 +393,15 @@ aoeNudgeColor.addEventListener('click', () => {
   const idx = names.indexOf(editingAoe.color);
   const next = names[(idx + 1) % names.length];
   socket.emit('aoe:setColor', { locationId: previewLocationId, aoeId: editingAoe.id, color: next });
+});
+
+// Stessa azione del fulmine nella pillola della lista (aoeChipList più
+// sotto), qui raggiungibile senza dover scendere fino alla lista mentre
+// si sta già modificando un'area col pad.
+aoeNudgeFire.addEventListener('click', () => {
+  const editingAoe = getSelectedAoe();
+  if (!editingAoe) return;
+  socket.emit('aoe:setCast', { locationId: previewLocationId, aoeId: editingAoe.id, cast: !editingAoe.cast });
 });
 
 aoeNudgeSizeUp.addEventListener('click', () => resizeSelectedAoe(AOE_METERS_PER_CELL, 0));
@@ -923,6 +933,7 @@ function renderAoeNudgeOverlay(editingAoe, grid) {
   aoeNudgeWidthDown.disabled = editingAoe.shape !== 'line';
 
   aoeNudgeColor.style.background = aoeColorHex(editingAoe.color);
+  aoeNudgeFire.classList.toggle('active', Boolean(editingAoe.cast));
 }
 
 function aoeShapeLabel(shape) {

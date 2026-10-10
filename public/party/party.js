@@ -48,6 +48,7 @@ const aoeNudgeSizeDown = document.getElementById('aoe-nudge-size-down');
 const aoeNudgeWidthUp = document.getElementById('aoe-nudge-width-up');
 const aoeNudgeWidthDown = document.getElementById('aoe-nudge-width-down');
 const aoeNudgeDragHandle = document.getElementById('aoe-nudge-drag-handle');
+const aoeNudgeFire = document.getElementById('aoe-nudge-fire');
 
 let socketConnected = false;
 let lastState = null;
@@ -541,6 +542,16 @@ aoeNudgeColor.addEventListener('click', () => {
   socket.emit('aoe:setColor', { locationId: location.id, aoeId: editingAoe.id, color: next });
 });
 
+// Stessa azione del fulmine nella pillola della lista (aoeChipList più
+// sotto), qui raggiungibile senza dover scendere fino alla lista mentre
+// si sta già modificando un'area col pad.
+aoeNudgeFire.addEventListener('click', () => {
+  const editingAoe = getSelectedAoe();
+  if (!editingAoe) return;
+  const location = getCurrentLocation();
+  socket.emit('aoe:setCast', { locationId: location.id, aoeId: editingAoe.id, cast: !editingAoe.cast });
+});
+
 aoeNudgeSizeUp.addEventListener('click', () => resizeSelectedAoe(AOE_METERS_PER_CELL, 0));
 aoeNudgeSizeDown.addEventListener('click', () => resizeSelectedAoe(-AOE_METERS_PER_CELL, 0));
 aoeNudgeWidthUp.addEventListener('click', () => resizeSelectedAoe(0, AOE_METERS_PER_CELL));
@@ -568,6 +579,7 @@ function renderAoeNudgeOverlay(editingAoe, grid) {
   aoeNudgeWidthDown.disabled = editingAoe.shape !== 'line';
 
   aoeNudgeColor.style.background = aoeColorHex(editingAoe.color);
+  aoeNudgeFire.classList.toggle('active', Boolean(editingAoe.cast));
 }
 
 // Pannello flottante: posizione ricordata per-dispositivo (localStorage),

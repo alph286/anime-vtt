@@ -610,7 +610,7 @@ h2 {
   bottom: calc(76px + env(safe-area-inset-bottom));
   display: grid;
   grid-template-columns: repeat(3, 44px);
-  grid-template-rows: repeat(4, 44px);
+  grid-template-rows: repeat(4, 44px) 36px;
   gap: 6px;
   background: rgba(31, 35, 43, 0.55);
   border: 1px solid var(--border-control);
@@ -656,6 +656,34 @@ h2 {
 
 .aoe-nudge-drag-handle:active {
   cursor: grabbing;
+}
+
+/* Riga finale a tutta larghezza (grid-column: 1/-1), sotto le 4 righe di
+   celle 44x44 del pad: stesso linguaggio delle pillole della lista aree
+   (fulmine="lancia"), qui come scorciatoia rapida mentre si sta già
+   modificando un'area col pad, senza dover scendere fino alla lista.
+   Rosso pieno sempre (non solo quando attivo, a differenza di
+   .aoe-chip-cast.active che resta muta finché non lanciata): qui è un
+   pulsante d'azione dedicato, non un indicatore di stato, quindi il
+   colore non deve "accendersi" -- lo stato lanciato/non lanciato si legge
+   comunque dal resto dell'interfaccia (contorno/shader sulla mappa,
+   pillola nella lista). */
+.aoe-nudge-overlay .aoe-nudge-fire {
+  grid-column: 1 / -1;
+  width: auto;
+  height: 36px;
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Area già lanciata: un bordo più chiaro basta a far capire che il
+   prossimo tap interrompe invece di lanciare, senza bisogno di cambiare
+   l'etichetta "FIRE". */
+.aoe-nudge-overlay .aoe-nudge-fire.active {
+  border-color: #fff;
 }
 
 .icon {
