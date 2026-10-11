@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { clampLocalZoomPan } from '../lib/local-zoom';
 import { useMapGeometry } from '../hooks/use-map-geometry';
+import { useShaderLoop } from '../hooks/use-shader-loop';
 import { selectPreviewLocation, useControlStore } from '../store/control-store';
 import { CompassMarker } from './CompassMarker';
 import { FogOverlays } from './FogOverlays';
@@ -9,6 +10,7 @@ import { ViewportRect } from './ViewportRect';
 import { useFogTap } from './use-fog-tap';
 import { useLocalZoomGesture } from './use-local-zoom-gesture';
 import { usePanGesture } from './use-pan-gesture';
+import { usePingGesture } from './use-ping-gesture';
 
 const MODE_CLASSES = ['pan', 'fog', 'ping', 'zoom', 'aoe'] as const;
 
@@ -17,8 +19,8 @@ const MODE_CLASSES = ['pan', 'fog', 'ping', 'zoom', 'aoe'] as const;
 // Portale, fog, griglia, canvas shader AOE, svg AOE, canvas ping -- in
 // quest'ordine, che e anche l'ordine di sovrapposizione. Riquadro giallo e
 // bussola stanno FUORI da #map-local-zoom-wrap: restano in spazio schermo
-// stabile, non seguono lo zoom locale. I canvas e l'svg AOE per ora sono
-// solo presenti, li collegano i task successivi.
+// stabile, non seguono lo zoom locale. I tre canvas li disegna useShaderLoop;
+// l'svg AOE lo collegano i task successivi.
 export default function MapPreview() {
   const location = useControlStore(selectPreviewLocation);
   const grid = location?.map.grid;
@@ -61,6 +63,10 @@ export default function MapPreview() {
   usePanGesture();
   useFogTap();
   useLocalZoomGesture();
+  usePingGesture();
+  // Loop WebGL (Portale, AOE lanciate, ping): stesso vincolo, legge i
+  // canvas da mapRefs.fitBox.
+  useShaderLoop();
 
   // Classi di modalita via classList, non via className: il gesto di zoom
   // aggiunge/toglie da se 'zoom-dragging' e un re-render non deve cancellarla.

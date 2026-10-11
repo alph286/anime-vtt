@@ -379,4 +379,93 @@ describe('gesti sulla mappa', () => {
       expect(get().localZoom.scale).toBe(2);
     });
   });
+  describe('(f) ping', () => {
+    function fitBox(container: HTMLElement) {
+      return container.querySelector('#map-fit-box') as HTMLDivElement;
+    }
+    beforeEach(() => {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+        { left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300, x: 0, y: 0, toJSON: () => ({}) } as DOMRect,
+      );
+    });
+    const pings = () => emitsOf('ping:show').map((c) => c[1] as { locationId: string; x: number; y: number; strokeId: string });
+
+    it('tap: un solo emit con locationId, coordinate in % e strokeId; capture sul fit-box', () => {
+      setServer();
+      const { container } = mount();
+      act(() => get().forceMode('ping'));
+      const fit = fitBox(container);
+      pointer(fit, 'pointerdown', 40, 30);
+      pointer(fit, 'pointerup', 40, 30);
+      expect(pings()).toHaveLength(1);
+      const p = pings()[0];
+      expect(p.locationId).toBe('L1');
+      expect(p.x).toBeCloseTo(10);
+      expect(p.y).toBeCloseTo(10);
+      expect(typeof p.strokeId).toBe('string');
+      expect(capture).toHaveBeenCalledTimes(1);
+      expect(capture.mock.instances[0]).toBe(fit);
+    });
+
+    it('drag: emette solo oltre 1.5% dall ultimo punto emesso, stesso strokeId', () => {
+      setServer();
+      const { container } = mount();
+      act(() => get().forceMode('ping'));
+      const fit = fitBox(container);
+      pointer(fit, 'pointerdown', 40, 30);
+      pointer(fit, 'pointermove', 44, 30); // +1% -> no
+      pointer(fit, 'pointermove', 46, 30); // +1.5% dal down -> si
+      pointer(fit, 'pointermove', 50, 30); // +1% dall ultimo emesso -> no
+      pointer(fit, 'pointermove', 60, 30); // +3.5% -> si
+      pointer(fit, 'pointerup', 60, 30);
+      pointer(fit, 'pointermove', 100, 30); // dopo up: nulla
+      const ps = pings();
+      expect(ps.map((p) => Math.round(p.x * 10) / 10)).toEqual([10, 11.5, 15]);
+      expect(new Set(ps.map((p) => p.strokeId)).size).toBe(1);
+    });
+
+    it('un nuovo gesto ha uno strokeId diverso', () => {
+      setServer();
+      const { container } = mount();
+      act(() => get().forceMode('ping'));
+      const fit = fitBox(container);
+      pointer(fit, 'pointerdown', 40, 30);
+      pointer(fit, 'pointerup', 40, 30);
+      pointer(fit, 'pointerdown', 42, 30);
+      pointer(fit, 'pointerup', 42, 30);
+      const ps = pings();
+      expect(ps).toHaveLength(2);
+      expect(ps[0].strokeId).not.toBe(ps[1].strokeId);
+    });
+
+    it('fuori da ping o con ping non disponibile non emette', () => {
+      setServer();
+      const { container } = mount();
+      const fit = fitBox(container);
+      pointer(fit, 'pointerdown', 40, 30);
+      pointer(fit, 'pointerup', 40, 30);
+      // Anteprima di un'altra location (mode forzato a ping per testare la guardia del gesto).
+      act(() => useControlStore.setState({ mode: 'ping', previewLocationId: 'L2' }));
+      pointer(fit, 'pointerdown', 40, 30);
+      pointer(fit, 'pointerup', 40, 30);
+      // Immagine mostrata al posto della mappa.
+      setServer({ activeImageId: 'IMG' });
+      act(() => useControlStore.setState({ mode: 'ping', previewLocationId: 'L1' }));
+      pointer(fit, 'pointerdown', 40, 30);
+      expect(pings()).toEqual([]);
+      expect(capture).not.toHaveBeenCalled();
+    });
+
+    it('cambio modalita a meta gesto non lascia drag appesi', () => {
+      setServer();
+      const { container } = mount();
+      act(() => get().forceMode('ping'));
+      const fit = fitBox(container);
+      pointer(fit, 'pointerdown', 40, 30);
+      act(() => get().forceMode(null));
+      act(() => get().forceMode('ping'));
+      pointer(fit, 'pointermove', 100, 30);
+      expect(pings()).toHaveLength(1);
+    });
+  });
 });

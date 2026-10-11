@@ -52,9 +52,11 @@ declare const AOE_COLOR_CYCLE_NAMES: string[];
 declare const AOE_SHADER_OVERRIDE_DEFAULT_COLOR: Record<string, string>;
 declare class PingLayer {
   constructor(canvas: HTMLCanvasElement);
+  readonly available: boolean;
   render(groups: PingPoint[][], lifespanSec: number, zoomScale: number): void;
 }
 declare class AoeShaderLayer {
   constructor(canvas: HTMLCanvasElement);
+  readonly available: boolean;
   render(aoes: AoeLike[], grid: import('./types').Grid, naturalW: number, naturalH: number): void;
 }

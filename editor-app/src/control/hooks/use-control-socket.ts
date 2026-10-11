@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import { socket } from '@/lib/socket';
+import { pingBuffer } from '../lib/ping';
 import { useControlStore } from '../store/control-store';
+import { kickShaderLoop } from './use-shader-loop';
 import type { ControlState } from '../types';
 
 // Registra i listener socket del pannello di controllo. Da chiamare una sola
-// volta da ControlApp. (Il listener di `ping:show` e gestito altrove.)
+// volta da ControlApp.
 export function useControlSocket(): void {
   useEffect(() => {
     const st = () => useControlStore.getState();
@@ -28,7 +30,18 @@ export function useControlSocket(): void {
       feedbackTimeout = setTimeout(() => st().setTelegram({ feedback: null }), 4000);
     };
 
+    // Eco del ping (il server rilancia a tutti, mittente incluso): anche il
+    // proprio ping arriva da qui, non dal gesto. Nessun filtro per
+    // locationId: il broadcast non lo include, e il gesto parte solo quando
+    // l'anteprima coincide con la location attiva (selectPingAvailable).
+    const onPing = ({ x, y, strokeId }: { x: unknown; y: unknown; strokeId?: string }) => {
+      if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return;
+      pingBuffer.push({ x, y, t: performance.now(), strokeId });
+      kickShaderLoop();
+    };
+
     socket.on('connect', onConnect);
+    socket.on('ping:show', onPing);
     socket.on('disconnect', onDisconnect);
     socket.on('display:status', onDisplayStatus);
     socket.on('state:update', onState);
@@ -38,6 +51,7 @@ export function useControlSocket(): void {
 
     return () => {
       socket.off('connect', onConnect);
+      socket.off('ping:show', onPing);
       socket.off('disconnect', onDisconnect);
       socket.off('display:status', onDisplayStatus);
       socket.off('state:update', onState);
