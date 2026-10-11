@@ -47,7 +47,7 @@ export function AudioBox() {
             <div className="audio-transport flex gap-2">
               <Button
                 type="button" variant="outline" size="icon"
-                className={cn('size-10', playing && 'active border-[var(--vtt-accent)] bg-[var(--vtt-accent)] text-[var(--accent-text)] hover:bg-[var(--vtt-accent)]')}
+                className={cn('size-10', playing && 'active border-[color:var(--vtt-accent)]! bg-[color:var(--vtt-accent)]! text-[color:var(--accent-text)]!')}
                 title="Play/Pausa" aria-label="Play/Pausa"
                 onClick={() => socket.emit(playing ? 'audio:pause' : 'audio:play', {})}
               >

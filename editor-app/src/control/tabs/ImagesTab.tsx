@@ -95,7 +95,7 @@ export default function ImagesTab() {
           </div>
           <div className="image-detail-actions flex flex-wrap gap-2">
             <Button
-              type="button" variant="outline" className={cn('h-11 min-w-[100px] flex-1', activeImageId === image.id && 'is-live border-[var(--vtt-accent)] bg-[var(--accent-bg-subtle)] text-[var(--vtt-accent)]')}
+              type="button" variant="outline" className={cn('h-11 min-w-[100px] flex-1', activeImageId === image.id && 'is-live border-[color:var(--vtt-accent)]! bg-[color:var(--accent-bg-subtle)]! text-[color:var(--vtt-accent)]!')}
               onClick={() => socket.emit('image:show', { imageId: image.id })}
             >
               Mostra
