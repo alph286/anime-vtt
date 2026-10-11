@@ -203,7 +203,7 @@ describe('AoeNudgePad', () => {
     expect(padEl().style.left).toBe('0px');
   });
 
-  it('10. posizione salvata applicata una sola volta, alla prima comparsa', () => {
+  it('10. posizione salvata applicata alla prima comparsa e non riscritta dai render', () => {
     localStorage.setItem('aoeNudgeOverlayPos', JSON.stringify({ left: 30, top: 40 }));
     open();
     render(<AoeNudgePad />);
@@ -213,10 +213,30 @@ describe('AoeNudgePad', () => {
     padEl().style.left = '77px';
     setServer([aoe({ cast: true })]);
     expect(padEl().style.left).toBe('77px');
-    // nascosto e riapparso: non si riapplica
+  });
+
+  it('10b. la posizione trascinata resta dopo nascondi -> mostra (deseleziona e rientra)', () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(400);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      { left: 200, top: 300, right: 360, bottom: 510, width: 160, height: 210, x: 200, y: 300, toJSON() {} } as DOMRect);
+    open();
+    render(<AoeNudgePad />);
+    const handle = screen.getByTitle('Trascina per spostare il pannello');
+    ptr(handle, 'pointerdown', 210, 310);
+    ptr(handle, 'pointermove', 110, 160);
+    ptr(handle, 'pointerup', 110, 160);
+    expect(padEl().style.left).toBe('100px');
+    act(() => useControlStore.getState().selectAoe(null));
+    expect(screen.queryByTestId('aoe-nudge-overlay')).toBeNull();
+    act(() => useControlStore.getState().selectAoe('A'));
+    expect(padEl().style.left).toBe('100px');
+    expect(padEl().style.top).toBe('150px');
+    // anche uscendo e rientrando dalla modalita aoe
     act(() => useControlStore.setState({ mode: 'ping' }));
     act(() => useControlStore.setState({ mode: 'aoe' }));
-    expect(padEl().style.left).not.toBe('30px');
+    expect(padEl().style.left).toBe('100px');
+    expect(padEl().style.top).toBe('150px');
   });
 
   it('11. senza posizione salvata resta sul default CSS (nessun left/top)', () => {

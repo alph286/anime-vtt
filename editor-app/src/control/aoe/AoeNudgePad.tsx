@@ -19,7 +19,10 @@ export function AoeNudgePad() {
   const visible = mode === 'aoe' && Boolean(aoe);
   const padRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
-  const positionApplied = useRef(false);
+  // Ultima posizione nota (in memoria): il div si smonta quando il pad si
+  // nasconde, quindi va riapplicata a ogni comparsa. undefined = non ancora
+  // letta da localStorage; null = nessuna posizione (default CSS).
+  const lastPos = useRef<{ left: number; top: number } | null | undefined>(undefined);
 
   // Spostamento imperativo (niente stato React a ogni pointermove): la
   // posizione e sempre clampata nel viewport e diventa esplicita (left/top).
@@ -34,16 +37,17 @@ export function AoeNudgePad() {
     el.style.top = `${y}px`;
     el.style.right = 'auto';
     el.style.bottom = 'auto';
+    lastPos.current = { left: x, top: y };
   };
 
-  // La posizione salvata si applica una sola volta, alla prima comparsa in
-  // questa pagina: mai ad ogni render, altrimenti riscriverebbe un
-  // trascinamento in corso.
+  // A ogni comparsa del div si riapplica l'ultima posizione nota (all'inizio
+  // quella salvata): mai durante un trascinamento, perche l'effetto scatta
+  // solo al cambio di `visible`.
   useLayoutEffect(() => {
-    if (!visible || positionApplied.current) return;
-    positionApplied.current = true;
-    const stored = loadNudgePos();
-    if (stored) place(stored.left, stored.top);
+    if (!visible) return;
+    if (lastPos.current === undefined) lastPos.current = loadNudgePos();
+    const p = lastPos.current;
+    if (p) place(p.left, p.top);
   }, [visible]);
 
   if (!visible || !aoe) return null;
