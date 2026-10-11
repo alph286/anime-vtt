@@ -25,7 +25,8 @@ export interface ControlMapData extends MapData {
 }
 export interface ControlLocation extends Omit<Location, 'map'> { map: ControlMapData }
 
-export type AudioPlayState = 'playing' | 'paused' | 'stopped' | string;
+// Valori impostati da server/index.js e server/state.js.
+export type AudioPlayState = 'playing' | 'paused' | 'stopped';
 
 export interface ControlState extends Omit<VttState, 'locations'> {
   locations: ControlLocation[];
