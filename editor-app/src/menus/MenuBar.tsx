@@ -49,7 +49,7 @@ export function MenuBar() {
       <input ref={fileInput} type="file" accept="image/*,video/*" hidden onChange={(e) => { void onUpload(e.target.files?.[0]); e.target.value = ''; }} />
       <Menubar
         className="h-10 border-0 bg-transparent p-0 shadow-none"
-        onValueChange={(v) => { if (v !== 'griglia') colorPicking.current = false; if (v === 'shaders') setSidebarTab('shader'); }}
+        onValueChange={(v) => { if (v !== 'griglia') colorPicking.current = false; }}
       >
         <MenubarMenu value="mappa">
           <MenubarTrigger className={triggerClass} data-active={Boolean(location?.map.flip180 || location?.map.rotate90)}>
@@ -178,7 +178,12 @@ export function MenuBar() {
         </MenubarMenu>
 
         <MenubarMenu value="shaders">
-          <MenubarTrigger className={triggerClass} data-active={mode === 'shader-place'}>
+          <MenubarTrigger
+            className={triggerClass}
+            data-active={mode === 'shader-place'}
+            onPointerDown={(e) => { if (e.button === 0) setSidebarTab('shader'); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') setSidebarTab('shader'); }}
+          >
             <Sparkles className="size-4" /> Shaders
           </MenubarTrigger>
           <MenubarContent>
