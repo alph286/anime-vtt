@@ -91,6 +91,19 @@ function modeAllowed(m: Exclude<Mode, null>, s: S): boolean {
   return true;
 }
 
+// Dopo ogni cambio di location in anteprima o di stato server: la selezione AOE
+// deve appartenere all'anteprima, e ping/aoe escono dalla modalita se non sono
+// piu disponibili (render() dell'originale).
+function reconcileSelection(d: ControlStore): void {
+  const preview = d.server?.locations.find((l) => l.id === d.previewLocationId);
+  if (d.selectedAoeId && !(preview?.map.aoes ?? []).some((a) => a.id === d.selectedAoeId)) {
+    d.selectedAoeId = null;
+  }
+  if ((d.mode === 'ping' || d.mode === 'aoe') && !modeAllowed(d.mode, d as unknown as S)) {
+    d.mode = null;
+  }
+}
+
 const ZOOM_RESET: LocalZoom = { scale: 1, x: 0, y: 0 };
 
 export const useControlStore = create<ControlStore>()(
@@ -127,21 +140,19 @@ export const useControlStore = create<ControlStore>()(
       if (d.previewImageId && !(active?.images ?? []).some((i) => i.id === d.previewImageId)) {
         d.previewImageId = null;
       }
-      const preview = s.locations.find((l) => l.id === d.previewLocationId);
-      if (d.selectedAoeId && !(preview?.map.aoes ?? []).some((a) => a.id === d.selectedAoeId)) {
-        d.selectedAoeId = null;
-      }
-      // Gating transitorio: ping/aoe non disponibili -> esce dalla modalita.
-      if ((d.mode === 'ping' || d.mode === 'aoe') && !modeAllowed(d.mode, d as unknown as S)) {
-        d.mode = null;
-      }
+      reconcileSelection(d as unknown as ControlStore);
     }),
     setConnected: (b) => set({ socketConnected: b }),
     setDisplayConnected: (b) => set({ displayConnected: b }),
-    setPreviewLocation: (id) => set((d) => { d.previewLocationId = id; d.localZoom = { ...ZOOM_RESET }; }),
+    setPreviewLocation: (id) => set((d) => {
+      d.previewLocationId = id;
+      d.localZoom = { ...ZOOM_RESET };
+      reconcileSelection(d as unknown as ControlStore);
+    }),
     cancelPreview: () => set((d) => {
       d.previewLocationId = d.server?.activeLocationId ?? null;
       d.localZoom = { ...ZOOM_RESET };
+      reconcileSelection(d as unknown as ControlStore);
     }),
     setPreviewImage: (id) => set({ previewImageId: id }),
     setMode: (m) => set((d) => {

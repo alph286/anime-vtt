@@ -102,4 +102,37 @@ describe('control-store', () => {
     get().receiveState(st({ locations: [loc('L1', { map: { file: null, aoes: [] } })] }));
     expect(selectAoeAvailable(get())).toBe(false);
   });
+
+  describe('cambio anteprima (I1)', () => {
+    const withAoe = (id: string) => loc(id, { map: { file: 'm.png', aoes: [{ id: 'a-' + id }] } });
+    const setup = (mode: 'aoe' | 'ping' | 'pan' | 'fog' | 'zoom') => {
+      get().receiveState(st({ locations: [withAoe('L1'), withAoe('L2')] }));
+      get().forceMode(mode);
+      get().selectAoe('a-L1');
+    };
+    it.each(['aoe', 'ping'] as const)('%s: setPreviewLocation altrove esce dalla modalita e azzera la selezione', (m) => {
+      setup(m);
+      get().setPreviewLocation('L2');
+      expect(get().mode).toBeNull();
+      expect(get().selectedAoeId).toBeNull();
+    });
+    it('cancelPreview non resuscita la modalita', () => {
+      setup('aoe');
+      get().setPreviewLocation('L2');
+      get().cancelPreview();
+      expect(get().previewLocationId).toBe('L1');
+      expect(get().mode).toBeNull();
+    });
+    it.each(['pan', 'fog', 'zoom'] as const)('%s resta invariata', (m) => {
+      setup(m);
+      get().setPreviewLocation('L2');
+      expect(get().mode).toBe(m);
+    });
+    it('selezione mantenuta se appartiene alla nuova anteprima', () => {
+      get().receiveState(st({ locations: [withAoe('L1'), loc('L2', { map: { file: 'm.png', aoes: [{ id: 'a-L1' }] } })] }));
+      get().selectAoe('a-L1');
+      get().setPreviewLocation('L2');
+      expect(get().selectedAoeId).toBe('a-L1');
+    });
+  });
 });
