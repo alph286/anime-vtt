@@ -19,6 +19,13 @@ export function useShaderLoop(mediaRef: React.MutableRefObject<MapMedia | null>)
       } else {
         shaders = [];
       }
+      if (!shaders.length) {
+        // render() esce senza pulire se non c'è ancora una mappa/media con
+        // dimensioni valide: senza questo il canvas terrebbe i pixel
+        // dell'ultima location (decorazioni "fantasma").
+        const gl = canvas.getContext('webgl2');
+        if (gl) { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); }
+      }
       if (!shaders.length) { running = false; return; }
       raf = requestAnimationFrame(step);
     };

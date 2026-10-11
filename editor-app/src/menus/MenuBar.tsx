@@ -49,7 +49,7 @@ export function MenuBar() {
       <input ref={fileInput} type="file" accept="image/*,video/*" hidden onChange={(e) => { void onUpload(e.target.files?.[0]); e.target.value = ''; }} />
       <Menubar
         className="h-10 border-0 bg-transparent p-0 shadow-none"
-        onValueChange={(v) => { if (v === 'shaders') setSidebarTab('shader'); }}
+        onValueChange={(v) => { if (v !== 'griglia') colorPicking.current = false; if (v === 'shaders') setSidebarTab('shader'); }}
       >
         <MenubarMenu value="mappa">
           <MenubarTrigger className={triggerClass} data-active={Boolean(location?.map.flip180 || location?.map.rotate90)}>
@@ -119,6 +119,7 @@ export function MenuBar() {
             <Grid3x3 className="size-4" /> Griglia
           </MenubarTrigger>
           <MenubarContent
+            onEscapeKeyDown={() => { colorPicking.current = false; }}
             onFocusOutside={(e) => { if (colorPicking.current) e.preventDefault(); }}
             onInteractOutside={(e) => { if (colorPicking.current) e.preventDefault(); }}
           >
@@ -151,9 +152,11 @@ export function MenuBar() {
                 onCommit={(v) => socket.emit('grid:update', { locationId: location!.id, divisions: v })} />
             </MenuField>
             <MenuField label="Colore" title="Colore griglia">
-              <div onPointerDown={() => { colorPicking.current = true; }} onBlur={() => { colorPicking.current = false; }}>
+              <div>
                 <ColorField
                   disabled={disabled}
+                  onPickStart={() => { colorPicking.current = true; }}
+                  onPickEnd={() => { colorPicking.current = false; }}
                   value={location?.map.grid.color || '#ffffff'}
                   onLive={(v) => useEditorStore.getState().mutateLocation((loc) => { loc.map.grid.color = v; })}
                   onCommit={(v) => { colorPicking.current = false; socket.emit('grid:update', { locationId: location!.id, color: v }); }}

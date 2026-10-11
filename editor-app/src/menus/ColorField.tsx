@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 
-interface Props { value: string; disabled?: boolean; onLive: (v: string) => void; onCommit: (v: string) => void }
+interface Props { value: string; disabled?: boolean; onPickStart?: () => void; onPickEnd?: () => void; onLive: (v: string) => void; onCommit: (v: string) => void }
 
-export function ColorField({ value, disabled, onLive, onCommit }: Props) {
+export function ColorField({ value, disabled, onPickStart, onPickEnd, onLive, onCommit }: Props) {
   const ref = useRef<HTMLInputElement>(null);
   const commitRef = useRef(onCommit);
   commitRef.current = onCommit;
@@ -23,6 +23,9 @@ export function ColorField({ value, disabled, onLive, onCommit }: Props) {
       className="h-8 w-12 cursor-pointer rounded border border-input bg-secondary p-0.5"
       disabled={disabled}
       value={value}
+      onPointerDown={onPickStart}
+      onFocus={onPickStart}
+      onBlur={onPickEnd}
       onChange={(e) => onLive(e.target.value)}
     />
   );
