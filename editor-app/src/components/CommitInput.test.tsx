@@ -17,6 +17,17 @@ describe('CommitInput', () => {
     expect(onCommit).toHaveBeenCalledWith('Locanda');
   });
 
+  it('blur senza modifiche non committa nemmeno se il prop è cambiato mentre era a fuoco', () => {
+    const onCommit = vi.fn();
+    const { rerender } = render(<CommitInput value="Taverna" onCommit={onCommit} placeholder="nome" />);
+    const input = screen.getByPlaceholderText('nome') as HTMLInputElement;
+    fireEvent.focus(input);
+    rerender(<CommitInput value="Rinominata" onCommit={onCommit} placeholder="nome" />);
+    fireEvent.blur(input);
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(input.value).toBe('Rinominata');
+  });
+
   it('Invio fa blur e conferma', () => {
     const onCommit = vi.fn();
     render(<CommitInput value="A" onCommit={onCommit} placeholder="n" />);

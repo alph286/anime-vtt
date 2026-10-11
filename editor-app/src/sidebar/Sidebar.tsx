@@ -23,7 +23,7 @@ export function Sidebar({ panels }: { panels: Partial<Record<SidebarTab, React.R
           ))}
         </TabsList>
         {TABS.map((t) => (
-          <TabsContent key={t.value} value={t.value} className="min-h-0 overflow-y-auto px-3 pb-3">
+          <TabsContent key={t.value} value={t.value} forceMount className="min-h-0 overflow-y-auto px-3 pb-3 data-[state=inactive]:hidden">
             <h2 className="mb-3 text-base font-semibold">{t.label}</h2>
             {panels[t.value] ?? <p className="text-sm text-muted-foreground">In arrivo.</p>}
           </TabsContent>

@@ -44,7 +44,7 @@ export function NumberField({ value, min, max, step, live, disabled, className, 
       }}
       onBlur={() => {
         focused.current = false;
-        if (!dirty.current) return;
+        if (!dirty.current) { setText(String(value)); return; }
         dirty.current = false;
         const v = parseClamped(text, min, max);
         if (v === null) { setText(String(value)); return; }
