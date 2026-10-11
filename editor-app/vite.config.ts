@@ -1,23 +1,11 @@
 import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
-import path from 'node:path';
-
-const BACKEND = process.env.VTT_BACKEND ?? 'http://localhost:3000';
+import { sharedAlias, sharedPlugins, sharedProxy } from './vite.shared';
 
 export default defineConfig({
   base: '/editor/',
-  plugins: [react(), tailwindcss()],
-  resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
+  plugins: sharedPlugins(),
+  resolve: { alias: sharedAlias },
   build: { outDir: '../public/editor', emptyOutDir: true },
-  server: {
-    port: 5173,
-    proxy: {
-      '/socket.io': { target: BACKEND, ws: true },
-      '/api': BACKEND,
-      '/storage': BACKEND,
-      '/shared': BACKEND,
-    },
-  },
+  server: { port: 5173, proxy: sharedProxy },
   test: { environment: 'node', include: ['src/**/*.test.{ts,tsx}'], setupFiles: ['src/test-setup.ts'] },
 });

@@ -23,3 +23,38 @@ declare class ShaderLayer {
   readonly available: boolean;
   render(decorations: import('./types').ShaderDeco[], grid: import('./types').Grid, naturalW: number, naturalH: number): void;
 }
+
+// --- Globali usati da /control (public/shared/media.js e shader-effects.js) ---
+declare function rotateVector(x: number, y: number, angleDeg: number): Pt;
+declare function rotateDirectionToBase(d: Pt, rotation: number): Pt;
+declare function snapAoeOrigin(
+  shape: string, sizeM: number, widthM: number, rotation: number, grid: import('./types').Grid,
+  xPct: number, yPct: number, naturalW: number, naturalH: number
+): Pt;
+// Le AoE non hanno ancora un tipo condiviso in types.ts: forma volutamente larga.
+type AoeLike = Record<string, any>;
+declare function aoeOutlinePoints(aoe: AoeLike, grid: import('./types').Grid, naturalW: number, naturalH: number): Pt[];
+declare function aoeAffectedCells(aoe: AoeLike, grid: import('./types').Grid, naturalW: number, naturalH: number): Array<[number, number]>;
+declare function cellRectPercent(
+  col: number, row: number, grid: import('./types').Grid, naturalW: number, naturalH: number
+): { leftPct: number; topPct: number; widthPct: number; heightPct: number };
+declare function appendAoeOriginMarker(
+  svgEl: SVGElement, aoe: AoeLike, strokeColor: string, strokeWidth: number, naturalW: number, naturalH: number
+): void;
+declare function aoeColorHex(name: string): string;
+declare function aoeColorDarkHex(name: string): string;
+declare function polygonClipPath(points: Pt[]): string;
+declare function resolveAoeShaderId(aoe: AoeLike): string | null;
+interface PingPoint { x: number; y: number; t: number; strokeId?: string; [k: string]: unknown }
+declare function groupPingPointsByStroke(points: PingPoint[]): PingPoint[][];
+declare const AOE_METERS_PER_CELL: number;
+declare const AOE_COLOR_CYCLE_NAMES: string[];
+declare const AOE_SHADER_OVERRIDE_DEFAULT_COLOR: Record<string, string>;
+declare class PingLayer {
+  constructor(canvas: HTMLCanvasElement);
+  render(groups: PingPoint[][], lifespanSec: number, zoomScale: number): void;
+}
+declare class AoeShaderLayer {
+  constructor(canvas: HTMLCanvasElement);
+  render(aoes: AoeLike[], grid: import('./types').Grid, naturalW: number, naturalH: number): void;
+}

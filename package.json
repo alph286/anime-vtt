@@ -8,7 +8,10 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "dev:editor": "cd editor-app && npm run dev",
-    "build:editor": "cd editor-app && npm install && npm run build"
+    "build:editor": "cd editor-app && npm install && npm run build",
+    "dev:control": "cd editor-app && npm run dev:control",
+    "build:control": "cd editor-app && npm install && npm run build:control",
+    "build:all": "npm run build:editor && npm run build:control"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
