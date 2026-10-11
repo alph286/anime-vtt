@@ -35,7 +35,7 @@ export default function ImagesTab() {
             type="button"
             className={cn(
               'image-thumb relative size-[84px] overflow-hidden rounded-lg border border-border bg-card p-0',
-              activeImageId === img.id && 'active border-2 border-[var(--accent)]',
+              activeImageId === img.id && 'active border-2 border-[var(--vtt-accent)]',
               previewImageId === img.id && 'selected ring-2 ring-foreground',
             )}
             onClick={() => setPreviewImage(img.id)}
@@ -95,7 +95,7 @@ export default function ImagesTab() {
           </div>
           <div className="image-detail-actions flex flex-wrap gap-2">
             <Button
-              type="button" variant="outline" className={cn('h-11 min-w-[100px] flex-1', activeImageId === image.id && 'is-live border-[var(--accent)] text-[var(--accent)]')}
+              type="button" variant="outline" className={cn('h-11 min-w-[100px] flex-1', activeImageId === image.id && 'is-live border-[var(--vtt-accent)] bg-[var(--accent-bg-subtle)] text-[var(--vtt-accent)]')}
               onClick={() => socket.emit('image:show', { imageId: image.id })}
             >
               Mostra
@@ -120,7 +120,7 @@ export default function ImagesTab() {
             </Button>
           </div>
           {feedback && feedback.imageId === image.id && (
-            <p className={cn('image-send-feedback text-sm text-[var(--accent)]', !feedback.ok && 'error text-destructive')}>
+            <p className={cn('image-send-feedback text-sm text-[var(--vtt-accent)]', !feedback.ok && 'error text-destructive')}>
               {feedback.ok ? 'Inviata ✓' : (feedback.error || 'Invio fallito')}
             </p>
           )}

@@ -67,6 +67,7 @@ describe('ImagesTab', () => {
     const t1 = screen.getByText('N-I1').closest('button')!;
     const t2 = screen.getByText('N-I2').closest('button')!;
     expect(t1.className).toContain('active');
+    expect(t1.className).toContain('--vtt-accent');
     expect(t1.className).not.toContain('selected');
     expect(t2.className).toContain('selected');
     expect(t1.querySelector('img')!.getAttribute('src')).toBe('/storage/images/I1.png');
@@ -138,6 +139,7 @@ describe('ImagesTab', () => {
     expect(emitsOf('image:show')).toEqual([['image:show', { imageId: 'I1' }]]);
     setServer({ activeImageId: 'I1' });
     expect(screen.getByText('Mostra').className).toContain('is-live');
+    expect(screen.getByText('Mostra').className).toContain('--vtt-accent');
     click(screen.getByText('Ritorna alla mappa'));
     expect(emitsOf('image:hide')).toEqual([['image:hide']]);
   });
@@ -202,6 +204,7 @@ describe('AudioBox', () => {
     expect(emitsOf('audio:play')).toEqual([['audio:play', {}]]);
     setServer({ audioState: 'playing', activeAudioTrack: 'main' }, L(audio('m.mp3', null)));
     expect(screen.getByTitle('Play/Pausa').className).toContain('active');
+    expect(screen.getByTitle('Play/Pausa').className).toContain('--vtt-accent');
     click(screen.getByTitle('Play/Pausa'));
     expect(emitsOf('audio:pause')).toEqual([['audio:pause', {}]]);
     click(screen.getByTitle('Stop'));

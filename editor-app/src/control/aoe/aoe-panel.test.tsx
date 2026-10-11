@@ -200,15 +200,11 @@ describe('AoePanel', () => {
     expect(socket.emit).not.toHaveBeenCalled();
   });
 
-  it('6. fulmine per pillola emette setCast invertito', () => {
+  it('6. la pillola non ha il fulmine (il lancio e il FIRE del pad)', () => {
     setServer([aoe(), aoe({ id: 'B', cast: true })]);
     render(<AoePanel />);
-    const bolts = screen.getAllByTitle(/Lancia incantesimo|Interrompi incantesimo/);
-    click(bolts[0]);
-    click(bolts[1]);
-    expect(emitsOf('aoe:setCast')).toEqual([
-      { locationId: 'L1', aoeId: 'A', cast: true },
-      { locationId: 'L1', aoeId: 'B', cast: false },
-    ]);
+    expect(screen.queryAllByTitle(/Lancia incantesimo|Interrompi incantesimo/)).toHaveLength(0);
+    expect(document.querySelectorAll('.aoe-chip-cast')).toHaveLength(0);
+    expect(document.querySelectorAll('.aoe-chip-delete')).toHaveLength(2);
   });
 });
