@@ -1,3 +1,4 @@
+import { AoePanel } from '../aoe/AoePanel';
 import { FogBox } from '../boxes/FogBox';
 import { PanBox } from '../boxes/PanBox';
 import { PingBox } from '../boxes/PingBox';
@@ -19,7 +20,8 @@ export default function MapTab() {
       {mode === 'fog' && <FogBox />}
       {mode === 'zoom' && <ZoomBox />}
       {mode === 'ping' && <PingBox />}
-      {/* TODO Task successivi: mode === 'aoe' -> <AoePanel />; <AudioBox /> sempre sotto. */}
+      {mode === 'aoe' && <AoePanel />}
+      {/* TODO Task successivi: <AudioBox /> sempre sotto. */}
     </div>
   );
 }
