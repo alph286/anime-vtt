@@ -1,0 +1,17 @@
+/* Solo le regole che Tailwind non esprime comodamente. */
+
+/* Il pannello gestisce da se i gesti sulla mappa (pan/pinch/ping). */
+.map-preview { touch-action: none; }
+
+/* Canvas sovrapposti alla mappa (shader Portale/AOE, ping). */
+.shader-layer,
+.ping-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.fit-box { position: absolute; }
+.media-wrap { position: relative; }

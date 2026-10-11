@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../src/index.css';
+import '../src/control/control.css';
 import ControlApp from '../src/control/ControlApp';
 
 createRoot(document.getElementById('root')!).render(
