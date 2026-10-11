@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config';
-import { sharedAlias, sharedPlugins, sharedProxy } from './vite.shared';
+import { sharedAlias, sharedPlugins, sharedProxy } from './vite.shared.ts';
 
 export default defineConfig({
   base: '/editor/',

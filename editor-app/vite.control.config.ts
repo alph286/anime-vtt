@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import path from 'node:path';
-import { sharedAlias, sharedPlugins, sharedProxy } from './vite.shared';
+import { sharedAlias, sharedPlugins, sharedProxy } from './vite.shared.ts';
 
 // Durante lo sviluppo del porting la build esce in public/control-next/ (base /control-next/);
 // il cutover (ultimo task del piano) la sposta su /control.

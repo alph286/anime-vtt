@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "paths": { "@/*": ["./src/*"] },
     "types": ["vite/client"]
   },
