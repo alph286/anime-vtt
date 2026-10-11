@@ -8,7 +8,7 @@ const BACKEND = process.env.VTT_BACKEND ?? 'http://localhost:3000';
 export default defineConfig({
   base: '/editor-next/',
   plugins: [react(), tailwindcss()],
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+  resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   build: { outDir: '../public/editor-next', emptyOutDir: true },
   server: {
     port: 5173,
