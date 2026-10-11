@@ -67,7 +67,7 @@ col `getBoundingClientRect` reale.
 | AOE: colore / menu "···" mutuamente esclusivi | OK | Viola Cornelia → purple/purple_fire; Verde → green/null |
 | AOE: taglia e larghezza | OK | lato 1,5↔3; linea 3/3 |
 | AOE: elimina arma-poi-conferma | OK | anche il disarmo per cambio selezione (correzione A.1) |
-| AOE: fulmine / cast | OK | contorno `stroke=none`, celle invariate (18→18); shader nel loop |
+| AOE: lancio (FIRE del pad, nessun fulmine per pillola) | OK | contorno `stroke=none`, celle invariate (18→18); shader nel loop |
 | AOE: pad di nudge | OK | frecce in direzione schermo anche a 90°, colore, taglia, FIRE/UN-FIRE |
 | AOE: posizione del pad salvata e mantenuta dopo deseleziona→riseleziona | OK | drag vero della maniglia → 109,289 salvato e riapplicato |
 | AOE: reattività di "Griglia (tu)" e occhio | OK | prima mai verificata nel browser |

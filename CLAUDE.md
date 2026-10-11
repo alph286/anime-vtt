@@ -90,8 +90,15 @@ cronologia git, commit precedenti al cutover).
   puntatore sono state verificate in browser (Task 14).
 
 **Deviazioni consapevoli dal control vecchio**
-- Fulmine (lancia/rilancia) per ogni pillola AOE ("layout A"): il markup originale
-  delle pillole non lo aveva, è stato aggiunto da quella decisione.
+- Le pillole AOE hanno solo etichetta + elimina, come nell'originale: il lancio
+  (`aoe:setCast`) è il pulsante FIRE del pad di nudge (nessun fulmine per pillola).
+- `setPreviewLocation` e `cancelPreview` azzerano lo zoom locale (l'originale
+  `cancelPreview` non lo faceva).
+- Corretti dopo la revisione finale: (I1) cambiare location in anteprima esce da
+  ping/AOE e azzera la selezione AOE non valida (helper `reconcileSelection` nello
+  store, condiviso con `receiveState`); (I2) l'ambra del progetto è `--vtt-accent`
+  (in shadcn `--accent` è grigio): immagine mostrata, "Mostra" live, "Inviata" e
+  play audio in riproduzione la usano.
 - Pan a rotazione 180: il segno NON si inverte (la matematica dell'originale ruota
   di -rot e poi +rot, si annulla); il testo del piano diceva il contrario ed era
   sbagliato, i test seguono il codice originale.
@@ -119,6 +126,11 @@ sullo stesso stepper leggono il valore del render precedente (artefatto di test)
 mano), pan/zoom/fog/ping/AOE/immagini/audio, zero location, `state:update` remoto
 durante un trascinamento, console pulita. `node --test public/shared/media.test.js`
 38/38.
+
+**Attenzione**: la resa dello stato ATTIVO di Immagini e Audio (miniatura mostrata,
+"Mostra" live, play in riproduzione) non era stata guardata prima della revisione
+finale (usava `--accent` grigio, invisibile); ora corretta ma da verificare
+visivamente al primo uso reale.
 
 **Non verificato a mano**: pinch vero a due dita su touch screen (solo test unitari
 e rotellina); resa visiva fine degli shader (sonar, scia, fiamme: verificato solo
