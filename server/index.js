@@ -54,8 +54,6 @@ app.use(express.json());
 app.use('/storage', express.static(STORAGE_DIR));
 app.use('/display', express.static(path.join(__dirname, '..', 'public', 'display')));
 app.use('/control', express.static(path.join(__dirname, '..', 'public', 'control')));
-// TEMPORANEA: rimossa al cutover del porting di /control (vedi docs/superpowers/plans/2026-10-11-control-shadcn.md).
-app.use('/control-next', express.static(path.join(__dirname, '..', 'public', 'control-next')));
 app.use('/party', express.static(path.join(__dirname, '..', 'public', 'party')));
 app.use('/editor', express.static(path.join(__dirname, '..', 'public', 'editor')));
 app.use('/shared', express.static(path.join(__dirname, '..', 'public', 'shared')));

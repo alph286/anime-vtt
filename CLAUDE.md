@@ -53,6 +53,79 @@ annulla/ripeti nel browser per area/vertice/griglia/disegno, doppio click di
 eliminazione per area/immagine/location/traccia/orfani, selettore colore nativo
 aperto davvero, stato senza location attiva dopo le ultime modifiche.
 
+## Porting di /control su React + shadcn/ui (fatto, branch `control-shadcn`)
+
+`/control` non è più vanilla JS: è un'app React + shadcn/ui nello STESSO progetto
+Vite dell'editor, `editor-app/`. Spec e piano:
+`docs/superpowers/specs/2026-10-11-control-shadcn-design.md` e
+`docs/superpowers/plans/2026-10-11-control-shadcn.md`; verifica di parità:
+`docs/superpowers/plans/2026-10-11-control-shadcn-parity.md`. Il vecchio
+`public/control/{control.js,control.css,index.html}` è stato rimosso (resta nella
+cronologia git, commit precedenti al cutover).
+
+**Decisioni chiave**
+- **Stesso progetto, seconda config**: `editor-app/vite.control.config.ts` con
+  root `editor-app/control`, entry `control/index.html` + `control/main.tsx`; il
+  codice sta in `editor-app/src/control/**` (shell, `map/`, `aoe/`, `hooks/`, `lib/`).
+  Config condivise (alias, plugin, proxy) in `vite.shared.ts`. Base `/control/`,
+  output `public/control/` (variabile `CONTROL_OUT` per costruire altrove).
+- **Approccio ibrido** (come per l'editor): React/shadcn per shell, schede, box e
+  liste; i moduli `public/shared/media.js` e `shader-effects.js` NON toccati, caricati
+  come `<script>` classici (globali, tipi in `globals.d.ts`). I layer WebGL vanilla
+  `PingLayer`, `AoeShaderLayer`, `ShaderLayer` restano classi imperative, pilotate
+  da `hooks/use-shader-loop.ts` (un solo loop rAF). Server invariato: stessi eventi
+  socket e stessi endpoint (`git diff main -- server/index.js` vuoto).
+- **Stato**: store Zustand `control-store` (stato server, gating `selectPingAvailable`/
+  `selectAoeAvailable`, preferenze locali in localStorage). I gesti sulla mappa
+  (pan, zoom locale, ping, AOE, tap sul fog) sono hook con listener nativi che
+  leggono lo store con `getState()` (niente closure obsolete): `map/use-*-gesture.ts`,
+  `map/use-fog-tap.ts`.
+- **Build committata**: Express serve `public/control/`, che va ricostruita e
+  ricommittata a ogni modifica di `editor-app/src/control` o `editor-app/control`:
+  `npm run build:control` dalla radice (oppure `npm run build:all` per editor +
+  control). Il Raspberry Pi serve file statici, senza build step. Sviluppo:
+  `npm run dev:control` (Vite su :5174, proxy verso :3000).
+- **Logica testata** (Vitest, `npm test` in `editor-app/`): `lib/` (view-math,
+  local-zoom, ping, aoe-ops), store, hook gesti e box. Le interazioni vere a
+  puntatore sono state verificate in browser (Task 14).
+
+**Deviazioni consapevoli dal control vecchio**
+- Fulmine (lancia/rilancia) per ogni pillola AOE ("layout A"): il markup originale
+  delle pillole non lo aveva, è stato aggiunto da quella decisione.
+- Pan a rotazione 180: il segno NON si inverte (la matematica dell'originale ruota
+  di -rot e poi +rot, si annulla); il testo del piano diceva il contrario ed era
+  sbagliato, i test seguono il codice originale.
+- La posizione del pad di nudge AOE è tenuta in memoria e riapplicata a ogni
+  comparsa (prima si perdeva su nascondi/mostra); se il pad si nasconde a metà
+  trascinamento la posizione viene comunque salvata.
+- Tap sul fog delegato sull'anteprima (un solo listener) invece di uno per zona.
+- Classi di modalità `mode-*` applicate in un effect (non layout effect).
+- Eliminazione "arma-poi-conferma": una sola riga armata alla volta; il disarmo
+  scatta anche se la selezione cambia da fuori la lista.
+- Tutti i piani usavano `/control-next/` fino al cutover (dichiarato nel piano); ora
+  la route temporanea e `public/control-next` non esistono più.
+- Colore della scheda attiva ambra come l'originale (shadcn lo rendeva grigio).
+
+**Limiti noti (minori rimandati rimasti)**: `lostpointercapture` non gestito (come
+l'originale); `AoePanel` si sottoscrive all'intero store (solo performance); un ping
+che arriva con un'immagine mostrata resta nel buffer fino al prossimo cambio di
+store (<=1,2s); `FogOverlays` si ri-renderizza al cambio opacità; il loop shader
+dipende dall'ordine degli effect di `MapPreview`; "Rivela tutto" armato non è
+legato alla location (come l'originale); due click sintetici nello stesso task JS
+sullo stesso stepper leggono il valore del render precedente (artefatto di test).
+
+**Verificato**: percorso end-to-end su copia dei dati (mai sui dati vivi), porta
+3100: shell, anteprima/invio al display, rotazioni (riquadro giallo ricalcolato a
+mano), pan/zoom/fog/ping/AOE/immagini/audio, zero location, `state:update` remoto
+durante un trascinamento, console pulita. `node --test public/shared/media.test.js`
+38/38.
+
+**Non verificato a mano**: pinch vero a due dita su touch screen (solo test unitari
+e rotellina); resa visiva fine degli shader (sonar, scia, fiamme: verificato solo
+che il loop riceva i gruppi e le aree giuste); invio Telegram reale (mai premuto
+"Invia"); riproduzione audio udibile (solo lo stato sul server); confronto
+affiancato con il /control originale (solo confronto col codice).
+
 ## Menù "Shaders" con sottomenù + trasforma ad angoli stile Photoshop (fatto)
 
 Tre richieste distinte nella stessa sessione, sul menù "Decorazioni" appena
@@ -384,6 +457,13 @@ confrontare il crop con l'inquadratura reale, farlo leggendo
 lettura) invece di connettersi come un client display/control vero.
 
 ## Box sotto la mappa: contenuto diverso per modalità (fatto)
+
+> Nota (cutover di /control): in questa sezione i riferimenti a `control.js` valgono
+> ora per il codice React sotto `editor-app/src/control/` (`renderAoePanel` →
+> `aoe/AoePanel.tsx`, pad di nudge → `aoe/AoeNudgePad.tsx`, ping → `lib/ping.ts` +
+> `hooks/use-shader-loop.ts`, zoom locale → `map/use-local-zoom-gesture.ts` +
+> `lib/local-zoom.ts`, riquadro inquadratura → `lib/view-math.ts`, ecc.). La storia
+> sotto non è stata riscritta.
 
 Oggi alcuni controlli vivono sopra la mappa, altri in una sezione fissa
 "Controlli" sempre visibile indipendentemente dalla modalità. Si vuole
@@ -758,6 +838,13 @@ il riquadro giallo quando i dati non ci sono, senza più toccare
   pulsante manuale.
 
 ## Shader sugli incantesimi AOE (fatto, parziale)
+
+> Nota (cutover di /control): in questa sezione i riferimenti a `control.js` valgono
+> ora per il codice React sotto `editor-app/src/control/` (`renderAoePanel` →
+> `aoe/AoePanel.tsx`, pad di nudge → `aoe/AoeNudgePad.tsx`, ping → `lib/ping.ts` +
+> `hooks/use-shader-loop.ts`, zoom locale → `map/use-local-zoom-gesture.ts` +
+> `lib/local-zoom.ts`, riquadro inquadratura → `lib/view-math.ts`, ecc.). La storia
+> sotto non è stata riscritta.
 
 Le aree d'effetto (box sotto la mappa, punto 5 sopra) ora possono mostrare
 uno shader animato invece del semplice riempimento flat colorato, portando
