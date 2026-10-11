@@ -1,7 +1,40 @@
 /* Solo le regole che Tailwind non esprime comodamente. */
 
-/* Il pannello gestisce da se i gesti sulla mappa (pan/pinch/ping). */
-.map-preview { touch-action: none; }
+/* Cursori per modalita (porting di public/control/control.css). */
+.map-preview.mode-pan { cursor: move; }
+.map-preview.mode-ping { cursor: crosshair; }
+.map-preview.mode-zoom { cursor: grab; }
+.map-preview.mode-zoom.zoom-dragging { cursor: grabbing; }
+.map-preview.mode-aoe { cursor: crosshair; }
+
+/* Senza questo, su touch il browser interpreta il trascinamento come uno
+   scroll/pan nativo dopo pochi pixel: interrompe la pointer capture con un
+   pointercancel e il gesto smette di seguire il dito. touch-action:
+   manipulation sui figli (.fog-overlay ecc., regola sotto) permette comunque
+   il pan nativo per l'antenato: va annullato su tutto il sottoalbero mentre
+   una di queste modalita e attiva. Fuori da queste modalita (nessuna, o
+   fog) la pagina resta scrollabile anche con il dito sulla mappa. */
+.map-preview.mode-pan,
+.map-preview.mode-pan *,
+.map-preview.mode-ping,
+.map-preview.mode-ping *,
+.map-preview.mode-zoom,
+.map-preview.mode-zoom *,
+.map-preview.mode-aoe,
+.map-preview.mode-aoe * {
+  touch-action: none;
+}
+
+/* Niente doppio-tap-zoom ne evidenziazione/selezione al tocco sui controlli
+   (questo foglio e caricato solo dalla pagina /control). Specificita bassa
+   apposta: deve perdere contro le regole touch-action:none qui sopra. */
+button,
+.fog-overlay {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
 
 /* Canvas sovrapposti alla mappa (shader Portale/AOE, ping). */
 .shader-layer,

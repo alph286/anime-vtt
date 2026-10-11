@@ -6,6 +6,11 @@ import { CompassMarker } from './CompassMarker';
 import { FogOverlays } from './FogOverlays';
 import { mapRefs, type MapMedia } from './map-refs';
 import { ViewportRect } from './ViewportRect';
+import { useFogTap } from './use-fog-tap';
+import { useLocalZoomGesture } from './use-local-zoom-gesture';
+import { usePanGesture } from './use-pan-gesture';
+
+const MODE_CLASSES = ['pan', 'fog', 'ping', 'zoom', 'aoe'] as const;
 
 // Anteprima mappa del DM. Stessa gerarchia di layer del pannello vanilla
 // (public/control/index.html): dentro .fit-box media, placeholder, canvas
@@ -23,6 +28,7 @@ export default function MapPreview() {
   const naturalW = useControlStore((s) => s.geometry.naturalW);
   const naturalH = useControlStore((s) => s.geometry.naturalH);
   const previewW = useControlStore((s) => s.geometry.previewW);
+  const mode = useControlStore((s) => s.mode);
 
   const previewRef = useRef<HTMLDivElement>(null);
   const zoomWrapRef = useRef<HTMLDivElement>(null);
@@ -49,6 +55,20 @@ export default function MapPreview() {
       mapRefs.media = null;
     };
   }, []);
+
+  // Gesti: listener nativi sul preview, montati DOPO il layout effect sopra
+  // (che scrive mapRefs.preview).
+  usePanGesture();
+  useFogTap();
+  useLocalZoomGesture();
+
+  // Classi di modalita via classList, non via className: il gesto di zoom
+  // aggiunge/toglie da se 'zoom-dragging' e un re-render non deve cancellarla.
+  useEffect(() => {
+    const preview = previewRef.current;
+    if (!preview) return;
+    for (const m of MODE_CLASSES) preview.classList.toggle(`mode-${m}`, mode === m);
+  }, [mode]);
 
   // Caricamento del media (immagine o video) al cambio location/file. Senza
   // file: placeholder e src svuotati, cosi un vecchio video non resta a
