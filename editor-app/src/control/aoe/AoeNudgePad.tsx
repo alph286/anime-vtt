@@ -42,9 +42,16 @@ export function AoeNudgePad() {
 
   // A ogni comparsa del div si riapplica l'ultima posizione nota (all'inizio
   // quella salvata): mai durante un trascinamento, perche l'effetto scatta
-  // solo al cambio di `visible`.
+  // solo al cambio di `visible`. Se il pad si nasconde a meta trascinamento
+  // il pointerup non arrivera mai: si salva qui l'ultima posizione in memoria.
   useLayoutEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      if (dragRef.current) {
+        dragRef.current = null;
+        if (lastPos.current) saveNudgePos(lastPos.current);
+      }
+      return;
+    }
     if (lastPos.current === undefined) lastPos.current = loadNudgePos();
     const p = lastPos.current;
     if (p) place(p.left, p.top);
