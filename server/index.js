@@ -56,7 +56,6 @@ app.use('/display', express.static(path.join(__dirname, '..', 'public', 'display
 app.use('/control', express.static(path.join(__dirname, '..', 'public', 'control')));
 app.use('/party', express.static(path.join(__dirname, '..', 'public', 'party')));
 app.use('/editor', express.static(path.join(__dirname, '..', 'public', 'editor')));
-app.use('/editor-next', express.static(path.join(__dirname, '..', 'public', 'editor-next')));
 app.use('/shared', express.static(path.join(__dirname, '..', 'public', 'shared')));
 app.use('/home', express.static(path.join(__dirname, '..', 'public', 'home')));
 app.use('/opzioni', express.static(path.join(__dirname, '..', 'public', 'opzioni')));

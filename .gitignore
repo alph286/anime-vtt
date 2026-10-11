@@ -10,5 +10,4 @@ storage/audio/*
 .superpowers/
 data/imports/
 data/backups/
-public/editor-next/
 editor-app/node_modules/

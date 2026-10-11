@@ -1,3 +1,58 @@
+## Porting di /editor su React + shadcn/ui (fatto, branch `editor-shadcn`)
+
+`/editor` non è più vanilla JS: è un'app React + shadcn/ui in `editor-app/`
+(Vite, TypeScript, Tailwind v4, Zustand+Immer, socket.io-client). Spec e piano:
+`docs/superpowers/specs/2026-10-10-editor-shadcn-design.md` e
+`docs/superpowers/plans/2026-10-10-editor-shadcn.md`. Il vecchio
+`public/editor/{editor.js,index.html,editor.css}` è stato rimosso (resta nella
+cronologia git, commit `4285071` e precedenti).
+
+**Decisioni chiave**
+- **Approccio ibrido**: React/shadcn per menù, pannelli, form e liste; i moduli
+  di rendering `public/shared/media.js` e `shader-effects.js` NON sono stati
+  toccati e si caricano come `<script>` classici (funzioni/classi globali,
+  dichiarate in `editor-app/src/globals.d.ts`) invece di essere importati: non
+  sono ES module. Server invariato: stessi eventi socket e stessi endpoint.
+- **Build committata**: Express serve `public/editor/` (output di
+  `cd editor-app && npm install && npm run build`, anche `npm run build:editor`
+  dalla radice). Va ricostruita e ricommittata a ogni modifica di `editor-app/src`
+  (il Raspberry Pi serve file statici, senza build step). Sviluppo:
+  `npm run dev:editor` (Vite su :5173 con proxy verso :3000).
+- **Stato**: store Zustand (`editor-app/src/store/editor-store.ts`); le azioni che
+  mescolano store e socket vivono in `stage/actions.ts`. Il lavoro sulla mappa
+  (disegno, trascinamento di poligoni/vertici/decorazioni, maniglie ad angoli,
+  riquadri di allinea griglia e piazzamento shader) è in
+  `stage/use-stage-interactions.ts`: listener nativi che leggono lo store con
+  `getState()` (niente closure obsolete), come le variabili di modulo
+  dell'originale. Una sottoscrizione allo store riapplica l'ultimo puntatore se
+  arriva un `state:update` remoto durante un trascinamento (niente scatti).
+- **Menù**: shadcn `Menubar` (Radix). Digitare nei campi dentro i menù funziona
+  (verificato); il "piano B" Popover non è servito. File orfani è un `Popover`
+  che NON si chiude cliccando fuori (può contenere una scansione).
+- **Logica testata** (Vitest, 58 test): `editor-app/src/lib`, store, hook e campi.
+  Le interazioni a puntatore sono state verificate in browser, non da test unitari.
+
+**Deviazioni consapevoli dall'editor vecchio**
+- Eliminazione "arma-poi-conferma": una sola riga armata alla volta (non un Set).
+- `useSortableList` usa listener di finestra, non `setPointerCapture` (la cattura
+  si perdeva quando React sposta il nodo trascinato).
+- Il canvas degli shader viene sempre pulito quando non ci sono decorazioni
+  (prima restavano pixel "fantasma" cambiando location).
+- Il cambio scheda a "Shaders attivi" avviene al click su Shaders, non al passaggio
+  del mouse; le schede della sidebar restano montate ma nascoste (nessuna perdita
+  di testo non confermato).
+
+**Limiti noti ereditati**: su mappe con rotazione attiva il cursore diagonale delle
+maniglie può risultare invertito (il ridimensionamento è corretto); lo storico
+annulla/ripeti non è legato alla location attiva (come prima).
+
+**Verifiche**: percorso end-to-end su copia dei dati (mai sui dati vivi), porta
+3100; `node --test public/shared/media.test.js` 38/38. Non verificati a mano al
+momento del cutover: sottomenù Shaders ribaltato a sinistra a finestra stretta,
+annulla/ripeti nel browser per area/vertice/griglia/disegno, doppio click di
+eliminazione per area/immagine/location/traccia/orfani, selettore colore nativo
+aperto davvero, stato senza location attiva dopo le ultime modifiche.
+
 ## Menù "Shaders" con sottomenù + trasforma ad angoli stile Photoshop (fatto)
 
 Tre richieste distinte nella stessa sessione, sul menù "Decorazioni" appena

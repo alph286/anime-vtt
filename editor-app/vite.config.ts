@@ -6,10 +6,10 @@ import path from 'node:path';
 const BACKEND = process.env.VTT_BACKEND ?? 'http://localhost:3000';
 
 export default defineConfig({
-  base: '/editor-next/',
+  base: '/editor/',
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
-  build: { outDir: '../public/editor-next', emptyOutDir: true },
+  build: { outDir: '../public/editor', emptyOutDir: true },
   server: {
     port: 5173,
     proxy: {
