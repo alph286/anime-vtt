@@ -174,6 +174,32 @@ describe('AoePanel', () => {
     expect(emitsOf('aoe:remove')).toEqual([]);
   });
 
+  it('5b. selezione cambiata da fuori la lista (es. tap sulla mappa) disarma', () => {
+    setServer([aoe(), aoe({ id: 'B', shape: 'cube', sizeM: 1.5 })]);
+    render(<AoePanel />);
+    const del = () => screen.getAllByTitle(/Rimuovi|Tocca di nuovo/)[0];
+    click(del());
+    expect(del().getAttribute('title')).toBe('Tocca di nuovo per confermare');
+    act(() => get().selectAoe('B'));
+    expect(del().getAttribute('title')).toBe('Rimuovi');
+    click(del());
+    expect(emitsOf('aoe:remove')).toEqual([]);
+  });
+
+  it('3c. senza selezione: riscegliere la stessa voce torna a null, colore invariato', () => {
+    setServer([]);
+    render(<AoePanel />);
+    click(screen.getByTitle('Altri shader'));
+    click(screen.getByText('Viola Cornelia'));
+    expect(get().aoeShaderOverride).toBe('purple_fire');
+    const colorAfterPick = get().aoeColor;
+    click(screen.getByTitle('Altri shader'));
+    click(screen.getByText('Viola Cornelia'));
+    expect(get().aoeShaderOverride).toBeNull();
+    expect(get().aoeColor).toBe(colorAfterPick);
+    expect(socket.emit).not.toHaveBeenCalled();
+  });
+
   it('6. fulmine per pillola emette setCast invertito', () => {
     setServer([aoe(), aoe({ id: 'B', cast: true })]);
     render(<AoePanel />);

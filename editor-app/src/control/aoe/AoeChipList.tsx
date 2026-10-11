@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { socket } from '@/lib/socket';
 import { cn } from '@/lib/utils';
 import { useArmConfirm } from '@/hooks/use-arm-confirm';
@@ -16,6 +17,13 @@ export function AoeChipList() {
   const selectAoe = useControlStore((s) => s.selectAoe);
   const arm = useArmConfirm(2500);
   const aoes = location?.map.aoes ?? [];
+  const { disarm } = arm;
+
+  // Come setSelectedAoeId dell'originale: la selezione cambiata da qualunque
+  // fonte (tap sulla mappa, piazzamento, cambio location) disarma l'elimina.
+  useEffect(() => {
+    disarm();
+  }, [selectedAoeId, disarm]);
 
   const toggleSelect = (id: string) => {
     arm.disarm();
