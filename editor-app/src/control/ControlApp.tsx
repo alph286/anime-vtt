@@ -5,6 +5,7 @@ import { selectIsPreviewing, useControlStore, type TabId } from './store/control
 import { Banners } from './shell/Banners';
 import { StatusBar } from './shell/StatusBar';
 import { TabBar } from './shell/TabBar';
+import { AoeNudgePad } from './aoe/AoeNudgePad';
 import MapTab from './map/MapTab';
 import FogTab from './tabs/FogTab';
 import ImagesTab from './tabs/ImagesTab';
@@ -52,6 +53,7 @@ export default function ControlApp() {
         </TabsContent>
       </div>
       <TabBar />
+      <AoeNudgePad />
     </Tabs>
   );
 }

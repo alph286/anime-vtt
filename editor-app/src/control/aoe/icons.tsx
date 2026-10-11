@@ -38,3 +38,4 @@ export const WizardHatIcon = () => (
   <Icon><path d="M12 2 7 17h10L12 2Z" /><path d="M3 19c3 2 15 2 18 0" /><path d="M17 5v2.4M15.8 6.2h2.4" /></Icon>
 );
 export const BoltIcon = () => <Icon><path d="M13 2 4 14h6l-1 8 9-12h-6z" /></Icon>;
+export const MoveIcon = () => <Icon><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" /></Icon>;
