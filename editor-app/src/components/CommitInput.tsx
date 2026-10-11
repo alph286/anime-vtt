@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 
 interface Props {
+  id?: string;
   value: string;
   onCommit: (value: string) => void;
   className?: string;
@@ -9,7 +10,7 @@ interface Props {
   disabled?: boolean;
 }
 
-export function CommitInput({ value, onCommit, className, placeholder, disabled }: Props) {
+export function CommitInput({ id, value, onCommit, className, placeholder, disabled }: Props) {
   const [text, setText] = useState(value);
   const focused = useRef(false);
   const dirty = useRef(false);
@@ -20,6 +21,7 @@ export function CommitInput({ value, onCommit, className, placeholder, disabled 
 
   return (
     <Input
+      id={id}
       className={className}
       placeholder={placeholder}
       disabled={disabled}

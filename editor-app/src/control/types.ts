@@ -25,12 +25,12 @@ export interface ControlMapData extends MapData {
 }
 export interface ControlLocation extends Omit<Location, 'map'> { map: ControlMapData }
 
-export interface AudioState { [key: string]: unknown }
+export type AudioPlayState = 'playing' | 'paused' | 'stopped' | string;
 
 export interface ControlState extends Omit<VttState, 'locations'> {
   locations: ControlLocation[];
   activeImageId: string | null;
-  activeAudioTrack: string | null;
-  audioState: AudioState | null;
+  activeAudioTrack: 'main' | 'special' | null;
+  audioState: AudioPlayState | null;
   displayViewport: DisplayViewport | null;
 }

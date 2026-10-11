@@ -39,3 +39,6 @@ export const WizardHatIcon = () => (
 );
 export const BoltIcon = () => <Icon><path d="M13 2 4 14h6l-1 8 9-12h-6z" /></Icon>;
 export const MoveIcon = () => <Icon><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" /></Icon>;
+export const PlayIcon = () => <Icon><path d="M7 4l13 8-13 8z" /></Icon>;
+export const PauseIcon = () => <Icon><path d="M8 4v16M16 4v16" /></Icon>;
+export const StopIcon = () => <Icon><rect x="6" y="6" width="12" height="12" /></Icon>;
