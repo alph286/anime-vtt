@@ -176,6 +176,31 @@ describe('AOE: gesti e overlay', () => {
     });
   });
 
+  describe('(c2) presa lontana dall\'origine e tap su un overlay', () => {
+    it('il drag applica il delta, non la posizione assoluta del puntatore', () => {
+      setServer([aoe()]); // origine al 25%,25% = client (100,75)
+      const { fit, svg } = mount();
+      act(() => get().forceMode('aoe'));
+      // Afferrata al 50%,50% (client 200,150), spostata di +60 px (+15%).
+      pointer(poly(svg), 'pointerdown', 200, 150);
+      pointer(fit, 'pointermove', 260, 150);
+      const [x, y] = snapAoeOrigin('cube', 3, undefined as unknown as number, 0, GRID as never, 25 + 15, 25, NW, NH);
+      const [absX] = snapAoeOrigin('cube', 3, undefined as unknown as number, 0, GRID as never, 65, 50, NW, NH);
+      expect(x).not.toBe(absX);
+      expect(emitsOf('aoe:move')).toEqual([{ locationId: 'L1', aoeId: 'A', x, y }]);
+    });
+
+    it('un tap su un overlay seleziona senza piazzare una nuova area', () => {
+      setServer([aoe()]);
+      const { svg } = mount();
+      act(() => get().forceMode('aoe'));
+      pointer(poly(svg), 'pointerdown', 100, 75);
+      pointer(poly(svg), 'pointerup', 100, 75);
+      expect(get().selectedAoeId).toBe('A');
+      expect(emitsOf('aoe:place')).toEqual([]);
+    });
+  });
+
   describe('(d) guardie di modalita e disponibilita', () => {
     it('fuori da aoe nessun emit, e il cambio modalita scarta il drag', () => {
       setServer([aoe()]);

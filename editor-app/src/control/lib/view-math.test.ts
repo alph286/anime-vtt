@@ -82,3 +82,40 @@ describe('panDeltaForDrag', () => {
     expect(panDeltaForDrag(args({ imageRect: null }), 1, 1)).toBeNull();
   });
 });
+
+// Caso ruotato di 90° derivato a mano da control.js (computeViewportScreenRect
+// e il pointermove del pan). Mappa 2000×1000 (rotazione automatica 0) con
+// rotate90 -> rotation 90. TV 1000×500 -> spazio effettivo 500×1000,
+// tvFit = fitRect(500,1000,2000,1000) = {left 0, top 375, w 500, h 250}.
+// Anteprima 400×200 -> spazio effettivo 200×400, imageRect =
+// fitRect(200,400,2000,1000) = {left 0, top 150, w 200, h 100}.
+// rotate(-90): (x,y) -> (y,-x); rotate(+90): (x,y) -> (-y,x).
+describe('rotazione 90 (calcolo a mano)', () => {
+  const rot90 = (live: { scale: number; offsetX: number; offsetY: number }) =>
+    args({
+      location: loc({ rotate90: true, liveView: live }),
+      imageRect: { left: 0, top: 150, width: 200, height: 100 },
+    });
+
+  it('computeViewportScreenRect, S=2 offsetX=100 -> {80,50,200,100}', () => {
+    // screenToLocal(0,0): d=((0-100-500)/2, -250/2)=(-300,-125) -> (-125,300) -> (125,800)
+    // screenToLocal(1000,500): d=(200,125) -> (125,-200) -> (375,300)
+    // vista: left 125 top 300 w 250 h 500 -> frazioni .25, -.3, .5, 2
+    // locale: left 50 top 120 right 150 bottom 320
+    // localToScreen(50,120): (-50,-80) -> (80,-50) -> (280,50)
+    // localToScreen(150,320): (50,120) -> (-120,50) -> (80,150)
+    const r = computeViewportScreenRect(rot90({ scale: 2, offsetX: 100, offsetY: 0 }))!;
+    expect(r.left).toBeCloseTo(80);
+    expect(r.top).toBeCloseTo(50);
+    expect(r.width).toBeCloseTo(200);
+    expect(r.height).toBeCloseTo(100);
+  });
+
+  it('panDeltaForDrag, S=1, trascinamento (10,4) -> (-25,-10)', () => {
+    // rotate(-90)(10,4) = (4,-10); dViewLeft = 4/200*500 = 10;
+    // dViewTop = -10/100*250 = -25; rotate(+90)(10,-25) = (25,10); emesso -S*(25,10)
+    const d = panDeltaForDrag(rot90({ scale: 1, offsetX: 0, offsetY: 0 }), 10, 4)!;
+    expect(d.dx).toBeCloseTo(-25);
+    expect(d.dy).toBeCloseTo(-10);
+  });
+});

@@ -263,6 +263,35 @@ describe('gesti sulla mappa', () => {
       expect(preview.classList.contains('zoom-dragging')).toBe(false);
     });
 
+    it('pinch -> drag: alzato un dito, l\'altro trascina dalla sua ultima posizione (nessun salto)', () => {
+      setServer();
+      const { preview } = mount();
+      act(() => get().forceMode('zoom'));
+      pointer(preview, 'pointerdown', 150, 150, 1);
+      pointer(preview, 'pointerdown', 250, 150, 2);
+      pointer(preview, 'pointermove', 50, 150, 1); // dist 200 -> scale 2
+      expect(get().localZoom).toEqual({ scale: 2, x: 0, y: 0 });
+      pointer(preview, 'pointerup', 250, 150, 2);
+      expect(localStorage.getItem('zoomLocalState')).toBeNull();
+      pointer(preview, 'pointermove', 70, 160, 1);
+      expect(get().localZoom).toEqual({ scale: 2, x: 20, y: 10 });
+    });
+
+    it('pointercancel chiude il gesto come un pointerup: salva, toglie la classe, niente drag dopo', () => {
+      setServer();
+      act(() => get().setLocalZoom({ scale: 2, x: 0, y: 0 }));
+      localStorage.clear();
+      const { preview } = mount();
+      act(() => get().forceMode('zoom'));
+      pointer(preview, 'pointerdown', 100, 100);
+      pointer(preview, 'pointermove', 130, 120);
+      pointer(preview, 'pointercancel', 130, 120);
+      expect(preview.classList.contains('zoom-dragging')).toBe(false);
+      expect(JSON.parse(localStorage.getItem('zoomLocalState')!)).toEqual({ scale: 2, x: 30, y: 20 });
+      pointer(preview, 'pointermove', 160, 150);
+      expect(get().localZoom).toEqual({ scale: 2, x: 30, y: 20 });
+    });
+
     it('pinch clampato a 5', () => {
       setServer();
       const { preview } = mount();

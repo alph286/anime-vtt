@@ -79,10 +79,21 @@ describe('PanBox', () => {
     render(<MapTab />);
     click(screen.getByText('▲'));
     click(screen.getByText('◀'));
+    click(screen.getByText('▶'));
+    click(screen.getByText('▼'));
     expect(emitsOf('view:pan')).toEqual([
       ['view:pan', { locationId: 'L1', dx: 0, dy: 10 }],
       ['view:pan', { locationId: 'L1', dx: 10, dy: 0 }],
+      ['view:pan', { locationId: 'L1', dx: -10, dy: 0 }],
+      ['view:pan', { locationId: 'L1', dx: 0, dy: -10 }],
     ]);
+  });
+
+  it('clamp dello zoom a 0.2', () => {
+    setServer({}, { liveView: { scale: 0.2, offsetX: 0, offsetY: 0 } });
+    render(<MapTab />);
+    click(btn('Riduci zoom'));
+    expect(emitsOf('view:zoom')[0][1]).toEqual({ locationId: 'L1', scale: 0.2 });
   });
 
   it('zoom +/- con clamp e arrotondamento, reset', () => {
