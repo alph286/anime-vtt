@@ -13,5 +13,118 @@
   pointer-events: none;
 }
 
-.fit-box { position: absolute; }
-.media-wrap { position: relative; }
+
+/* ---------- anteprima mappa (porting di public/control/control.css) ----------
+   --vtt-accent e l'ambra del progetto: in shadcn --accent e un grigio. */
+.map-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--map-aspect, 4 / 3);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-control);
+}
+
+/* Da 700px la colonna mappa ha altezza propria: niente aspect-ratio. */
+@media (min-width: 700px) {
+  .map-preview {
+    aspect-ratio: auto;
+    min-height: 420px;
+  }
+}
+
+#map-local-zoom-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+.map-preview .media-wrap,
+.map-preview .fit-box {
+  position: absolute;
+}
+
+.map-preview .media-img,
+.map-preview .map-placeholder,
+.map-preview .fog-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.map-preview .media-img {
+  object-fit: contain;
+  display: block;
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.map-preview [hidden] { display: none; }
+
+.map-preview .map-placeholder {
+  background-color: var(--bg-canvas);
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 15px, var(--grid-line) 15px 16px),
+    repeating-linear-gradient(90deg, transparent 0 15px, var(--grid-line) 15px 16px);
+}
+
+/* Il fog of war resta nero puro, come su editor e display. */
+.map-preview .fog-overlay {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.map-preview .fog-overlay.revealed {
+  background: var(--accent-bg-subtle);
+  outline: 2px solid var(--vtt-accent);
+  outline-offset: -2px;
+}
+
+#viewport-rect {
+  position: absolute;
+  border: 2px solid var(--vtt-accent);
+  background: var(--accent-bg-subtle);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Fuori da #map-local-zoom-wrap apposta: spazio-schermo stabile, non segue
+   lo zoom locale. .pinned la fissa in un angolo in modalita pan. */
+.map-compass-marker {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.map-compass-marker.pinned {
+  left: auto;
+  top: auto;
+  right: 10px;
+  bottom: 10px;
+}
+
+.map-compass-marker svg { width: 100%; height: 100%; }
+.map-compass-marker .compass-star { fill: var(--vtt-accent); }
+.map-compass-marker .compass-hub { fill: var(--bg-panel); stroke: var(--vtt-accent); stroke-width: 2; }
+.map-compass-marker text { fill: var(--text-primary); font-size: 14px; font-weight: 600; }
+
+.grid-layer,
+.aoe-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Stesso z-index di .ping-layer in display.css, per coerenza tra le pagine. */
+.ping-layer { z-index: 4; }

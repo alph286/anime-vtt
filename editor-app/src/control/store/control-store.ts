@@ -10,7 +10,12 @@ import { loadLocalZoom, saveLocalZoom, type LocalZoom } from '../lib/local-zoom'
 export type Mode = 'pan' | 'fog' | 'ping' | 'zoom' | 'aoe' | null;
 export type TabId = 'mappa' | 'fog' | 'immagini';
 export interface TelegramFeedback { imageId: string; ok: boolean; error?: string }
-export interface Geometry { imageRect: Rect | null; rotation: number; naturalW: number; naturalH: number }
+// previewW/H = dimensioni di #map-preview (spazio non zoomato), servono al
+// riquadro giallo e al clamp dello zoom locale.
+export interface Geometry {
+  imageRect: Rect | null; rotation: number; naturalW: number; naturalH: number;
+  previewW: number; previewH: number;
+}
 
 interface AoeDefaults {
   shape: AoeShape; color: string; size: number; width: number; shaderOverride: string | null;
@@ -110,7 +115,7 @@ export const useControlStore = create<ControlStore>()(
     aoeShaderMenuOpen: false,
     telegramPending: false,
     telegramFeedback: null,
-    geometry: { imageRect: null, rotation: 0, naturalW: 0, naturalH: 0 },
+    geometry: { imageRect: null, rotation: 0, naturalW: 0, naturalH: 0, previewW: 0, previewH: 0 },
 
     receiveState: (s) => set((d) => {
       d.server = s as never;
