@@ -159,5 +159,24 @@ button,
   pointer-events: none;
 }
 
+/* stroke-width NON e qui: lo spessore (2, o 3 se .selected) e compensato
+   per lo zoom locale e impostato inline da AoeOverlays. */
+.aoe-shape-overlay {
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+}
+
+/* "all", non "auto": con shapeVisible:false o area lanciata fill e stroke
+   sono "none", e pointer-events:auto su un fill "none" non intercetta i
+   tocchi sull'interno della forma -- resterebbe trascinabile solo sfiorando
+   il bordo. "all" usa sempre la sola geometria per l'hit-test. */
+.map-preview.mode-aoe .aoe-shape-overlay {
+  pointer-events: all;
+}
+
+.aoe-cell-highlight {
+  pointer-events: none;
+}
+
 /* Stesso z-index di .ping-layer in display.css, per coerenza tra le pagine. */
 .ping-layer { z-index: 4; }

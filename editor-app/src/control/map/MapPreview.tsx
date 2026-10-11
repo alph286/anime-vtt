@@ -3,10 +3,12 @@ import { clampLocalZoomPan } from '../lib/local-zoom';
 import { useMapGeometry } from '../hooks/use-map-geometry';
 import { useShaderLoop } from '../hooks/use-shader-loop';
 import { selectPreviewLocation, useControlStore } from '../store/control-store';
+import { AoeOverlays } from './AoeOverlays';
 import { CompassMarker } from './CompassMarker';
 import { FogOverlays } from './FogOverlays';
 import { mapRefs, type MapMedia } from './map-refs';
 import { ViewportRect } from './ViewportRect';
+import { useAoeGesture } from './use-aoe-gesture';
 import { useFogTap } from './use-fog-tap';
 import { useLocalZoomGesture } from './use-local-zoom-gesture';
 import { usePanGesture } from './use-pan-gesture';
@@ -20,7 +22,7 @@ const MODE_CLASSES = ['pan', 'fog', 'ping', 'zoom', 'aoe'] as const;
 // quest'ordine, che e anche l'ordine di sovrapposizione. Riquadro giallo e
 // bussola stanno FUORI da #map-local-zoom-wrap: restano in spazio schermo
 // stabile, non seguono lo zoom locale. I tre canvas li disegna useShaderLoop;
-// l'svg AOE lo collegano i task successivi.
+// l'svg AOE lo possiede AoeOverlays.
 export default function MapPreview() {
   const location = useControlStore(selectPreviewLocation);
   const grid = location?.map.grid;
@@ -64,6 +66,7 @@ export default function MapPreview() {
   useFogTap();
   useLocalZoomGesture();
   usePingGesture();
+  useAoeGesture();
   // Loop WebGL (Portale, AOE lanciate, ping): stesso vincolo, legge i
   // canvas da mapRefs.fitBox.
   useShaderLoop();
@@ -172,7 +175,7 @@ export default function MapPreview() {
             <FogOverlays />
             <svg ref={gridSvgRef} id="map-grid-svg" className="grid-layer" viewBox="0 0 100 100" preserveAspectRatio="none" />
             <canvas id="map-aoe-shader-canvas" className="shader-layer aoe-shader-layer" />
-            <svg id="map-aoe-svg" className="aoe-svg" viewBox="0 0 100 100" preserveAspectRatio="none" />
+            <AoeOverlays />
             <canvas id="map-ping-canvas" className="ping-layer" />
           </div>
         </div>

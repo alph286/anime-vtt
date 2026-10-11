@@ -34,7 +34,7 @@ declare function snapAoeOrigin(
 // Le AoE non hanno ancora un tipo condiviso in types.ts: forma volutamente larga.
 type AoeLike = Record<string, any>;
 declare function aoeOutlinePoints(aoe: AoeLike, grid: import('./types').Grid, naturalW: number, naturalH: number): Pt[];
-declare function aoeAffectedCells(aoe: AoeLike, grid: import('./types').Grid, naturalW: number, naturalH: number): Array<[number, number]>;
+declare function aoeAffectedCells(aoe: AoeLike, grid: import('./types').Grid, naturalW: number, naturalH: number): Array<{ col: number; row: number }>;
 declare function cellRectPercent(
   col: number, row: number, grid: import('./types').Grid, naturalW: number, naturalH: number
 ): { leftPct: number; topPct: number; widthPct: number; heightPct: number };

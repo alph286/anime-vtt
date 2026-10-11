@@ -21,7 +21,7 @@ interface AoeDefaults {
   shape: AoeShape; color: string; size: number; width: number; shaderOverride: string | null;
 }
 
-interface ControlStore {
+export interface ControlStore {
   server: ControlState | null;
   socketConnected: boolean;
   displayConnected: boolean;
