@@ -25,7 +25,10 @@ export function TabBar() {
           disabled={id === 'immagini' && previewing}
           className={
             'h-auto min-h-[60px] flex-col gap-1 rounded-none px-1 pt-2 pb-1.5 text-[11px] font-semibold tracking-[0.02em] text-muted-foreground ' +
-            'data-[state=active]:text-primary data-[state=active]:bg-transparent dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-transparent ' +
+            // dark:...text-primary serve: il trigger shadcn ha
+            // dark:data-[state=active]:text-foreground, piu specifico.
+            // L'originale non ha la sottolineatura della variante "line".
+            'after:hidden data-[state=active]:text-primary dark:data-[state=active]:text-primary data-[state=active]:bg-transparent dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-transparent ' +
             'active:bg-[var(--accent-bg-subtle)] disabled:opacity-35 ' +
             // Su schermi larghi la Mappa e sempre visibile: niente scheda.
             (id === 'mappa' ? 'min-[700px]:hidden' : '')
