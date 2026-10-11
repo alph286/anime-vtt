@@ -86,6 +86,11 @@ export const useEditorStore = create<EditorStore>()(
       set((st) => {
         st.server = s;
         const hasActive = Boolean(s.activeLocationId) && s.locations.some((l) => l.id === s.activeLocationId);
+        const loc = s.locations.find((l) => l.id === s.activeLocationId);
+        if (hasActive && loc) {
+          if (st.selectedPolygonId && !loc.map.polygons.some((p) => p.id === st.selectedPolygonId)) st.selectedPolygonId = null;
+          if (st.selectedShaderId && !loc.map.shaders.some((x) => x.id === st.selectedShaderId)) st.selectedShaderId = null;
+        }
         if (!hasActive) {
           st.mode = 'select';
           st.drawing = emptyDraft();
@@ -149,6 +154,6 @@ export const useEditorStore = create<EditorStore>()(
     toggleSquareConstrain: () => set((st) => { st.gridSquareConstrain = !st.gridSquareConstrain; }),
     setSidebarTab: (t) => set({ sidebarTab: t }),
     setUploadWarning: (msg) => set({ uploadWarning: msg }),
-    resetForLocationChange: () => set({ selectedPolygonId: null, drawing: emptyDraft(), editorZoom: 1 }),
+    resetForLocationChange: () => set({ selectedPolygonId: null, selectedShaderId: null, drawing: emptyDraft(), editorZoom: 1 }),
   }))
 );

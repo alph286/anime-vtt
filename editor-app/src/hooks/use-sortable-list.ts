@@ -64,6 +64,8 @@ export function useSortableList(ids: string[], onCommit: (orderedIds: string[]) 
         orderRef.current = null;
         cleanup();
         setDragOrder(null);
+        const start = idsRef.current;
+        if (finalOrder.length === start.length && finalOrder.every((id, i) => id === start[i])) return;
         commitRef.current(finalOrder);
       };
       window.addEventListener('pointermove', onMove);

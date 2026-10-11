@@ -50,6 +50,28 @@ describe('stato server', () => {
   });
 });
 
+describe('selezioni orfane', () => {
+  it('receiveState azzera le selezioni che non esistono più', () => {
+    const s = useEditorStore.getState();
+    s.receiveState(makeState());
+    s.select({ polygon: 'p1', shader: 'gone' });
+    s.receiveState(makeState());
+    const after = useEditorStore.getState();
+    expect(after.selectedPolygonId).toBe('p1');
+    expect(after.selectedShaderId).toBeNull();
+    s.select({ polygon: 'zz' });
+    s.receiveState(makeState());
+    expect(useEditorStore.getState().selectedPolygonId).toBeNull();
+  });
+
+  it('resetForLocationChange azzera anche lo shader selezionato', () => {
+    const s = useEditorStore.getState();
+    s.select({ polygon: 'p1', shader: 's1' });
+    s.resetForLocationChange();
+    expect(useEditorStore.getState().selectedShaderId).toBeNull();
+  });
+});
+
 describe('strumenti', () => {
   it('chooseDrawTool deseleziona il poligono; chooseShaderTool imposta il tipo e azzera la bozza', () => {
     const s = useEditorStore.getState();

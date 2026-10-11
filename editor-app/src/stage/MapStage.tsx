@@ -60,8 +60,7 @@ export function MapStage({
   useLayoutEffect(() => {
     stageRefs.canvas = canvasRef.current;
     stageRefs.wrap = wrapRef.current;
-    stageRefs.recompute = recompute;
-    return () => { stageRefs.canvas = null; stageRefs.wrap = null; stageRefs.recompute = null; };
+    return () => { stageRefs.canvas = null; stageRefs.wrap = null; };
   }, [recompute]);
 
   // Caricamento del media attivo (immagine o video).
