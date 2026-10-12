@@ -432,6 +432,40 @@ lavorassi su un altro branch ma va bene così per questa volta") — per la
 prossima richiesta di questo tipo, proporre esplicitamente un branch
 dedicato prima di iniziare invece di assumere il branch corrente.
 
+## Audio: dissolvenze e stato reale del display (fatto, branch `claude/audio-development-proposals-664ebb`)
+
+Spec e piano: `docs/superpowers/specs/2026-10-12-audio-fade-status-design.md`,
+`docs/superpowers/plans/2026-10-12-audio-fade-status.md`.
+
+**Decisioni chiave**
+- Motore in `public/shared/audio-fade.js` (script classico + `module.exports`,
+  testato con `node --test public/shared/audio-fade.test.js`): due `<audio>` su
+  `/display` (`scene-audio`, `scene-audio-b`), rampe lineari. Costanti
+  `AUDIO_FADE` in un solo punto: 2000/400/600/300/1500 ms.
+- Cambio file della principale = crossfade. Sting = la principale sfuma in
+  pausa MANTENENDO la posizione e riprende da lì (prima ripartiva da zero).
+  Cambio location durante lo sting scarta la principale ducked.
+- `requestFrame` di `display.js` ha un timer di riserva (100 ms): a pagina
+  nascosta `requestAnimationFrame` non scatta e i fade restavano a volume 0.
+- Modello server invariato. Nuovo `audio:status` display → server (solo da un
+  socket con `hello role display`), tenuto in memoria in `displayAudio` e
+  aggiunto a `state:update` con `statePayload()`; azzerato quando l'ultimo
+  display si disconnette. Mai in `state`, mai su disco.
+- `AudioBox` su `/control` mostra "Display: in riproduzione / fermo / file non
+  trovato o illeggibile / audio bloccato dal browser / non connesso".
+- Nessun avviso o click su `/display` (Raspberry in kiosk senza input);
+  l'autoplay non è stato toccato.
+- `public/control/` ricostruita e committata; `/display` è vanilla, nessuna build.
+
+**Verificato**: server di prova :3100 con dati temporanei; volumi, `paused` e
+`currentTime` dei due `<audio>` durante play, sting, stop, pausa; riga di stato
+su `/control` per fermo/in riproduzione/errore (file corrotto)/non connesso.
+`node --test` media 38/38 + audio-fade 19/19; Vitest tutto verde.
+
+**Non verificato a mano**: l'ascolto (durate e curva dei fade sono da giudicare
+dal vivo: ritoccare `AUDIO_FADE`); due `<audio>` contemporanei sul Pi 4 vero;
+lo stato `blocked` (l'autoplay nel browser di prova non è stato rifiutato).
+
 # Piano di lavoro
 
 Elenco delle cose da fare sul progetto, aggiornato man mano che si procede.
