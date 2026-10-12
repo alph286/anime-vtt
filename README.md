@@ -20,7 +20,7 @@ creare da nessuna parte.
 
 ## Cos'è, in pratica
 
-Il programma ha **quattro pagine**, ognuna con un ruolo diverso:
+Il programma ha **cinque pagine**, ognuna con un ruolo diverso:
 
 - **`/editor`** — la usi prima della sessione, dal tuo PC: qui carichi le
   mappe, disegni le zone coperte dalla nebbia di guerra, tracci la griglia
@@ -33,12 +33,18 @@ Il programma ha **quattro pagine**, ognuna con un ruolo diverso:
   ai giocatori, gestisci l'audio della location.
 - **`/display`** — è quella che resta aperta sulla TV, a schermo intero: i
   giocatori la guardano e basta, non la toccano mai.
+- **`/party`** — da dare in mano ai giocatori (uno smartphone a testa, o uno
+  condiviso): mostra la stessa porzione di mappa che il DM sta mandando
+  sulla TV e permette di piazzare e muovere le proprie aree d'effetto
+  degli incantesimi. Niente altro: nessun controllo del DM è raggiungibile
+  da qui.
 - **`/opzioni`** — impostazioni generali: qui configuri l'URL di PicSender e
   il nome della campagna, senza dover toccare file a mano.
 
-`/editor`, `/control` e `/display` restano sincronizzate in tempo reale:
-quello che fai sul telefono in `/control` appare subito sulla TV in
-`/display`, senza bisogno di premere "aggiorna" o ricaricare nulla.
+`/editor`, `/control`, `/display` e `/party` restano sincronizzate in tempo
+reale: quello che fai sul telefono in `/control` appare subito sulla TV in
+`/display` e sugli smartphone dei giocatori in `/party`, senza bisogno di
+premere "aggiorna" o ricaricare nulla.
 
 ## Cosa ti serve prima di iniziare
 
@@ -170,6 +176,7 @@ Sullo stesso computer dove hai avviato il programma, apri un browser
 - `http://localhost:3000/editor` — per preparare le mappe
 - `http://localhost:3000/control` — per pilotare la sessione
 - `http://localhost:3000/display` — quella che andrà sulla TV
+- `http://localhost:3000/party` — per i giocatori (smartphone)
 - `http://localhost:3000/opzioni` — per configurare l'URL di PicSender e il
   nome della campagna
 
@@ -186,7 +193,7 @@ rete locale del computer. Per trovarlo:
 
 Poi dal telefono vai su `http://192.168.1.23:3000/control` (sostituendo con
 il tuo indirizzo reale). Stessa cosa per aprire `/display` su un'altra TV o
-computer della rete.
+computer della rete, e `/party` sugli smartphone dei giocatori.
 
 ## Come si usa, in breve
 
@@ -204,6 +211,11 @@ computer della rete.
    un'immagine a schermo intero ai giocatori quando serve.
 3. **`/display`** (TV): non richiede nessuna azione — mostra semplicemente
    quello che decidi da `/control`, aggiornandosi da solo in tempo reale.
+4. **`/party`** (smartphone dei giocatori): mostra la mappa com'è inquadrata
+   sulla TV; i giocatori piazzano e muovono da soli le proprie aree
+   d'effetto. Per vedere la stessa inquadratura della TV serve che `/display`
+   sia stato aperto almeno una volta da quando il programma è partito:
+   altrimenti `/party` mostra la mappa intera.
 
 ### Aree d'effetto degli incantesimi
 
@@ -217,6 +229,18 @@ già piazzata per ridimensionarla o cambiarle colore senza doverla
 ricreare da capo. Per Sfera e Cubo un mirino "+" segna il punto d'origine
 esatto (un vertice di griglia o un centro-cella): è visibile sia su
 `/control` che su `/display`.
+
+### Vista dei giocatori (`/party`)
+
+`/party` è pensata per il tavolo: la mappa segue lo stesso pan e zoom che il
+DM mostra sulla TV, quindi i giocatori vedono la stessa porzione, solo più
+piccola. Sopra la mappa c'è il pannello delle aree d'effetto (forme,
+colori, dimensione, lista) e il pad flottante per ruotare, spostare e
+lanciare l'area selezionata; la sua posizione viene ricordata dal telefono.
+Quando il DM mostra un'immagine ai giocatori, su `/party` non cambia nulla
+di visibile, ma in quel momento non si possono piazzare né spostare aree
+dalla mappa. Più giocatori su `/party` condividono la stessa lista di aree:
+chi modifica o elimina per ultimo vince.
 
 ### Decorazioni a shader
 
@@ -289,6 +313,12 @@ sessione.
 
 ## Domande frequenti
 
+**L'audio non parte su `/display`.** Alcuni browser bloccano la
+riproduzione automatica dell'audio finché non c'è stata almeno
+un'interazione con la pagina. Clicca una volta in un punto qualsiasi della
+scheda `/display` (o premi un tasto), poi riprova da `/control`. Il browser
+non mostra nessun errore: il blocco è silenzioso.
+
 **Ho chiuso la finestra del terminale e `/control`/`/display` non
 rispondono più.** È normale se hai avviato il programma con `npm run dev`:
 quella finestra deve restare aperta. Per un uso permanente senza tenere
@@ -306,6 +336,30 @@ scaricabile, utile anche solo per spostare tutto su un altro computer.
 "Anime Salve" compare solo come testo nell'interfaccia — puoi cambiarlo
 dalla pagina `/opzioni` (campo "Nome campagna"), oppure lasciarlo così, non
 ha nessun effetto sul funzionamento.
+
+## Per chi vuole modificare il codice
+
+Le pagine `/editor`, `/control` e `/party` sono applicazioni React + shadcn/ui
+che vivono in `editor-app/` (Vite, TypeScript, Tailwind). Il risultato della
+compilazione è già incluso nel repository (cartelle `public/editor/`,
+`public/control/`, `public/party/`): **per usare il programma non serve
+compilare nulla**, e il Raspberry Pi serve semplicemente file statici.
+`/display` e `/opzioni` sono rimaste in JavaScript semplice.
+
+Serve compilare di nuovo solo se modifichi il codice in `editor-app/src`:
+
+```bash
+npm run build:editor    # solo /editor
+npm run build:control   # solo /control
+npm run build:party     # solo /party
+npm run build:all       # tutte e tre
+```
+
+Per sviluppare con ricarica automatica, in un terminale tieni acceso il
+server (`npm run dev`) e in un altro lancia `npm run dev:editor`,
+`npm run dev:control` oppure `npm run dev:party` (porte 5173, 5174, 5175).
+I test del codice dell'interfaccia si lanciano con `cd editor-app && npm test`;
+quelli dei moduli condivisi con `node --test public/shared/media.test.js`.
 
 ## Ambienti separati
 
