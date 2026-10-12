@@ -107,7 +107,7 @@ describe('PartyMap', () => {
       setServer({ liveView: { scale: 2, offsetX: 40, offsetY: 0 } }, { displayViewport: vp });
       const { q, unmount } = mount();
       expect(q<HTMLElement>('#map-layer').style.transform).toBe('none');
-      expect(q<HTMLElement>('#map-preview').style.getPropertyValue('--map-aspect')).not.toBe('1000 / 500');
+      expect(q<HTMLElement>('#map-preview').style.getPropertyValue('--map-aspect')).toBe('');
       unmount();
     }
   });
@@ -164,7 +164,7 @@ describe('PartyMap', () => {
     localStorage.setItem('zoomLocalState', JSON.stringify({ scale: 3, x: 0, y: 0 }));
     useControlStore.setState({ localZoom: { scale: 3, x: 0, y: 0 }, dmGridOpacity: 0.1 });
     act(() => get().resetLocalZoom());
-    setServer({ aoes: [aoe()] });
+    setServer({ scale: 2, liveView: { scale: 2, offsetX: 0, offsetY: 0 }, aoes: [aoe()] });
     const { svg } = mount();
     expect(poly(svg).style.strokeWidth).toBe('2');
     expect(gridSpy.mock.calls.at(-1)![1].opacity).toBe(0.8);

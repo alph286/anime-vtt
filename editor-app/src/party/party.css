@@ -1,14 +1,14 @@
-/* Stili di /party. Questo foglio e il solo caricato dalla pagina: control.css
-   NON c'e, quindi il blocco mappa e portato per intero (da party.css
-   originale) invece di affidarsi alle regole di /control. In particolare la
-   media query >=700px di control.css (aspect-ratio:auto, min-height) qui non
-   esiste: il box deve restare una replica in scala di /display. */
+/* Stili di /party. Questo foglio e il solo foglio mappa della pagina: party/main.tsx
+   NON importa control.css (la sua media query >=700px metterebbe min-height:420px
+   al box, che deve restare una replica in scala di /display). Il blocco mappa e
+   quindi portato per intero qui. */
 
 /* ---------- mappa ---------- */
 .map-preview {
   position: relative;
   width: 100%;
   aspect-ratio: var(--map-aspect, 4 / 3);
+  min-height: 0;
   border-radius: 10px;
   overflow: hidden;
   background: var(--bg-canvas);
