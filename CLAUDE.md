@@ -138,6 +138,76 @@ che il loop riceva i gruppi e le aree giuste); invio Telegram reale (mai premuto
 "Invia"); riproduzione audio udibile (solo lo stato sul server); confronto
 affiancato con il /control originale (solo confronto col codice).
 
+## Porting di /party su React + shadcn/ui (fatto, branch `party-display-shadcn`)
+
+`/party` non è più vanilla JS: è la quarta entry dello stesso progetto Vite,
+`editor-app/` (config `vite.party.config.ts`, root `editor-app/party`, codice in
+`editor-app/src/party/**`). Spec e piano:
+`docs/superpowers/specs/2026-10-12-party-shadcn-design.md` e
+`docs/superpowers/plans/2026-10-12-party-shadcn.md`; verifica di parità:
+`docs/superpowers/plans/2026-10-12-party-shadcn-parity.md`. Il vecchio
+`public/party/{party.js,party.css}` è stato rimosso e `index.html` sovrascritto
+dalla build (restano nella cronologia git).
+
+**Ordine di merge**: il branch è creato SOPRA `control-shadcn` e ne riusa store e
+componenti: `control-shadcn` va in `main` per primo, poi questo.
+
+**Decisioni chiave**
+- **Riuso di /control, mai copie**: stesso store Zustand `control-store`, stessi
+  `AoePanel`, `AoeNudgePad`, `use-aoe-gesture`, `use-map-geometry`, `use-shader-loop`.
+  /party ha solo `PartyApp` (header + mappa + pannello + pad), `PartyMap` (mappa che
+  segue `/display`), `follow-math.ts` (formula pura del transform) e
+  `use-party-socket.ts`.
+- **Modalità fissa `aoe`**: dopo ogni `state:update` l'anteprima è forzata sulla
+  location attiva e `mode` resta `aoe` (`syncPartyState`), anche con immagine mostrata
+  o mappa senza file; la selezione AOE non più valida viene azzerata.
+- **Nessun gating tranne il gesto con immagine mostrata**: con `activeImageId` la
+  mappa e le aree restano visibili com'erano (l'immagine non compare su /party), ma
+  tap e trascinamento sulla mappa non piazzano né spostano; pannello e pad restano
+  usabili. Tolta l'immagine il gesto torna attivo.
+- **Segue l'inquadratura di /display**: box con la proporzione di
+  `state.displayViewport`, `translate(offset*k) scale(live.scale)` con
+  k = larghezza box / larghezza display, griglia compensata (lineWidth/scale), contorno
+  AOE no. Senza `displayViewport`: mappa intera, nessun transform.
+- **Chiave del pad dedicata**: `partyAoeNudgeOverlayPos` (mai `aoeNudgeOverlayPos`).
+  Le preferenze locali di /control nello stesso localStorage (`zoomLocalState`,
+  `dmGridVisible`, `dmGridOpacity`) sono ignorate: lo zoom locale è azzerato in
+  memoria senza toccare lo storage.
+- **`/display` volutamente lasciato vanilla** (fuori da questo porting).
+- **Le quattro parametrizzazioni di /control** (retrocompatibili, default = comportamento
+  di prima): `lib/prefs.ts` `loadNudgePos/saveNudgePos(key?)`; prop `storageKey` di
+  `AoeNudgePad`; `useAoeGesture({ isActive })` (/party passa "nessuna immagine
+  mostrata"); `useMapGeometry({ aspect })` che sovrascrive `--map-aspect`.
+- **Build committata**: Express serve `public/party/`; va ricostruita e ricommittata a
+  ogni modifica di `editor-app/src/party`, `editor-app/party` o dei componenti di
+  /control che riusa: `npm run build:party` dalla radice (oppure `npm run build:all`).
+  Sviluppo: `npm run dev:party` (Vite su :5175, proxy verso :3000, o `VTT_BACKEND`).
+  `vite.party.config.ts` inoltra anche `/party/shared/*`: in dev Vite antepone la base
+  agli `<script>` classici di `index.html`, che altrimenti davano 404.
+
+**Corretti durante la verifica in browser**: (1) 404 di `media.js`/`shader-effects.js`
+in dev (proxy sopra); (2) stato iniziale perso: se il socket era già connesso al mount
+dell'hook, lo `state:update` che il server manda solo alla connessione andava perso e
+la pagina restava vuota fino alla prima azione del DM (1 reload su 6); ora l'hook si
+riconnette se è connesso senza stato.
+
+**Da sapere (non corretti, fuori da /party)**: `vite.shared.ts` non ha il proxy con la
+base, quindi `dev:control` e `dev:editor` probabilmente hanno lo stesso 404 in dev
+(la build no); `use-control-socket.ts` ha lo stesso rischio di stato iniziale perso.
+
+**Verificato**: su copia dei dati, server di prova :3100, dev server :5175, aperta
+solo `/party/` (display e DM simulati da client socket.io Node verso la 3100): header,
+follow con e senza display (transform ricalcolato a mano), griglia compensata, fog,
+loop shader che parte e si ferma, pannello AOE, gesto e soglia, pad (anche a mappa
+ruotata), immagine mostrata, cambio location, reload con preferenze di /control nello
+storage. Vitest 298/298, `node --test public/shared/media.test.js` 38/38.
+
+**Non verificato a mano**: touch e trascinamento col dito su un telefono vero (solo
+mouse in emulazione mobile); resa visiva degli shader (solo il loop rAF); confronto
+affiancato con un vero `/display` acceso (vietato aprirlo: `displayViewport` è globale
+sul server); tavolo con più telefoni insieme; build di produzione aperta nel browser
+(solo controllata via curl che index, asset e `/shared/*` rispondano 200).
+
 ## Menù "Shaders" con sottomenù + trasforma ad angoli stile Photoshop (fatto)
 
 Tre richieste distinte nella stessa sessione, sul menù "Decorazioni" appena
