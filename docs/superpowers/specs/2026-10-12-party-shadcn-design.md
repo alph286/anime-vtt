@@ -57,8 +57,20 @@ una TV/monitor e ogni regressione si vedrebbe sullo schermo dei giocatori. Non s
   senza file). **Eccezione richiesta dall'utente (cambio rispetto all'originale):** quando
   sul display è mostrata un'immagine (`server.activeImageId` valorizzato) `/party` non
   può piazzare né spostare aree dalla mappa. Il gesto torna attivo appena l'immagine
-  sparisce. Non cambia altro: pannello, lista e pad restano utilizzabili (si può
-  eliminare o regolare un'area già esistente); eventuale blocco più ampio si decide
+  sparisce.
+- **Immagini mostrate (richiesta dell'utente, novità rispetto all'originale):** oggi `/party`
+  ignora le immagini e continua a mostrare la mappa. Ora, quando `server.activeImageId`
+  corrisponde a un'immagine della location attiva, `/party` mostra l'immagine **sopra** la
+  mappa, come `#image-layer` di `/display` (stesso `fitRect`/`positionFitBox`, file da
+  `/storage/images/<file>`, nessun pan/zoom). La mappa e le sue aree AOE **restano montate
+  sotto** l'immagine (coperte, non rimosse né azzerate): se ce n'erano, tornano visibili
+  identiche appena l'immagine sparisce. Differenza da `/display`, che nasconde il livello
+  mappa con `display:none` e ne svuota l'svg AOE: qui il livello mappa non viene
+  nascosto ma coperto, e l'svg AOE non viene toccato. L'immagine ha `pointer-events` attivi
+  per coprire anche i tocchi: il gesto sulla mappa è comunque bloccato dal controllo
+  sopra. Il box mantiene la stessa proporzione del follow.
+- Il resto non cambia: pannello, lista e pad restano utilizzabili con un'immagine mostrata
+  (si può eliminare o regolare un'area esistente); eventuale blocco più ampio si decide
   dopo averlo visto in uso.
 
 ## Architettura
@@ -102,6 +114,8 @@ mai copie.
 ### Componenti (`src/party/`)
 - `PartyApp`: header (`StatusBar` semplificato: wifi + nome, senza `Select`), `PartyMap`,
   `AoePanel` (nel `Box` esistente), `AoeNudgePad storageKey="partyAoeNudgeOverlayPos"`.
+- `PartyImageLayer`: livello immagine sopra `PartyMap`, visibile solo con un'immagine
+  mostrata (porting di `renderImage` di `display.js`).
 - `PartyMap`: stessa gerarchia di layer di `MapPreview` (media, placeholder, canvas Portale,
   fog, griglia, canvas shader AOE, svg AOE) **senza** canvas ping, riquadro giallo, bussola
   né wrapper di zoom locale. Il transform follow si applica a un `#map-layer` via ref
@@ -115,7 +129,7 @@ mai copie.
 ### Test e verifica
 - Vitest: `follow-math` (con/senza viewport, k, scala griglia), `usePartySocket` (hello,
   stato, mode forzata), montaggio di `PartyApp` con lo store vero (pannello, lista,
-  elimina arma-poi-conferma, nessun fulmine, gesto bloccato con immagine mostrata e di nuovo attivo senza, nessun altro gating), i quattro
+  elimina arma-poi-conferma, nessun fulmine, gesto bloccato con immagine mostrata e di nuovo attivo senza, immagine sopra la mappa con aree ancora montate sotto (e identiche al ritorno), nessun altro gating), i quattro
   punti di parametrizzazione (default invariato + valore passato).
 - `npm test` e `npm run typecheck` verdi sull'intero `editor-app/` (i 260 test di
   `/control` e quelli dell'editor devono restare verdi). `node --test public/shared/media.test.js` 38/38.
