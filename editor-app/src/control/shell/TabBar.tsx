@@ -15,7 +15,7 @@ export function TabBar() {
     <TabsList
       variant="line"
       aria-label="Sezioni"
-      className="h-auto w-full shrink-0 gap-0 rounded-none border-t bg-card p-0 pb-[env(safe-area-inset-bottom)] min-[700px]:justify-center min-[700px]:gap-2 min-[700px]:rounded-b-xl"
+      className="h-auto group-data-[orientation=horizontal]/tabs:h-auto w-full shrink-0 gap-0 rounded-none border-t bg-card p-0 pb-[env(safe-area-inset-bottom)] min-[700px]:justify-center min-[700px]:gap-2 min-[700px]:rounded-b-xl"
     >
       {TABS.map(({ id, label, Icon }) => (
         <TabsTrigger
