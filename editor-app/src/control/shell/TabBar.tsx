@@ -15,7 +15,7 @@ export function TabBar() {
     <TabsList
       variant="line"
       aria-label="Sezioni"
-      className="h-auto w-full shrink-0 gap-0 rounded-none border-t bg-card p-0 pb-[env(safe-area-inset-bottom)] min-[700px]:rounded-b-xl"
+      className="h-auto w-full shrink-0 gap-0 rounded-none border-t bg-card p-0 pb-[env(safe-area-inset-bottom)] min-[700px]:justify-center min-[700px]:gap-2 min-[700px]:rounded-b-xl"
     >
       {TABS.map(({ id, label, Icon }) => (
         <TabsTrigger
@@ -24,7 +24,8 @@ export function TabBar() {
           // Le immagini si mostrano solo sulla location attiva.
           disabled={id === 'immagini' && previewing}
           className={
-            'h-auto min-h-[60px] flex-col gap-1 rounded-none px-1 pt-2 pb-1.5 text-[11px] font-semibold tracking-[0.02em] text-muted-foreground ' +
+            // Su schermi larghi le schede non si stirano ai due estremi: restano vicine, centrate.
+            'h-auto min-h-[60px] flex-col gap-1 rounded-none px-1 pt-2 pb-1.5 min-[700px]:w-32 min-[700px]:flex-none text-[11px] font-semibold tracking-[0.02em] text-muted-foreground ' +
             // dark:...text-primary serve: il trigger shadcn ha
             // dark:data-[state=active]:text-foreground, piu specifico.
             // L'originale non ha la sottolineatura della variante "line".
