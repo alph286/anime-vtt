@@ -91,3 +91,14 @@
 }
 .aoe-shape-overlay.selected { stroke-width: 3; }
 .aoe-cell-highlight { pointer-events: none; }
+
+/* ---------- pulsanti fuori dalla mappa ---------- */
+/* Niente doppio-tap-zoom ne evidenziazione/selezione al tocco. Specificita
+   bassa apposta: deve perdere contro `.map-preview *` (touch-action:none). */
+button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+[hidden] { display: none; }
