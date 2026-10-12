@@ -166,7 +166,7 @@ componenti: `control-shadcn` va in `main` per primo, poi questo.
   tap e trascinamento sulla mappa non piazzano né spostano; pannello e pad restano
   usabili. Tolta l'immagine il gesto torna attivo.
 - **Segue l'inquadratura di /display**: box con la proporzione di
-  `state.displayViewport`, `translate(offset*k) scale(live.scale)` con
+  `state.displayViewport`, `translate(offset*k) scale((map.scale||1)*(live.scale||1))` con
   k = larghezza box / larghezza display, griglia compensata (lineWidth/scale), contorno
   AOE no. Senza `displayViewport`: mappa intera, nessun transform.
 - **Chiave del pad dedicata**: `partyAoeNudgeOverlayPos` (mai `aoeNudgeOverlayPos`).
