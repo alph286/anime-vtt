@@ -13,5 +13,5 @@
     "paths": { "@/*": ["./src/*"] },
     "types": ["vite/client"]
   },
-  "include": ["src", "control", "vite.config.ts", "vite.shared.ts", "vite.control.config.ts"]
+  "include": ["src", "control", "party", "vite.config.ts", "vite.shared.ts", "vite.control.config.ts", "vite.party.config.ts"]
 }

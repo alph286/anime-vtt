@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "vite",
     "dev:control": "vite --config vite.control.config.ts",
+    "dev:party": "vite --config vite.party.config.ts",
     "build": "tsc --noEmit && vite build",
     "build:control": "tsc --noEmit && vite build --config vite.control.config.ts",
+    "build:party": "tsc --noEmit && vite build --config vite.party.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
