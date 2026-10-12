@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/socket', () => ({
-  socket: { on: vi.fn(), off: vi.fn(), emit: vi.fn(), connected: false },
+  socket: { on: vi.fn(), off: vi.fn(), emit: vi.fn(), connect: vi.fn(), disconnect: vi.fn(), connected: false },
 }));
 
 import { socket } from '@/lib/socket';
@@ -31,6 +31,9 @@ describe('usePartySocket', () => {
     }) as never);
     vi.mocked(socket.off).mockClear();
     vi.mocked(socket.emit).mockClear();
+    vi.mocked(socket.connect).mockClear();
+    vi.mocked(socket.disconnect).mockClear();
+    (socket as { connected: boolean }).connected = false;
     useControlStore.setState({
       server: null, previewLocationId: null, previewImageId: null, mode: null,
       selectedAoeId: null, socketConnected: false,
@@ -88,6 +91,28 @@ describe('usePartySocket', () => {
     renderHook(() => usePartySocket());
     expect(() => handlers['state:update'](state({ activeLocationId: null, locations: [] }))).not.toThrow();
     expect(get().previewLocationId).toBeNull();
+  });
+
+  it('gia connesso al mount senza stato: si riconnette per ricevere lo state:update iniziale perso', () => {
+    (socket as { connected: boolean }).connected = true;
+    renderHook(() => usePartySocket());
+    expect(socket.disconnect).toHaveBeenCalledTimes(1);
+    expect(socket.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('gia connesso al mount con stato gia ricevuto: nessuna riconnessione', () => {
+    (socket as { connected: boolean }).connected = true;
+    useControlStore.setState({ server: state() });
+    renderHook(() => usePartySocket());
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    expect(socket.connect).not.toHaveBeenCalled();
+    expect(socket.emit).toHaveBeenCalledWith('hello', { role: 'party' });
+  });
+
+  it('non ancora connesso al mount: nessuna riconnessione forzata', () => {
+    renderHook(() => usePartySocket());
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    expect(socket.connect).not.toHaveBeenCalled();
   });
 
   it('allo smontaggio fa off di ogni handler registrato', () => {

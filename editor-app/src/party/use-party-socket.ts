@@ -34,7 +34,15 @@ export function usePartySocket(): void {
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('state:update', onState);
-    if (socket.connected) onConnect();
+    if (socket.connected) {
+      // Il server invia lo state:update iniziale solo alla connessione: se la
+      // connessione è avvenuta prima di questo effetto, quell'evento è andato
+      // perso e la pagina resterebbe vuota fino alla prossima modifica del DM
+      // (visto in browser, intermittente). Una riconnessione lo fa rinviare,
+      // con displayViewport incluso (che /api/state non ha); il 'connect'
+      // successivo chiama onConnect.
+      if (!st().server) { socket.disconnect(); socket.connect(); } else onConnect();
+    }
     return () => {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
