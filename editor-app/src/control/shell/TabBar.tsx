@@ -31,6 +31,9 @@ export function TabBar() {
             // L'originale non ha la sottolineatura della variante "line".
             'after:hidden data-[state=active]:text-primary dark:data-[state=active]:text-primary data-[state=active]:bg-transparent dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-transparent ' +
             'active:bg-[var(--accent-bg-subtle)] disabled:opacity-35 ' +
+            // Niente contorno ambra (--ring) attorno alla scheda attiva/a fuoco:
+            // l'originale non ha ne bordo ne anello di focus sulle schede.
+            'focus-visible:border-transparent! focus-visible:ring-0! focus-visible:outline-none! ' +
             // Su schermi larghi la Mappa e sempre visibile: niente scheda.
             (id === 'mappa' ? 'min-[700px]:hidden' : '')
           }
