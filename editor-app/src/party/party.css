@@ -9,6 +9,7 @@
   width: 100%;
   aspect-ratio: var(--map-aspect, 4 / 3);
   min-height: 0;
+  flex-shrink: 0; /* in main (flex-col) non va compresso: perderebbe --map-aspect */
   border-radius: 10px;
   overflow: hidden;
   background: var(--bg-canvas);

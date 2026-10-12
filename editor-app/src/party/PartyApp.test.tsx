@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/socket', () => ({
@@ -126,5 +127,12 @@ describe('PartyApp', () => {
     render(<PartyApp />);
     expect(() => load(serverState({ activeLocationId: null, locations: [] }))).not.toThrow();
     expect(screen.getByTestId('wifi-dot')).toBeTruthy();
+  });
+
+  it('h) .map-preview non e comprimibile nel flex-col di main (regressione --map-aspect)', () => {
+    // jsdom non calcola il layout: si controlla la regola nel foglio sorgente.
+    const css = readFileSync('src/party/party.css', 'utf8');
+    const rule = /\.map-preview\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/flex-shrink:\s*0/);
   });
 });
