@@ -1,1 +1,93 @@
-/* Stili di /party (vedi Task 5). */
+/* Stili di /party. Questo foglio e il solo caricato dalla pagina: control.css
+   NON c'e, quindi il blocco mappa e portato per intero (da party.css
+   originale) invece di affidarsi alle regole di /control. In particolare la
+   media query >=700px di control.css (aspect-ratio:auto, min-height) qui non
+   esiste: il box deve restare una replica in scala di /display. */
+
+/* ---------- mappa ---------- */
+.map-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--map-aspect, 4 / 3);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-control);
+  cursor: crosshair;
+}
+
+/* Il gesto AOE vale sempre (in /control e condizionato a .mode-aoe). Senza
+   touch-action:none su touch il browser interpreta il trascinamento come
+   scroll e manda pointercancel. */
+.map-preview,
+.map-preview * {
+  touch-action: none;
+}
+
+/* Riceve il transform di pan/zoom condiviso con /display (vedi follow-math.ts). */
+#map-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: center center;
+}
+
+.map-preview .media-wrap,
+.map-preview .fit-box {
+  position: absolute;
+}
+
+.map-preview .media-img,
+.map-preview .map-placeholder,
+.map-preview .fog-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.map-preview .media-img {
+  object-fit: contain;
+  display: block;
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.map-preview [hidden] { display: none; }
+
+.map-preview .map-placeholder {
+  background-color: var(--bg-canvas);
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 15px, var(--grid-line) 15px 16px),
+    repeating-linear-gradient(90deg, transparent 0 15px, var(--grid-line) 15px 16px);
+}
+
+/* Il fog di /party e nero pieno, come su /display. */
+.map-preview .fog-overlay {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 1;
+}
+
+.grid-layer,
+.aoe-svg,
+.shader-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Il colore dell'area e inline (JS); lo spessore del contorno lo scrive
+   AoeOverlays come style.strokeWidth. */
+.aoe-shape-overlay {
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+  pointer-events: all;
+  stroke-width: 2;
+}
+.aoe-shape-overlay.selected { stroke-width: 3; }
+.aoe-cell-highlight { pointer-events: none; }
