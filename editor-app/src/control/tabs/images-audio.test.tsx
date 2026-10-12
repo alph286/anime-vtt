@@ -47,6 +47,7 @@ beforeEach(() => {
   dest.value = [{ name: 'Gruppo' }, { name: 'Altro' }];
   useControlStore.setState({
     server: null, previewLocationId: null, previewImageId: null, telegramPending: false, telegramFeedback: null,
+    displayConnected: false,
   });
 });
 
@@ -234,6 +235,37 @@ describe('AudioBox', () => {
     vi.mocked(socket.emit).mockClear();
     click(screen.getByTitle('Riduci volume'));
     expect(emitsOf('audio:volume')).toEqual([['audio:volume', { volume: 0 }]]);
+  });
+
+  it('stato del display: non connesso, poi per ogni stato riportato', () => {
+    const tracks = L(audio('m.mp3', null));
+    act(() => useControlStore.getState().setDisplayConnected(false));
+    setServer({ displayAudio: null }, tracks);
+    render(<AudioBox />);
+    expect(screen.getByTestId('display-audio-status').textContent).toContain('non connesso');
+
+    act(() => useControlStore.getState().setDisplayConnected(true));
+    expect(screen.queryByTestId('display-audio-status')).toBeNull();
+
+    const cases: [string, string, boolean][] = [
+      ['playing', 'in riproduzione', false],
+      ['idle', 'fermo', false],
+      ['error', 'file non trovato o illeggibile', true],
+      ['blocked', 'audio bloccato dal browser', true],
+    ];
+    for (const [status, text, destructive] of cases) {
+      setServer({ displayAudio: { status, slot: 'main' } }, tracks);
+      const row = screen.getByTestId('display-audio-status');
+      expect(row.textContent).toContain(text);
+      expect(row.className.includes('text-destructive')).toBe(destructive);
+    }
+  });
+
+  it('stato del display: non compare se il box e nascosto (nessuna traccia)', () => {
+    act(() => useControlStore.getState().setDisplayConnected(true));
+    setServer({ displayAudio: { status: 'error', slot: 'main' } }, L(audio(null, null)));
+    const { container } = render(<AudioBox />);
+    expect(container.innerHTML).toBe('');
   });
 
   it('riflette la location ATTIVA, non l\'anteprima', () => {

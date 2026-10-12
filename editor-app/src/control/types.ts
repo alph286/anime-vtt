@@ -34,4 +34,5 @@ export interface ControlState extends Omit<VttState, 'locations'> {
   activeAudioTrack: 'main' | 'special' | null;
   audioState: AudioPlayState | null;
   displayViewport: DisplayViewport | null;
+  displayAudio?: { status: 'playing' | 'idle' | 'error' | 'blocked'; slot: 'main' | 'special' } | null;
 }

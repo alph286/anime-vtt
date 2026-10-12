@@ -9,16 +9,28 @@ import { Box, clamp, round1 } from './Box';
 const AUDIO_VOLUME_STEP = 0.1;
 const DEFAULT_VOLUME = 0.7;
 
+const DISPLAY_AUDIO_LABELS = {
+  playing: 'in riproduzione',
+  idle: 'fermo',
+  error: 'file non trovato o illeggibile',
+  blocked: 'audio bloccato dal browser',
+} as const;
+
 // Box "Audio": riflette sempre la location ATTIVA (i comandi non hanno un
 // concetto di anteprima). Nascosto se non c'e nessuna traccia.
 export function AudioBox() {
   const location = useControlStore(selectActiveLocation);
   const activeTrack = useControlStore((s) => s.server?.activeAudioTrack ?? null);
   const playing = useControlStore((s) => s.server?.audioState === 'playing');
+  const displayConnected = useControlStore((s) => s.displayConnected);
+  const displayAudio = useControlStore((s) => s.server?.displayAudio ?? null);
   const audio = location?.map.audio;
   const hasMain = Boolean(audio?.main?.file);
   const hasSpecial = Boolean(audio?.special?.file);
   if (!hasMain && !hasSpecial) return null;
+
+  const displayLabel = !displayConnected ? 'non connesso' : displayAudio ? DISPLAY_AUDIO_LABELS[displayAudio.status] : null;
+  const displayProblem = displayConnected && (displayAudio?.status === 'error' || displayAudio?.status === 'blocked');
 
   const track = activeTrack ? audio?.[activeTrack] : undefined;
   const hasActive = Boolean(track?.file);
@@ -28,6 +40,14 @@ export function AudioBox() {
 
   return (
     <Box id="audio-section" title="Audio">
+      {displayLabel && (
+        <p
+          data-testid="display-audio-status"
+          className={cn('text-xs', displayProblem ? 'text-destructive' : 'text-muted-foreground')}
+        >
+          Display: {displayLabel}
+        </p>
+      )}
       {hasSpecial && (
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm">Traccia speciale</span>
