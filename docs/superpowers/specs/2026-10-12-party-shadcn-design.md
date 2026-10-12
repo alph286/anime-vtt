@@ -52,9 +52,14 @@ una TV/monitor e ogni regressione si vedrebbe sullo schermo dei giocatori. Non s
   sposta, snap alla griglia, `pointercancel` pulisce.
 - Loop rAF per Portale e AOE lanciate (si ferma se non serve). Nessun ping, nessuna
   bussola, nessun audio, nessun pan/zoom locale.
-- Differenza **voluta** rispetto a `/control`: nessun gating "AOE disponibile". `/party`
-  piazza e modifica aree anche se sul display c'è un'immagine mostrata o se la mappa non
-  ha file (nell'originale non c'è alcun controllo).
+- Differenza **voluta** rispetto a `/control`: `/party` non applica il gating completo di
+  `selectAoeAvailable` (nell'originale non c'è alcun controllo, e piazza anche su una mappa
+  senza file). **Eccezione richiesta dall'utente (cambio rispetto all'originale):** quando
+  sul display è mostrata un'immagine (`server.activeImageId` valorizzato) `/party` non
+  può piazzare né spostare aree dalla mappa. Il gesto torna attivo appena l'immagine
+  sparisce. Non cambia altro: pannello, lista e pad restano utilizzabili (si può
+  eliminare o regolare un'area già esistente); eventuale blocco più ampio si decide
+  dopo averlo visto in uso.
 
 ## Architettura
 
@@ -75,7 +80,7 @@ una TV/monitor e ogni regressione si vedrebbe sullo schermo dei giocatori. Non s
    (default `aoeNudgeOverlayPos`).
 2. `AoeNudgePad`: prop opzionale `storageKey`.
 3. `use-aoe-gesture`: opzione `{ isActive?: (s) => boolean }`. Default = oggi
-   (`mode==='aoe' && selectAoeAvailable`); `/party` passa `() => true`.
+   (`mode==='aoe' && selectAoeAvailable`); `/party` passa `(s) => !selectShowingImage(s)` (nessun altro requisito: solo "nessuna immagine mostrata").
 4. `use-map-geometry`: opzione `aspect?: string | null` che sovrascrive `--map-aspect`
    (caso follow). Senza opzione, comportamento identico a oggi.
 
@@ -110,7 +115,7 @@ mai copie.
 ### Test e verifica
 - Vitest: `follow-math` (con/senza viewport, k, scala griglia), `usePartySocket` (hello,
   stato, mode forzata), montaggio di `PartyApp` con lo store vero (pannello, lista,
-  elimina arma-poi-conferma, nessun fulmine, nessuna dipendenza dal gating), i quattro
+  elimina arma-poi-conferma, nessun fulmine, gesto bloccato con immagine mostrata e di nuovo attivo senza, nessun altro gating), i quattro
   punti di parametrizzazione (default invariato + valore passato).
 - `npm test` e `npm run typecheck` verdi sull'intero `editor-app/` (i 260 test di
   `/control` e quelli dell'editor devono restare verdi). `node --test public/shared/media.test.js` 38/38.
@@ -137,8 +142,8 @@ mai copie.
 - **Merge in ordine:** `control-shadcn` deve entrare in `main` per primo.
 - **Follow senza display noto:** degrada a mappa intera, come oggi; da verificare con la
   copia dei dati senza `displayViewport`.
-- **Gating assente:** il comportamento diverge volutamente da `/control`; i test lo
-  fissano per non farlo "correggere" per errore.
+- **Gating ridotto:** `/party` blocca il gesto solo con un'immagine mostrata, non con
+  mappa senza file o anteprima; diverge volutamente da `/control`, i test lo fissano.
 - **Hash degli asset:** l'`@source` condiviso di Tailwind fa cambiare gli hash anche di
   `public/editor` e `public/control` a ogni nuova build; innocuo, non si committano
   modifiche non volute (si ricostruisce e si ricommette solo `public/party`).
