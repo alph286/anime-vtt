@@ -12,7 +12,7 @@ const cell = 'flex size-11 items-center justify-center rounded-lg border border-
 // cambia colore/taglia/larghezza e lancia l'area selezionata. Compare solo in
 // modalita aoe con un'area selezionata. La cella "trascina" lo sposta dove
 // serve; la posizione si ricorda su questo dispositivo (localStorage).
-export function AoeNudgePad() {
+export function AoeNudgePad({ storageKey }: { storageKey?: string } = {}) {
   const mode = useControlStore((s) => s.mode);
   const aoe = useControlStore(selectSelectedAoe);
   const location = useControlStore(selectPreviewLocation);
@@ -48,11 +48,11 @@ export function AoeNudgePad() {
     if (!visible) {
       if (dragRef.current) {
         dragRef.current = null;
-        if (lastPos.current) saveNudgePos(lastPos.current);
+        if (lastPos.current) saveNudgePos(lastPos.current, storageKey);
       }
       return;
     }
-    if (lastPos.current === undefined) lastPos.current = loadNudgePos();
+    if (lastPos.current === undefined) lastPos.current = loadNudgePos(storageKey);
     const p = lastPos.current;
     if (p) place(p.left, p.top);
   }, [visible]);
@@ -119,7 +119,7 @@ export function AoeNudgePad() {
     const el = padRef.current;
     if (!d || e.pointerId !== d.pointerId || !el) return;
     dragRef.current = null;
-    saveNudgePos({ left: el.offsetLeft, top: el.offsetTop });
+    saveNudgePos({ left: el.offsetLeft, top: el.offsetTop }, storageKey);
   };
 
   return (

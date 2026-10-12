@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, render } from '@testing-library/react';
+import { useLayoutEffect, useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/socket', () => ({
@@ -8,6 +9,8 @@ vi.mock('@/lib/socket', () => ({
 
 import { socket } from '@/lib/socket';
 import MapTab from './MapTab';
+import { mapRefs } from './map-refs';
+import { useAoeGesture } from './use-aoe-gesture';
 import { useControlStore } from '../store/control-store';
 import type { ControlState } from '../types';
 
@@ -303,5 +306,56 @@ describe('AOE: gesti e overlay', () => {
       act(() => get().setGeometry({ ...get().geometry, naturalW: 0, naturalH: 0 }));
       expect(svg.children.length).toBe(0);
     });
+  });
+});
+
+// useAoeGesture con isActive personalizzato (usato da /party): il gesto
+// non dipende piu da mode==='aoe'.
+describe('useAoeGesture: opzione isActive', () => {
+  function Harness({ isActive }: { isActive?: (s: ReturnType<typeof useControlStore.getState>) => boolean }) {
+    const ref = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => { mapRefs.fitBox = ref.current; return () => { mapRefs.fitBox = null; }; }, []);
+    useAoeGesture(isActive ? { isActive } : undefined);
+    return <div id="map-fit-box" ref={ref} />;
+  }
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(socket.emit).mockClear();
+    useControlStore.setState({
+      server: null, previewLocationId: null, mode: null, selectedAoeId: null,
+      aoeShape: 'cone', aoeColor: 'red', aoeSize: 1.5, aoeWidth: 1.5, aoeShaderOverride: null,
+      geometry: { imageRect: null, rotation: 0, naturalW: 0, naturalH: 0, previewW: 0, previewH: 0 },
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      { left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300, x: 0, y: 0, toJSON: () => ({}) } as DOMRect,
+    );
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('isActive: () => true con mode null: il tap piazza', () => {
+    setServer();
+    const { container } = render(<Harness isActive={() => true} />);
+    act(() => get().setGeometry({
+      imageRect: { left: 0, top: 0, width: 400, height: 300 }, rotation: 0,
+      naturalW: NW, naturalH: NH, previewW: 400, previewH: 300,
+    }));
+    const fit = container.querySelector('#map-fit-box') as HTMLDivElement;
+    expect(get().mode).toBeNull();
+    pointer(fit, 'pointerdown', 40, 30);
+    pointer(fit, 'pointerup', 41, 31);
+    expect(emitsOf('aoe:place')).toHaveLength(1);
+  });
+
+  it('isActive: () => false con mode aoe: nessun piazzamento', () => {
+    setServer();
+    const { container } = render(<Harness isActive={() => false} />);
+    act(() => { get().setGeometry({
+      imageRect: { left: 0, top: 0, width: 400, height: 300 }, rotation: 0,
+      naturalW: NW, naturalH: NH, previewW: 400, previewH: 300,
+    }); get().forceMode('aoe'); });
+    const fit = container.querySelector('#map-fit-box') as HTMLDivElement;
+    pointer(fit, 'pointerdown', 40, 30);
+    pointer(fit, 'pointerup', 41, 31);
+    expect(emitsOf('aoe:place')).toHaveLength(0);
   });
 });

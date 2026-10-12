@@ -24,7 +24,11 @@ function sameGeometry(a: Geometry, b: Geometry): boolean {
 // Restituisce `recompute` (sincrono) e `schedule` (raggruppato in un
 // requestAnimationFrame, per resize/ResizeObserver: evita di leggere e
 // scrivere il layout piu volte nello stesso frame).
-export function useMapGeometry(refs: MapGeometryRefs) {
+export function useMapGeometry(refs: MapGeometryRefs, opts: { aspect?: string | null } = {}) {
+  // Aspect imposta dall'esterno (es. /party replica lo schermo del display):
+  // se presente vince su quella derivata dal media.
+  const aspectRef = useRef(opts.aspect ?? null);
+  aspectRef.current = opts.aspect ?? null;
   const recompute = useCallback(() => {
     const preview = refs.preview.current;
     const wrap = refs.mediaWrap.current;
@@ -50,6 +54,7 @@ export function useMapGeometry(refs: MapGeometryRefs) {
     } else {
       preview.style.removeProperty('--map-aspect');
     }
+    if (aspectRef.current) preview.style.setProperty('--map-aspect', aspectRef.current);
 
     const effective = layoutMapWrap(preview, wrap, rotation);
     const imageRect = nw && nh
@@ -83,7 +88,7 @@ export function useMapGeometry(refs: MapGeometryRefs) {
   // Cambiano scala/rotazioni: ricalcolo immediato (prima del paint).
   useLayoutEffect(() => {
     recompute();
-  }, [recompute, location?.map.scale, location?.map.flip180, location?.map.rotate90]);
+  }, [recompute, location?.map.scale, location?.map.flip180, location?.map.rotate90, opts.aspect]);
 
   // Resize della finestra e del riquadro stesso (es. cambio aspect-ratio,
   // pannello che passa da display:none a visibile).

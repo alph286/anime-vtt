@@ -173,6 +173,21 @@ describe('AoeNudgePad', () => {
     expect(emitsOf('aoe:setCast').pop()).toEqual({ locationId: 'L1', aoeId: 'A', cast: false });
   });
 
+  it('storageKey personalizzata: la posizione va solo in quella chiave', () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(400);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      { left: 200, top: 300, right: 360, bottom: 510, width: 160, height: 210, x: 200, y: 300, toJSON() {} } as DOMRect);
+    open();
+    render(<AoeNudgePad storageKey="altraChiave" />);
+    const handle = screen.getByTitle('Trascina per spostare il pannello');
+    ptr(handle, 'pointerdown', 210, 310);
+    ptr(handle, 'pointermove', 110, 160);
+    ptr(handle, 'pointerup', 110, 160);
+    expect(JSON.parse(localStorage.getItem('altraChiave') as string)).toEqual({ left: 0, top: 0 }); // jsdom: offsetLeft/Top = 0
+    expect(localStorage.getItem('aoeNudgeOverlayPos')).toBeNull();
+  });
+
   it('9. drag della maniglia: cattura il puntatore, fissa left/top, clampa, salva a fine drag', () => {
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(400);
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(600);

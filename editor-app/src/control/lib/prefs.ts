@@ -30,9 +30,9 @@ export function saveDmGridVisible(b: boolean): void {
   try { localStorage.setItem(DM_GRID_VISIBLE_KEY, String(b)); } catch { /* vale solo per la sessione */ }
 }
 
-export function loadNudgePos(): { left: number; top: number } | null {
+export function loadNudgePos(key: string = AOE_NUDGE_POS_KEY): { left: number; top: number } | null {
   try {
-    const raw = localStorage.getItem(AOE_NUDGE_POS_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) {
       const p = JSON.parse(raw);
       if (p && Number.isFinite(p.left) && Number.isFinite(p.top)) return { left: p.left, top: p.top };
@@ -41,6 +41,6 @@ export function loadNudgePos(): { left: number; top: number } | null {
   return null;
 }
 
-export function saveNudgePos(p: { left: number; top: number }): void {
-  try { localStorage.setItem(AOE_NUDGE_POS_KEY, JSON.stringify(p)); } catch { /* vale solo per la sessione */ }
+export function saveNudgePos(p: { left: number; top: number }, key: string = AOE_NUDGE_POS_KEY): void {
+  try { localStorage.setItem(key, JSON.stringify(p)); } catch { /* vale solo per la sessione */ }
 }

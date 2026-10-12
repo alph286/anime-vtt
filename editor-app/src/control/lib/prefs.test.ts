@@ -45,4 +45,11 @@ describe('prefs', () => {
     expect(() => saveDmGridVisible(true)).not.toThrow();
     expect(() => saveNudgePos({ left: 1, top: 1 })).not.toThrow();
   });
+
+  it('chiave personalizzata del pad: isolata da quella di /control', () => {
+    saveNudgePos({ left: 1, top: 2 }, 'partyAoeNudgeOverlayPos');
+    expect(localStorage.getItem('aoeNudgeOverlayPos')).toBeNull();
+    expect(loadNudgePos('partyAoeNudgeOverlayPos')).toEqual({ left: 1, top: 2 });
+    expect(loadNudgePos()).toBeNull();
+  });
 });

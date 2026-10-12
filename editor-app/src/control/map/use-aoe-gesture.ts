@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { socket } from '@/lib/socket';
 import { AOE_TAP_THRESHOLD_PX } from '../aoe/constants';
 import { selectAoeAvailable, selectPreviewLocation, useControlStore, type ControlStore } from '../store/control-store';
@@ -31,14 +31,16 @@ function snapAoePlacement(s: ControlStore, shape: string, sizeM: number, widthM:
 // mappa piazza una nuova area con forma/colore/taglia correnti; un
 // trascinamento che parte da un contorno gia disegnato la seleziona e la
 // sposta invece di piazzarne una nuova.
-export function useAoeGesture() {
+export function useAoeGesture(opts: { isActive?: (s: ControlStore) => boolean } = {}) {
+  const isActiveRef = useRef(opts.isActive ?? aoeActive);
+  isActiveRef.current = opts.isActive ?? aoeActive;
   useEffect(() => {
     const fit = mapRefs.fitBox;
     if (!fit) return;
 
     const onDown = (e: PointerEvent) => {
       const s = useControlStore.getState();
-      if (!aoeActive(s)) return;
+      if (!isActiveRef.current(s)) return;
       const overlay = (e.target as Element | null)?.closest?.('.aoe-shape-overlay') as SVGElement | null;
       if (overlay) {
         const id = overlay.dataset.id;
@@ -55,7 +57,7 @@ export function useAoeGesture() {
 
     const onMove = (e: PointerEvent) => {
       const s = useControlStore.getState();
-      if (!aoeActive(s)) { aoeDrag = null; return; }
+      if (!isActiveRef.current(s)) { aoeDrag = null; return; }
       if (!aoeDrag || e.pointerId !== aoeDrag.pointerId) return;
       const point = eventToBasePoint(e);
       if (!point) return;
@@ -74,7 +76,7 @@ export function useAoeGesture() {
 
     const onUp = (e: PointerEvent) => {
       const s = useControlStore.getState();
-      if (!aoeActive(s)) { aoeDrag = null; aoePlaceStart = null; return; }
+      if (!isActiveRef.current(s)) { aoeDrag = null; aoePlaceStart = null; return; }
       if (aoeDrag && e.pointerId === aoeDrag.pointerId) { aoeDrag = null; return; }
       if (!aoePlaceStart || e.pointerId !== aoePlaceStart.pointerId) return;
       const { x: startX, y: startY } = aoePlaceStart;
