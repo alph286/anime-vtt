@@ -147,7 +147,7 @@ export function AoeNudgePad() {
       <button type="button" className={cell} title="Aumenta larghezza" disabled={!isLine} onClick={() => resize(0, AOE_METERS_PER_CELL)}>+</button>
       <button
         type="button"
-        className={cn(cell, 'cursor-grab touch-none border-[var(--vtt-accent)] bg-[var(--vtt-accent)]/15 text-[var(--vtt-accent)] active:cursor-grabbing')}
+        className={cn(cell, 'cursor-grab touch-none! border-[var(--vtt-accent)] bg-[var(--vtt-accent)]/15 text-[var(--vtt-accent)] active:cursor-grabbing')}
         title="Trascina per spostare il pannello"
         aria-label="Trascina per spostare il pannello"
         onPointerDown={onDown}
