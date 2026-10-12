@@ -9,6 +9,7 @@ const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
 const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
+const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js');
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -407,8 +408,17 @@ const displaySockets = new Set();
 // `state`), si ri-popola da sé alla riconnessione del display.
 let displayViewport = null;
 
+// Stato reale dell'audio di /display, riportato dal display stesso. Come
+// displayViewport: volutamente fuori da `state` (mai persistito), si ripopola
+// alla riconnessione del display e si azzera quando l'ultimo display se ne va.
+let displayAudio = null;
+
+function statePayload() {
+  return { ...state, displayViewport, displayAudio };
+}
+
 function broadcastState() {
-  io.emit('state:update', { ...state, displayViewport });
+  io.emit('state:update', statePayload());
 }
 
 // Un trascinamento (pan della mappa, spostamento di un'AoE o di una
@@ -453,7 +463,7 @@ function broadcastDisplayStatus() {
 }
 
 io.on('connection', (socket) => {
-  socket.emit('state:update', { ...state, displayViewport });
+  socket.emit('state:update', statePayload());
   socket.emit('control:status', { connected: controlSockets.size > 0 });
   socket.emit('display:status', { connected: displaySockets.size > 0 });
 
@@ -469,6 +479,17 @@ io.on('connection', (socket) => {
 
   socket.on('display:viewport', ({ width, height }) => {
     displayViewport = { width, height };
+    broadcastState();
+  });
+
+  // Stato reale dell'audio, solo dal display (ha fatto `hello` con role display).
+  // Si ritrasmette solo quando cambia, mai su disco.
+  socket.on('audio:status', (payload) => {
+    if (!displaySockets.has(socket.id)) return;
+    const next = normalizeDisplayAudioStatus(payload);
+    if (!next) return;
+    if (displayAudio && displayAudio.status === next.status && displayAudio.slot === next.slot) return;
+    displayAudio = next;
     broadcastState();
   });
 
@@ -555,7 +576,7 @@ io.on('connection', (socket) => {
 
   socket.on('location:reorder', ({ orderedIds }) => {
     if (!Array.isArray(orderedIds)) {
-      socket.emit('state:update', { ...state, displayViewport });
+      socket.emit('state:update', statePayload());
       return;
     }
     const activeIds = state.locations.filter((l) => !l.archived).map((l) => l.id);
@@ -567,7 +588,7 @@ io.on('connection', (socket) => {
       return true;
     });
     if (validOrder.length !== activeIds.length) {
-      socket.emit('state:update', { ...state, displayViewport });
+      socket.emit('state:update', statePayload());
       return;
     }
     const byId = new Map(state.locations.map((l) => [l.id, l]));
@@ -757,7 +778,7 @@ io.on('connection', (socket) => {
   socket.on('polygon:reorder', ({ locationId, orderedIds }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location || !Array.isArray(orderedIds)) {
-      if (location) socket.emit('state:update', { ...state, displayViewport });
+      if (location) socket.emit('state:update', statePayload());
       return;
     }
     const currentIds = (location.map.polygons || []).map((p) => p.id);
@@ -769,7 +790,7 @@ io.on('connection', (socket) => {
       return true;
     });
     if (validOrder.length !== currentIds.length) {
-      socket.emit('state:update', { ...state, displayViewport });
+      socket.emit('state:update', statePayload());
       return;
     }
     const byId = new Map((location.map.polygons || []).map((p) => [p.id, p]));
@@ -1194,8 +1215,12 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     controlSockets.delete(socket.id);
     broadcastControlStatus();
-    displaySockets.delete(socket.id);
+    const wasDisplay = displaySockets.delete(socket.id);
     broadcastDisplayStatus();
+    if (wasDisplay && displaySockets.size === 0 && displayAudio) {
+      displayAudio = null;
+      broadcastState();
+    }
   });
 });
 
