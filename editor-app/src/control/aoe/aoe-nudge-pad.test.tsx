@@ -268,6 +268,15 @@ describe('AoeNudgePad', () => {
     expect(JSON.parse(localStorage.getItem('aoeNudgeOverlayPos') as string)).toEqual({ left: 100, top: 150 });
   });
 
+  it('12. la maniglia forza touch-action:none con importante', () => {
+    // La regola non in layer `button { touch-action: manipulation }` (control.css, party.css)
+    // batte la utility Tailwind (in @layer): senza `!` su touch il browser prende il
+    // controllo dopo pochi pixel (pointercancel) e il trascinamento si interrompe.
+    open();
+    render(<AoeNudgePad />);
+    expect(screen.getByTitle('Trascina per spostare il pannello').className).toContain('touch-none!');
+  });
+
   it('11. senza posizione salvata resta sul default CSS (nessun left/top)', () => {
     open();
     render(<AoeNudgePad />);
