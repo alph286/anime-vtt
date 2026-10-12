@@ -124,6 +124,9 @@ function createAudioEngine({ elements, now, requestFrame, onStatus, onSpecialEnd
       (err) => {
         if (p.role !== 'active') return;
         if (err && err.name === 'AbortError') return;
+        // L'elemento non sta suonando: il prossimo stato "playing" deve poter
+        // ritentare (come faceva il codice precedente a ogni state:update).
+        p.intent = 'paused';
         report(err && err.name === 'NotAllowedError' ? 'blocked' : 'error', p.slot);
       }
     );

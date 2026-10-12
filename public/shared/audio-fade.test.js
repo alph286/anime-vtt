@@ -270,3 +270,16 @@ test('resendStatus ripete l\'ultimo stato anche se invariato', async () => {
   assert.equal(statuses.length, 2);
   assert.deepEqual(statuses[1], statuses[0]);
 });
+
+test('dopo un play() rifiutato, il successivo stato playing ritenta e sblocca la traccia', async () => {
+  const { els, engine, statuses } = harness();
+  els[0].playResult = () => Promise.reject(Object.assign(new Error('x'), { name: 'NotAllowedError' }));
+  engine.apply(play('A'));
+  await flush();
+  assert.deepEqual(statuses.at(-1), { status: 'blocked', slot: 'main' });
+  els[0].playResult = () => Promise.resolve();
+  engine.apply(play('A'));
+  await flush();
+  assert.equal(els[0].playCalls, 2);
+  assert.deepEqual(statuses.at(-1), { status: 'playing', slot: 'main' });
+});
