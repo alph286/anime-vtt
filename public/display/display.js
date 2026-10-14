@@ -310,14 +310,16 @@ function renderImage(location, activeImageId) {
   const image = location.images.find((i) => i.id === activeImageId);
   if (!image) return;
 
-  // Handout: immagine o video (loop muto), stessa logica delle mappe.
-  let el;
+  // Handout: immagine o video (loop muto), stessa logica delle mappe. L'elemento
+  // attivo si decide prima: loadMapMedia può chiamare onReady in modo sincrono
+  // (media già caricato) e non deve trovarsi con un riferimento ancora vuoto.
+  const el = isVideoFile(image.file) ? shownImageVideo : shownImageImg;
   const applyLayout = () => {
     const rect = fitRect(imageLayer.clientWidth, imageLayer.clientHeight, mediaW(el), mediaH(el));
     positionFitBox(imageFitBox, rect);
   };
 
-  el = loadMapMedia(shownImageImg, shownImageVideo, image.file, `/storage/images/${image.file}`, applyLayout);
+  loadMapMedia(shownImageImg, shownImageVideo, image.file, `/storage/images/${image.file}`, applyLayout);
 }
 
 // The wrap element's CSS rotate() transform already turns this locally-flat
