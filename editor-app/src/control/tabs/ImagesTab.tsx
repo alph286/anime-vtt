@@ -1,12 +1,13 @@
 import { Button } from '@/components/ui/button';
 import { CommitInput } from '@/components/CommitInput';
+import { MediaPreview } from '@/components/MediaPreview';
 import { Label } from '@/components/ui/label';
 import { useTelegramDestinations } from '@/hooks/use-telegram-destinations';
 import { socket } from '@/lib/socket';
 import { cn } from '@/lib/utils';
 import { selectActiveLocation, useControlStore } from '../store/control-store';
 
-// Scheda Immagini: miniature della location ATTIVA (non quella in anteprima);
+// Scheda Media (immagini e video): miniature della location ATTIVA (non quella in anteprima);
 // toccandone una si apre il dettaglio (didascalia, destinazione Telegram,
 // Mostra / Invia / Ritorna alla mappa).
 export default function ImagesTab() {
@@ -21,13 +22,14 @@ export default function ImagesTab() {
 
   const images = location?.images ?? [];
   const image = images.find((i) => i.id === previewImageId);
+  const isVideo = isVideoFile(image?.file);
   const unavailable = destinations !== null && destinations.length === 0;
 
   return (
     <div data-testid="images-tab" className="flex flex-col gap-3 p-3">
       <div id="images-list" className="thumb-row flex flex-wrap gap-2.5">
         {images.length === 0 && (
-          <p className="text-xs text-muted-foreground">nessuna immagine per questa location</p>
+          <p className="text-xs text-muted-foreground">nessun media per questa location</p>
         )}
         {images.map((img) => (
           <button
@@ -40,7 +42,7 @@ export default function ImagesTab() {
             )}
             onClick={() => setPreviewImage(img.id)}
           >
-            <img src={`/storage/images/${img.file}`} alt={img.name} className="block size-full object-cover" />
+            <MediaPreview file={img.file} name={img.name} className="block size-full object-cover" />
             <span className="image-thumb-label absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 py-0.5 text-center text-[11px] leading-snug text-white">
               {img.name}
             </span>
@@ -50,11 +52,14 @@ export default function ImagesTab() {
 
       {image && (
         <section id="image-detail" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
-          <img
-            src={`/storage/images/${image.file}`}
-            alt={image.name || ''}
+          <MediaPreview
+            file={image.file}
+            name={image.name}
+            playing
             className="block max-h-[220px] w-full rounded-lg bg-background object-contain"
           />
+          {!isVideo && (
+            <>
           <div className="flex flex-col gap-1">
             <Label htmlFor="image-caption-input" className="text-xs text-muted-foreground">Didascalia</Label>
             <CommitInput
@@ -93,6 +98,8 @@ export default function ImagesTab() {
               )}
             </select>
           </div>
+            </>
+          )}
           <div className="image-detail-actions flex flex-wrap gap-2">
             <Button
               type="button" variant="outline" className={cn('h-11 min-w-[100px] flex-1', activeImageId === image.id && 'is-live border-[color:var(--vtt-accent)]! bg-[color:var(--accent-bg-subtle)]! text-[color:var(--vtt-accent)]!')}
@@ -100,6 +107,7 @@ export default function ImagesTab() {
             >
               Mostra
             </Button>
+            {!isVideo && (
             <Button
               type="button" variant="outline" className="h-11 min-w-[100px] flex-1"
               disabled={!image.telegramDestination || pending}
@@ -111,6 +119,7 @@ export default function ImagesTab() {
             >
               {pending ? 'Invio…' : 'Invia'}
             </Button>
+            )}
             <Button
               type="button" className="h-11 min-w-[100px] flex-1"
               disabled={!activeImageId}

@@ -3,6 +3,8 @@ import { GripVertical, Maximize2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CommitInput } from '@/components/CommitInput';
+import { MediaPreview } from '@/components/MediaPreview';
+import { checkVideoSafe } from '@/lib/video-check';
 import { useArmConfirm } from '@/hooks/use-arm-confirm';
 import { useSortableList } from '@/hooks/use-sortable-list';
 import { useTelegramDestinations } from '@/hooks/use-telegram-destinations';
@@ -30,6 +32,15 @@ export function ImagePanel() {
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
+    const { setUploadWarning } = useEditorStore.getState();
+    setUploadWarning(null);
+    if (isVideoFile(file.name)) {
+      const check = await checkVideoSafe(file);
+      if (!check.ok) {
+        setUploadWarning(`Upload bloccato: ${check.reason}`);
+        return;
+      }
+    }
     const formData = new FormData();
     formData.append('file', file);
     formData.append('locationId', location.id);
@@ -39,7 +50,7 @@ export function ImagePanel() {
 
   return (
     <div className="flex flex-col gap-3">
-      {images.length === 0 && <p className="text-sm text-muted-foreground">Nessuna immagine per questa location.</p>}
+      {images.length === 0 && <p className="text-sm text-muted-foreground">Nessun media per questa location.</p>}
       <div className="flex flex-col gap-2">
         {sortable.order.map((id) => {
           const img = byId.get(id);
@@ -52,7 +63,7 @@ export function ImagePanel() {
                   <GripVertical className="size-4" />
                 </span>
                 <button type="button" className="relative size-12 shrink-0 overflow-hidden rounded" title="Anteprima a schermo intero" onClick={() => setPreview(img)}>
-                  <img src={`/storage/images/${img.file}`} alt={img.name} className="size-full object-cover" />
+                  <MediaPreview file={img.file} name={img.name} className="size-full object-cover" />
                   <Maximize2 className="absolute right-0.5 bottom-0.5 size-3 text-white drop-shadow" />
                 </button>
                 <CommitInput className="h-8" placeholder="etichetta" value={img.name}
@@ -60,13 +71,13 @@ export function ImagePanel() {
                 <Button
                   variant={armed ? 'destructive' : 'ghost'}
                   size="icon"
-                  title={armed ? 'Click di nuovo per confermare' : 'Elimina immagine'}
+                  title={armed ? 'Click di nuovo per confermare' : 'Elimina media'}
                   onClick={() => arm.press(id, () => socket.emit('image:delete', { locationId: location.id, imageId: id }))}
                 >
                   <Trash2 />
                 </Button>
               </div>
-              <div className="flex gap-1">
+              {!isVideoFile(img.file) && <div className="flex gap-1">
                 <CommitInput className="h-8" placeholder="didascalia per Telegram" value={img.caption || ''}
                   onCommit={(caption) => socket.emit('image:caption', { locationId: location.id, imageId: id, caption })} />
                 <Select
@@ -84,14 +95,14 @@ export function ImagePanel() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </div>}
             </div>
           );
         })}
       </div>
       <label className="inline-flex w-fit cursor-pointer items-center rounded-md bg-secondary px-3 py-2 text-sm hover:bg-accent">
-        Carica immagine
-        <input type="file" accept="image/*" hidden onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ''; }} />
+        Carica media
+        <input type="file" accept="image/*,video/*" hidden onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ''; }} />
       </label>
       <Lightbox image={preview} onClose={() => setPreview(null)} />
     </div>

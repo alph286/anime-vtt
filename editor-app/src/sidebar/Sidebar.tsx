@@ -4,7 +4,7 @@ import { useEditorStore, type SidebarTab } from '@/store/editor-store';
 
 const TABS: { value: SidebarTab; label: string; icon: React.ReactNode }[] = [
   { value: 'location', label: 'Location', icon: <MapPin /> },
-  { value: 'immagini', label: 'Immagini', icon: <ImageIcon /> },
+  { value: 'immagini', label: 'Media', icon: <ImageIcon /> },
   { value: 'fog', label: 'Fog of war', icon: <CloudFog /> },
   { value: 'shader', label: 'Shader', icon: <Sparkles /> },
   { value: 'audio', label: 'Audio', icon: <Volume2 /> },
