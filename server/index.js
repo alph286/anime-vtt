@@ -8,8 +8,10 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
-const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS, isVideoFile } = require('../public/shared/media.js');
-const picsender = require('./picsender');
+const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
+const { createTelegramClient } = require('./telegram');
+const { createTelegramConfig } = require('./telegram-config');
+const { registerTelegramRoutes, sendStoredMedia } = require('./telegram-routes');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
 const packageJson = require('../package.json');
@@ -21,6 +23,8 @@ const IMAGES_DIR = path.join(STORAGE_DIR, 'images');
 const AUDIO_DIR = path.join(STORAGE_DIR, 'audio');
 const IMPORTS_DIR = path.join(DATA_DIR, 'imports');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
+const telegramConfig = createTelegramConfig(path.join(DATA_DIR, 'telegram.json'));
+const telegramClient = createTelegramClient();
 // Limite di sicurezza per gli AoE: una taglia enorme (o Infinity) farebbe
 // iterare aoeAffectedCells su un numero di celle spropositato lato client.
 const MAX_AOE_SIZE_M = 300;
@@ -77,8 +81,7 @@ app.get('/api/info', (req, res) => {
 });
 
 app.post('/api/settings', (req, res) => {
-  const { picsenderUrl, campaignName } = req.body;
-  state.settings.picsenderUrl = typeof picsenderUrl === 'string' ? picsenderUrl.trim() : '';
+  const { campaignName } = req.body;
   if (!state.campaign) state.campaign = { name: '' };
   if (typeof campaignName === 'string') state.campaign.name = campaignName.trim();
   saveState(state);
@@ -269,14 +272,7 @@ app.post('/api/upload/audio', uploadAudio.single('file'), (req, res) => {
   res.json({ ok: true, file: req.file.filename, slot });
 });
 
-app.get('/api/telegram/destinations', async (req, res) => {
-  try {
-    const destinations = await picsender.getDestinations(state.settings.picsenderUrl);
-    res.json(destinations);
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
-});
+registerTelegramRoutes(app, { config: telegramConfig, client: telegramClient });
 
 app.get('/api/export/location/:id', (req, res) => {
   const location = state.locations.find((l) => l.id === req.params.id);
@@ -677,12 +673,9 @@ io.on('connection', (socket) => {
       socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Immagine non trovata' });
       return;
     }
-    if (isVideoFile(image.file)) {
-      socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Invio dei video su Telegram non supportato' });
-      return;
-    }
-    const result = await picsender.sendImage({
-      url: state.settings.picsenderUrl,
+    const result = await sendStoredMedia({
+      config: telegramConfig,
+      client: telegramClient,
       filePath: path.join(IMAGES_DIR, image.file),
       caption: image.caption,
       destinationName: image.telegramDestination
