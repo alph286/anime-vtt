@@ -21,8 +21,8 @@
 - `getMe(token)` → `{ ok, username }`, valida il token.
 - `sendMedia({ token, chatId, threadId, filePath, caption })` → `{ ok } | { ok:false, error }`. Non lancia mai. Sceglie il metodo dall'estensione (`isVideoFile` di `public/shared/media.js`):
   - **foto** → `sendPhoto`; se Telegram la rifiuta per dimensioni/peso (`PHOTO_INVALID_DIMENSIONS`, oltre 10 MB) → secondo tentativo con `sendDocument` (file originale).
-  - **video `mp4`, `m4v`, `mov`** → `sendVideo` con `supports_streaming`; se Telegram lo rifiuta → secondo tentativo con `sendDocument`.
-  - **altri video** (`webm`, `ogv`, `ogg`, `mkv`, `avi`, `wmv`, `flv`) → direttamente `sendDocument` (arrivano come file, Telegram non li riproduce inline).
+  - **video `mp4`, `m4v`, `mov`** → `sendAnimation` (in chat appaiono come una GIF: autoplay, loop, muti; Telegram si aspetta H.264 senza audio, e l'audio eventualmente presente viene ignorato). Se Telegram rifiuta l'animazione → secondo tentativo con `sendDocument`.
+  - **altri video** (`webm`, `ogv`, `ogg`, `mkv`, `avi`, `wmv`, `flv`) → `sendDocument` (arrivano come file: Telegram non li riproduce come animazione). **Nessuna conversione**: niente ffmpeg né altre dipendenze, scelta esplicita ("caricherò solo MP4"). Per ottenere un'animazione l'utente carica un MP4 H.264.
   - **Limite 50 MB** (Bot API pubblico) controllato PRIMA dell'upload, per foto e video: oltre → `{ ok:false, error }` "Il file pesa X MB: Telegram accetta fino a 50 MB, comprimilo prima di inviarlo". Nessuna ricompressione e nessun supporto a Bot API locale (fuori scope).
   - Il 429 non viene ritentato: l'errore riporta `retry_after`.
   - L'upload usa `FormData`/`Blob` come oggi per PicSender, ma il file viene letto in streaming dove possibile, perché un video da 50 MB non deve restare tutto in memoria sul Raspberry Pi.
@@ -70,13 +70,13 @@ Sezione "Telegram" al posto del campo URL PicSender (resta "Nome campagna" e il 
 - Da verificare in implementazione: che l'export "backup" non impacchetti l'intera `data/` (altrimenti `telegram.json` dev'essere escluso esplicitamente).
 
 ## Test
-- `node --test` per `telegram.js` con `fetch` finto: successo, ogni codice d'errore, ripiego su `sendDocument`, parsing di `getUpdates` con e senza topic, 409 webhook; scelta del metodo per estensione (foto → `sendPhoto`, `mp4/m4v/mov` → `sendVideo`, `webm/mkv/…` → `sendDocument`); rifiuto sopra 50 MB senza chiamare Telegram.
+- `node --test` per `telegram.js` con `fetch` finto: successo, ogni codice d'errore, ripiego su `sendDocument`, parsing di `getUpdates` con e senza topic, 409 webhook; scelta del metodo per estensione (foto → `sendPhoto`, `mp4/m4v/mov` → `sendAnimation`, `webm/mkv/…` → `sendDocument`); rifiuto sopra 50 MB senza chiamare Telegram.
 - Vitest: aggiornare `images-audio.test.tsx` (ora testa che per un video didascalia e "Invia" NON compaiano: il test va invertito) e il test del pannello Immagini dell'editor.
 - `node --test` per `telegram-config.js`: scrittura atomica, file mancante, file corrotto, validazione destinazioni, permessi `0600`.
 - Test di regressione: il token non compare mai in `state:update`, `GET /api/telegram/config`, `GET /api/telegram/destinations`, export location, export backup.
 - Vitest per `use-telegram-destinations` solo se il formato cambia (non cambia).
 - Verifica nel browser su copia dei dati (mai sui dati vivi).
-- **Non verificabile senza bot reale:** un invio vero su Telegram, di foto e di video (in particolare che un `mp4` parta inline e che il ripiego su `sendDocument` funzioni). Resta "non verificato" finché l'autore non lo prova con un proprio bot e una propria chat.
+- **Non verificabile senza bot reale:** un invio vero su Telegram, di foto e di video (in particolare che un `mp4` parta come animazione in loop e che il ripiego su `sendDocument` funzioni). Resta "non verificato" finché l'autore non lo prova con un proprio bot e una propria chat.
 
 ## Fuori scope
-Webhook e ricezione messaggi, più bot contemporanei, invio delle mappe di sfondo (anche se video), ridimensionamento o ricompressione di foto e video, server Bot API locale per file oltre 50 MB, autenticazione degli endpoint.
+Webhook e ricezione messaggi, più bot contemporanei, invio delle mappe di sfondo (anche se video), ridimensionamento o ricompressione o conversione di foto e video (nessun ffmpeg), server Bot API locale per file oltre 50 MB, autenticazione degli endpoint.
