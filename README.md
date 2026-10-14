@@ -278,11 +278,12 @@ tu in due minuti:
    (argomenti), dagli il permesso di scrivere.
 3. Apri `/opzioni`, incolla il token e salva.
 4. Aggiungi le **destinazioni**: ognuna ha un nome, un `chat_id` e, se serve,
-   un `thread_id` (il topic). Puoi scriverli a mano oppure premere
-   **Rileva**: poi scrivi nel gruppo (o nel topic giusto) un messaggio che
-   **menziona il bot**, per esempio «@nomedelbot ciao». Serve la menzione
-   perché i bot, per privacy, vedono solo i comandi e le menzioni. Il
-   pulsante **Prova** manda un messaggio di prova alla destinazione.
+   un `thread_id` (il topic). Puoi scriverli a mano oppure usare
+   **Rileva**: prima scrivi nel gruppo (o nel topic giusto) un messaggio che
+   **menziona il bot**, per esempio «@nomedelbot ciao», e solo dopo premi
+   il pulsante. Serve la menzione perché i bot, per privacy, vedono solo i
+   comandi e le menzioni. Il pulsante **Prova** manda un messaggio di prova
+   alla destinazione (già salvata).
 5. Nella scheda Media di `/control` scegli la destinazione di ogni immagine
    o video e premi Invia. La destinazione si riconosce dal nome: se ne
    cancelli una e la ricrei con lo stesso nome, le assegnazioni restano.
