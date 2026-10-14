@@ -38,8 +38,9 @@ Il programma ha **cinque pagine**, ognuna con un ruolo diverso:
   sulla TV e permette di piazzare e muovere le proprie aree d'effetto
   degli incantesimi. Niente altro: nessun controllo del DM è raggiungibile
   da qui.
-- **`/opzioni`** — impostazioni generali: qui configuri l'URL di PicSender e
-  il nome della campagna, senza dover toccare file a mano.
+- **`/opzioni`** — impostazioni generali: qui colleghi il bot di Telegram
+  (token e destinazioni) e imposti il nome della campagna, senza dover
+  toccare file a mano.
 
 `/editor`, `/control`, `/display` e `/party` restano sincronizzate in tempo
 reale: quello che fai sul telefono in `/control` appare subito sulla TV in
@@ -136,7 +137,7 @@ cp .env.example .env
 ```
 
 Non serve modificarlo per iniziare — funziona già con i valori di base.
-Se in futuro vuoi capire cosa contiene, sono quattro righe:
+Se in futuro vuoi capire cosa contiene, sono tre righe:
 
 - `PORT=3000` — su quale "canale" (porta) del computer gira il programma.
   Lascialo com'è a meno che tu non sappia già che la porta 3000 è occupata
@@ -145,16 +146,6 @@ Se in futuro vuoi capire cosa contiene, sono quattro righe:
   posizioni, ecc.).
 - `STORAGE_DIR=./storage` — dove vengono salvate le mappe e le immagini che
   carichi.
-- `PICSENDER_URL=` — riguarda una funzione facoltativa per inviare foto su
-  Telegram tramite un altro programma esterno (PicSender). **Non serve più
-  modificare questa riga:** l'URL di PicSender ora si imposta dalla pagina
-  `/opzioni` una volta avviato il programma (vedi sotto). Questa riga in
-  `.env` serve solo a chi aveva già configurato PicSender prima
-  dell'introduzione di `/opzioni`: al primo avvio dopo l'aggiornamento, il
-  valore viene letto una sola volta da qui e trasferito automaticamente
-  nelle impostazioni salvate — dopo quel primo avvio, modificare `.env` non
-  ha più nessun effetto. Se stai partendo da zero, lascia pure questa riga
-  vuota e configura tutto da `/opzioni`.
 
 ### 6. Avvia il programma
 
@@ -177,7 +168,7 @@ Sullo stesso computer dove hai avviato il programma, apri un browser
 - `http://localhost:3000/control` — per pilotare la sessione
 - `http://localhost:3000/display` — quella che andrà sulla TV
 - `http://localhost:3000/party` — per i giocatori (smartphone)
-- `http://localhost:3000/opzioni` — per configurare l'URL di PicSender e il
+- `http://localhost:3000/opzioni` — per collegare Telegram e impostare il
   nome della campagna
 
 Per aprire `/control` dal telefono (che è il modo in cui verrà usata
@@ -271,9 +262,48 @@ stella cometa. Compare anche sulla tua stessa anteprima su `/control`, non
 solo sullo schermo dei giocatori.
 
 Il resto delle funzioni (rosa dei venti, esportazione/backup delle
-location, invio foto su Telegram) si scopre esplorando i menu di `/editor`
+location, invio foto e video su Telegram) si scopre esplorando i menu di `/editor`
 e `/control` — sono tutte pensate per essere intuitive senza bisogno di
 documentazione aggiuntiva.
+
+## Inviare foto e video su Telegram
+
+Dalla scheda Media di `/control` puoi mandare un'immagine o un video in una
+chat Telegram (per esempio il gruppo dei giocatori). Serve un bot, che crei
+tu in due minuti:
+
+1. Su Telegram apri la chat con **@BotFather**, scrivi `/newbot` e segui le
+   domande. Alla fine ti dà un **token** (una lunga stringa): copialo.
+2. Aggiungi il bot al gruppo dei giocatori. Se il gruppo ha i "topic"
+   (argomenti), dagli il permesso di scrivere.
+3. Apri `/opzioni`, incolla il token e salva.
+4. Aggiungi le **destinazioni**: ognuna ha un nome, un `chat_id` e, se serve,
+   un `thread_id` (il topic). Puoi scriverli a mano oppure premere
+   **Rileva**: poi scrivi nel gruppo (o nel topic giusto) un messaggio che
+   **menziona il bot**, per esempio «@nomedelbot ciao». Serve la menzione
+   perché i bot, per privacy, vedono solo i comandi e le menzioni. Il
+   pulsante **Prova** manda un messaggio di prova alla destinazione.
+5. Nella scheda Media di `/control` scegli la destinazione di ogni immagine
+   o video e premi Invia. La destinazione si riconosce dal nome: se ne
+   cancelli una e la ricrei con lo stesso nome, le assegnazioni restano.
+
+Come vengono spediti i file:
+
+- le **foto** vanno come foto (se Telegram le rifiuta, come file);
+- i video `mp4`, `m4v` e `mov` vanno come **animazione**: si ripetono in
+  loop e senza audio, come una GIF. Funziona meglio con `mp4` H.264;
+- gli altri formati (`webm`, `mkv`, `avi`...) vanno come **file normale**,
+  senza nessuna conversione;
+- il limite di Telegram per i bot è **50 MB per file**: se è più grande
+  viene rifiutato con un messaggio chiaro.
+
+Il token resta solo sul computer che fa da server, nel file
+`data/telegram.json` (escluso da git, leggibile solo dal tuo utente). Non
+finisce mai nei backup o nelle esportazioni e non viene più mostrato nella
+pagina dopo averlo salvato.
+
+**Se usavi PicSender:** non esiste più, né `PICSENDER_URL` né il campo
+dell'URL. Ricrea in `/opzioni` le destinazioni con gli stessi nomi.
 
 ## Metterlo su un Raspberry Pi collegato alla TV (facoltativo)
 
