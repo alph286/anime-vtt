@@ -1,4 +1,4 @@
-const { test, before, after } = require('node:test');
+const { test, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
@@ -30,7 +30,12 @@ async function start(clientOverrides) {
   await new Promise((resolve) => { server = app.listen(0, resolve); });
   base = `http://127.0.0.1:${server.address().port}`;
 }
-async function stop() { await new Promise((resolve) => server.close(resolve)); }
+afterEach(async () => {
+  if (!server) return;
+  server.closeAllConnections?.();
+  await new Promise((resolve) => server.close(resolve));
+  server = null;
+});
 const json = (method, url, body) => fetch(base + url, {
   method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body)
 });
@@ -43,7 +48,6 @@ test('POST /token: valida con getMe, salva ripulito e NON restituisce il token',
   assert.deepEqual(body, { ok: true, botUsername: 'mio_bot' });
   assert.equal(config.getToken(), '123:SEGRETO');
   assert.deepEqual(client.calls[0], ['getMe', '123:SEGRETO']);
-  await stop();
 });
 
 test('POST /token: token non valido -> 400 e nulla salvato', async () => {
@@ -52,7 +56,6 @@ test('POST /token: token non valido -> 400 e nulla salvato', async () => {
   assert.equal(res.status, 400);
   assert.equal((await res.json()).error, 'Token del bot non valido');
   assert.equal(config.getToken(), '');
-  await stop();
 });
 
 test('POST /token: token mancante -> 400 senza chiamare Telegram', async () => {
@@ -60,7 +63,6 @@ test('POST /token: token mancante -> 400 senza chiamare Telegram', async () => {
   const res = await json('POST', '/api/telegram/token', { token: '   ' });
   assert.equal(res.status, 400);
   assert.equal(client.calls.length, 0);
-  await stop();
 });
 
 test('GET /config e GET /destinations: mai il token; destinations solo nomi', async () => {
@@ -74,7 +76,6 @@ test('GET /config e GET /destinations: mai il token; destinations solo nomi', as
   });
   const dest = await json('GET', '/api/telegram/destinations');
   assert.deepEqual(await dest.json(), [{ name: 'Mappe' }]);
-  await stop();
 });
 
 test('DELETE /token: rimuove il token', async () => {
@@ -83,7 +84,6 @@ test('DELETE /token: rimuove il token', async () => {
   const res = await json('DELETE', '/api/telegram/token');
   assert.equal(res.status, 200);
   assert.equal(config.getToken(), '');
-  await stop();
 });
 
 test('PUT /destinations: salva; errore -> 400 con la riga', async () => {
@@ -94,7 +94,6 @@ test('PUT /destinations: salva; errore -> 400 con la riga', async () => {
   const bad = await json('PUT', '/api/telegram/destinations', { destinations: [{ name: 'A', chatId: 'x' }] });
   assert.equal(bad.status, 400);
   assert.match((await bad.json()).error, /Riga 1/);
-  await stop();
 });
 
 test('POST /detect: senza token -> 400; con token inoltra a detectChats', async () => {
@@ -105,7 +104,6 @@ test('POST /detect: senza token -> 400; con token inoltra a detectChats', async 
   const yes = await json('POST', '/api/telegram/detect');
   assert.equal(yes.status, 200);
   assert.deepEqual((await yes.json()).chats[0].chatTitle, 'G');
-  await stop();
 });
 
 test('POST /test: invia un messaggio di prova alla destinazione salvata', async () => {
@@ -120,7 +118,6 @@ test('POST /test: invia un messaggio di prova alla destinazione salvata', async 
   const missing = await json('POST', '/api/telegram/test', { name: 'Altro' });
   assert.equal(missing.status, 404);
   assert.match((await missing.json()).error, /salva/i);
-  await stop();
 });
 
 test('sendStoredMedia: risolve il nome nella destinazione e inoltra a sendMedia', async () => {
@@ -132,7 +129,6 @@ test('sendStoredMedia: risolve il nome nella destinazione e inoltra a sendMedia'
   assert.deepEqual(client.calls.find((c) => c[0] === 'sendMedia')[1], {
     token: '123:abc', chatId: '-100', threadId: 4, filePath: '/x/a.mp4', caption: 'ciao'
   });
-  await stop();
 });
 
 test('sendStoredMedia: errori espliciti senza token, senza destinazione, destinazione sparita', async () => {
@@ -145,7 +141,6 @@ test('sendStoredMedia: errori espliciti senza token, senza destinazione, destina
   r = await sendStoredMedia({ config, client, filePath: '/x', caption: '', destinationName: 'Sparita' });
   assert.match(r.error, /«Sparita» non più configurata/);
   assert.equal(client.calls.filter((c) => c[0] === 'sendMedia').length, 0);
-  await stop();
 });
 
 test('POST /token: se il salvataggio fallisce risponde 500 e il server resta in piedi', async () => {
@@ -165,5 +160,4 @@ test('POST /token: se il salvataggio fallisce risponde 500 e il server resta in 
   // Il server risponde ancora dopo l'errore (nessun crash del processo).
   const still = await json('GET', '/api/telegram/destinations');
   assert.equal(still.status, 200);
-  await stop();
 });
