@@ -768,6 +768,7 @@ if (typeof module !== 'undefined' && module.exports) {
     AOE_COLORS_DARK,
     aoeColorHex,
     aoeColorDarkHex,
+    isVideoFile,
     rotateVector,
     rotateDirectionToBase,
     aoePixelsPerMeter,

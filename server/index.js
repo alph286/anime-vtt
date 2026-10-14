@@ -8,7 +8,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
-const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
+const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS, isVideoFile } = require('../public/shared/media.js');
 const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -103,7 +103,9 @@ function makeUpload(destDir, { allowVideo = false, maxFileSize = 50 * 1024 * 102
 // Le mappe possono essere anche video (usati come sfondo animato in loop, muto);
 // un tetto più alto perché un video anche breve pesa molto più di un'immagine.
 const uploadMap = makeUpload(MAPS_DIR, { allowVideo: true, maxFileSize: 300 * 1024 * 1024 });
-const uploadImage = makeUpload(IMAGES_DIR);
+// Gli handout possono essere anche video (loop muto su /display); tetto più basso
+// delle mappe, in linea col limite lato editor.
+const uploadImage = makeUpload(IMAGES_DIR, { allowVideo: true, maxFileSize: 150 * 1024 * 1024 });
 
 // L'audio non riusa makeUpload(): filtro mime (audio/*) e limite dimensione
 // diversi da mappe/immagini, e vogliamo poter cambiare l'uno senza rischiare
@@ -673,6 +675,10 @@ io.on('connection', (socket) => {
     const image = location?.images.find((i) => i.id === imageId);
     if (!image) {
       socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Immagine non trovata' });
+      return;
+    }
+    if (isVideoFile(image.file)) {
+      socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Invio dei video su Telegram non supportato' });
       return;
     }
     const result = await picsender.sendImage({

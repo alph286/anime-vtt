@@ -1157,3 +1157,21 @@ giallo/bianco/Viola Cornelia risolve rispettivamente in
 "none" sul poligono) mentre 25 celle restano evidenziate su un'area
 lanciata; suite di test ancora verde (38/38, `AOE_COLORS.blue` rinominato
 `AOE_COLORS.white` anche nei test).
+
+## Handout video: scheda "Media" (fatto, branch `media-handout`)
+
+Gli handout mostrati ai PG (`location.images`, eventi `image:*`) possono essere anche
+video. Nessuna distinzione nel modello dati: il tipo si deduce dall'estensione del file
+(`isVideoFile` in `public/shared/media.js`, ora esportata anche per il server).
+- Scheda "Immagini" rinominata **Media** in /editor (sidebar) e /control (TabBar);
+  l'editor carica `image/*,video/*` da un solo pulsante (video controllati con
+  `checkVideoSafe`, come le mappe; `/api/upload/image` accetta video fino a 150MB).
+- `/display`: nuovo `<video id="shown-image-video">` accanto all'`<img>`, pilotato da
+  `loadMapMedia` (loop, muto, autoplay). Nascondendo l'handout il video va in pausa.
+- Componente condiviso `editor-app/src/components/MediaPreview.tsx` (miniatura ferma sul
+  primo fotogramma, riproduzione in loop in lightbox/dettaglio).
+- **Telegram escluso per i video** (richiesta esplicita, da riprendere in seguito): UI
+  nascosta per i video e `image:sendTelegram` risponde con errore lato server.
+- Verificato su dati vuoti (porta 3100): upload, miniature, Mostra/Ritorna alla mappa,
+  video su /display in loop muto con proporzioni corrette. Non verificato: riproduzione su
+  un vero Raspberry/TV, video pesanti, autoplay con /display aperto da molto in background.
