@@ -77,7 +77,7 @@ export function ImagePanel() {
                   <Trash2 />
                 </Button>
               </div>
-              {!isVideoFile(img.file) && <div className="flex gap-1">
+              <div className="flex gap-1">
                 <CommitInput className="h-8" placeholder="didascalia per Telegram" value={img.caption || ''}
                   onCommit={(caption) => socket.emit('image:caption', { locationId: location.id, imageId: id, caption })} />
                 <Select
@@ -95,7 +95,7 @@ export function ImagePanel() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>}
+              </div>
             </div>
           );
         })}

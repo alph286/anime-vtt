@@ -22,7 +22,6 @@ export default function ImagesTab() {
 
   const images = location?.images ?? [];
   const image = images.find((i) => i.id === previewImageId);
-  const isVideo = isVideoFile(image?.file);
   const unavailable = destinations !== null && destinations.length === 0;
 
   return (
@@ -58,8 +57,6 @@ export default function ImagesTab() {
             playing
             className="block max-h-[220px] w-full rounded-lg bg-background object-contain"
           />
-          {!isVideo && (
-            <>
           <div className="flex flex-col gap-1">
             <Label htmlFor="image-caption-input" className="text-xs text-muted-foreground">Didascalia</Label>
             <CommitInput
@@ -98,8 +95,6 @@ export default function ImagesTab() {
               )}
             </select>
           </div>
-            </>
-          )}
           <div className="image-detail-actions flex flex-wrap gap-2">
             <Button
               type="button" variant="outline" className={cn('h-11 min-w-[100px] flex-1', activeImageId === image.id && 'is-live border-[color:var(--vtt-accent)]! bg-[color:var(--accent-bg-subtle)]! text-[color:var(--vtt-accent)]!')}
@@ -107,7 +102,6 @@ export default function ImagesTab() {
             >
               Mostra
             </Button>
-            {!isVideo && (
             <Button
               type="button" variant="outline" className="h-11 min-w-[100px] flex-1"
               disabled={!image.telegramDestination || pending}
@@ -119,7 +113,6 @@ export default function ImagesTab() {
             >
               {pending ? 'Invio…' : 'Invia'}
             </Button>
-            )}
             <Button
               type="button" className="h-11 min-w-[100px] flex-1"
               disabled={!activeImageId}
