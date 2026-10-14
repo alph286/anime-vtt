@@ -225,3 +225,37 @@ test('detectChats: 409 (webhook attivo) -> messaggio dedicato', async () => {
   assert.equal(r.ok, false);
   assert.match(r.error, /webhook/);
 });
+
+test('sendMedia: apertura del file fallisce dopo statSync -> errore, mai un rifiuto', async () => {
+  // Su Node 22 openAsBlob su una directory o su un file senza permessi NON
+  // fallisce (la lettura avviene dopo, dentro fetch): per coprire il ramo di
+  // errore simuliamo il rifiuto di openAsBlob (file sparito tra stat e apertura).
+  const original = fs.openAsBlob;
+  fs.openAsBlob = async () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); };
+  try {
+    const f = mockFetch([]);
+    const r = await createTelegramClient({ fetchImpl: f }).sendMedia({
+      token: TOKEN, chatId: '5', threadId: null, filePath: tmpFile('a.png'), caption: ''
+    });
+    assert.deepEqual(r, { ok: false, error: 'File non leggibile' });
+    assert.equal(f.calls.length, 0);
+  } finally {
+    fs.openAsBlob = original;
+  }
+});
+
+test('risposta con corpo null non fa esplodere il client (200 e 500)', async () => {
+  const ok200 = mockFetch([{ status: 200, body: null }]);
+  const r1 = await createTelegramClient({ fetchImpl: ok200 }).getMe(TOKEN);
+  assert.equal(r1.ok, false);
+  const err500 = mockFetch([{ status: 500, body: null }]);
+  const r2 = await createTelegramClient({ fetchImpl: err500 }).getMe(TOKEN);
+  assert.equal(r2.ok, false);
+  assert.match(r2.error, /500/);
+});
+
+test('errore di rete senza token: nessun *** inserito nel messaggio', async () => {
+  const f = mockFetch([new Error('boom')]);
+  const r = await createTelegramClient({ fetchImpl: f }).getMe('');
+  assert.equal(r.error, 'Telegram non raggiungibile: boom');
+});

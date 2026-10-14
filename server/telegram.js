@@ -48,10 +48,11 @@ function createTelegramClient({ fetchImpl = fetch } = {}) {
       res = await fetchImpl(`${API_BASE}/bot${token}/${method}`, body ? { method: 'POST', body } : {});
     } catch (err) {
       // L'URL (e quindi il token) può finire nel messaggio dell'errore di rete.
-      const safe = String(err && err.message).split(token).join('***');
+      const msg = String(err && err.message);
+      const safe = token ? msg.split(token).join('***') : msg;
       return { ok: false, status: 0, description: '', error: `Telegram non raggiungibile: ${safe}` };
     }
-    const data = await res.json().catch(() => ({}));
+    const data = (await res.json().catch(() => null)) || {};
     if (res.ok && data.ok) return { ok: true, result: data.result };
     return { ok: false, status: res.status, description: String(data.description || ''), error: describeError(res.status, data) };
   }
@@ -74,7 +75,13 @@ function createTelegramClient({ fetchImpl = fetch } = {}) {
     if (caption) form.append('caption', caption);
     // openAsBlob legge il file a richiesta: un video da decine di MB non resta
     // tutto in memoria (conta sul Raspberry Pi). Fallback per Node più vecchi.
-    const blob = typeof fs.openAsBlob === 'function' ? await fs.openAsBlob(filePath) : new Blob([fs.readFileSync(filePath)]);
+    let blob;
+    try {
+      blob = typeof fs.openAsBlob === 'function' ? await fs.openAsBlob(filePath) : new Blob([fs.readFileSync(filePath)]);
+    } catch (err) {
+      // Il file può sparire tra statSync e qui, o non essere un file leggibile.
+      return { ok: false, status: 0, description: '', error: 'File non leggibile' };
+    }
     form.append(kind, blob, path.basename(filePath));
     return call(token, method, form);
   }
