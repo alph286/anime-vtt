@@ -2,7 +2,9 @@
 
 **Goal:** chi scarica il repo deve poter configurare da solo, dal browser, l'invio di foto su Telegram, senza installare PicSender. L'integrazione PicSender esce dal progetto (scelta esplicita: "solo Telegram nativo"); il PicSender dell'autore resta acceso per conto suo, ma anime-vtt non lo usa più.
 
-**Successo:** un utente nuovo crea un bot con @BotFather, lo configura in `/opzioni` (token + destinazioni, anche con rilevamento automatico di chat e topic) e invia foto da `/control` come oggi. L'UI di invio (didascalia, tendina destinazione, pulsante Invia) non cambia.
+**Successo:** un utente nuovo crea un bot con @BotFather, lo configura in `/opzioni` (token + destinazioni, anche con rilevamento automatico di chat e topic) e invia dalla scheda **Media** di `/control` sia foto sia **video**. L'UI di invio (didascalia, tendina destinazione, pulsante Invia) resta quella di oggi, ma ora vale anche per i video.
+
+**Contesto (dopo il merge di `main`):** la scheda Immagini si chiama **Media** e contiene anche video (handout, fino a 150 MB, estensioni `mp4 webm ogv ogg mov m4v mkv avi wmv flv`). Oggi per i video il server risponde "Invio dei video su Telegram non supportato" e la UI nasconde didascalia e "Invia". Questa spec toglie entrambi i blocchi.
 
 **Assunzioni** (non dette dall'utente, da confermare nella review):
 - Il bot è dell'utente; il progetto non fornisce un bot condiviso.
@@ -17,7 +19,13 @@
 ### `server/telegram.js` (client Bot API, puro)
 `fetch` iniettabile per i test. Nessuno stato, nessun accesso a file.
 - `getMe(token)` → `{ ok, username }`, valida il token.
-- `sendPhoto({ token, chatId, threadId, filePath, caption })` → `{ ok } | { ok:false, error }`. Non lancia mai. Se Telegram rifiuta la foto per dimensioni/peso (`PHOTO_INVALID_DIMENSIONS`, file oltre 10 MB), secondo tentativo con `sendDocument` (file originale, non compresso). Il 429 non viene ritentato: l'errore riporta `retry_after`.
+- `sendMedia({ token, chatId, threadId, filePath, caption })` → `{ ok } | { ok:false, error }`. Non lancia mai. Sceglie il metodo dall'estensione (`isVideoFile` di `public/shared/media.js`):
+  - **foto** → `sendPhoto`; se Telegram la rifiuta per dimensioni/peso (`PHOTO_INVALID_DIMENSIONS`, oltre 10 MB) → secondo tentativo con `sendDocument` (file originale).
+  - **video `mp4`, `m4v`, `mov`** → `sendVideo` con `supports_streaming`; se Telegram lo rifiuta → secondo tentativo con `sendDocument`.
+  - **altri video** (`webm`, `ogv`, `ogg`, `mkv`, `avi`, `wmv`, `flv`) → direttamente `sendDocument` (arrivano come file, Telegram non li riproduce inline).
+  - **Limite 50 MB** (Bot API pubblico) controllato PRIMA dell'upload, per foto e video: oltre → `{ ok:false, error }` "Il file pesa X MB: Telegram accetta fino a 50 MB, comprimilo prima di inviarlo". Nessuna ricompressione e nessun supporto a Bot API locale (fuori scope).
+  - Il 429 non viene ritentato: l'errore riporta `retry_after`.
+  - L'upload usa `FormData`/`Blob` come oggi per PicSender, ma il file viene letto in streaming dove possibile, perché un video da 50 MB non deve restare tutto in memoria sul Raspberry Pi.
 - `sendText({ token, chatId, threadId, text })` per la prova invio.
 - `detectChats(token)` → `[{ chatId, chatTitle, threadId|null, topicName|null }]` da `getUpdates` SENZA `offset` (gli aggiornamenti non vengono consumati). Il nome del topic compare solo se è stato visto il messaggio di creazione; altrimenti `topicName` è null e la UI mostra "Topic <id>". Un 409 (webhook attivo) diventa un errore dedicato; il webhook non viene toccato.
 - Errori tradotti in italiano: token non valido (401), bot non nel gruppo o senza permessi (400/403), webhook attivo (409), rate limit (429 + secondi), Telegram irraggiungibile.
@@ -39,7 +47,13 @@ File `data/telegram.json`: `{ botToken: string, destinations: [{ name, chatId, t
 - `POST /api/telegram/test` `{ name }` → `sendText` alla destinazione, per la prova invio.
 
 ### Invio
-L'evento socket `image:sendTelegram { locationId, imageId }` e la risposta `telegram:sendResult { imageId, ok, error? }` restano identici. Il server risolve `image.telegramDestination` (un nome) nella riga di `destinations` e chiama `sendPhoto`. Nome non più presente → errore esplicito come oggi, senza inviare. Nessuna destinazione assegnata → errore come oggi.
+L'evento socket `image:sendTelegram { locationId, imageId }` e la risposta `telegram:sendResult { imageId, ok, error? }` restano identici (il nome "image" è storico: vale per ogni elemento di `location.images[]`, foto o video). Il server risolve `image.telegramDestination` (un nome) nella riga di `destinations` e chiama `sendMedia`. Il rifiuto dei video in `server/index.js` (`isVideoFile` → "non supportato") viene rimosso. Nome non più presente → errore esplicito come oggi, senza inviare. Nessuna destinazione assegnata → errore come oggi.
+
+## Modifiche a Media (`/control` e `/editor`)
+- `editor-app/src/control/tabs/ImagesTab.tsx`: tolti i due `!isVideo` che nascondono didascalia e pulsante "Invia"; i video hanno gli stessi campi e lo stesso flusso delle foto.
+- `editor-app/src/sidebar/ImagePanel.tsx`: tolto `!isVideoFile(img.file)` attorno a didascalia e tendina destinazione.
+- L'errore dei 50 MB arriva già dal server come `telegram:sendResult` e compare nel feedback esistente; nessuna logica nuova lato client. Eventuale testo d'aiuto accanto al pulsante per i video grossi: non necessario.
+- Un video viene inviato come file originale, così com'è sul disco (nessuna conversione).
 
 ## UI di `/opzioni`
 Sezione "Telegram" al posto del campo URL PicSender (resta "Nome campagna" e il resto della pagina):
@@ -49,19 +63,20 @@ Sezione "Telegram" al posto del campo URL PicSender (resta "Nome campagna" e il 
 4. **Prova invio**: pulsante per riga che manda un messaggio di test a quella destinazione.
 
 ## Rimozioni e migrazione
-- Rimossi: `server/picsender.js`, `settings.picsenderUrl` (e la sua migrazione in `server/state.js`), il campo e il "Testa connessione" di `/opzioni` (`public/opzioni/index.html`, `opzioni.js`), `PICSENDER_URL` da `.env.example`, le menzioni nel README.
+- Rimossi: `server/picsender.js` (e il blocco `isVideoFile` in `image:sendTelegram`), `settings.picsenderUrl` (e la sua migrazione in `server/state.js`), il campo e il "Testa connessione" di `/opzioni` (`public/opzioni/index.html`, `opzioni.js`), `PICSENDER_URL` da `.env.example`, le menzioni nel README.
 - `state.settings` resta come contenitore per le altre impostazioni (per ora solo il nome campagna vive in `state.campaign`): una `picsenderUrl` presente in uno `state.json` esistente viene semplicemente ignorata e rimossa al primo salvataggio.
 - `image.telegramDestination` è già un nome: ricreando le destinazioni con gli stessi nomi di PicSender le assegnazioni esistenti tornano valide, senza migrazione.
 - Export/import non contengono impostazioni Telegram (portano solo `telegramDestination`): invariati.
 - Da verificare in implementazione: che l'export "backup" non impacchetti l'intera `data/` (altrimenti `telegram.json` dev'essere escluso esplicitamente).
 
 ## Test
-- `node --test` per `telegram.js` con `fetch` finto: successo, ogni codice d'errore, ripiego su `sendDocument`, parsing di `getUpdates` con e senza topic, 409 webhook.
+- `node --test` per `telegram.js` con `fetch` finto: successo, ogni codice d'errore, ripiego su `sendDocument`, parsing di `getUpdates` con e senza topic, 409 webhook; scelta del metodo per estensione (foto → `sendPhoto`, `mp4/m4v/mov` → `sendVideo`, `webm/mkv/…` → `sendDocument`); rifiuto sopra 50 MB senza chiamare Telegram.
+- Vitest: aggiornare `images-audio.test.tsx` (ora testa che per un video didascalia e "Invia" NON compaiano: il test va invertito) e il test del pannello Immagini dell'editor.
 - `node --test` per `telegram-config.js`: scrittura atomica, file mancante, file corrotto, validazione destinazioni, permessi `0600`.
 - Test di regressione: il token non compare mai in `state:update`, `GET /api/telegram/config`, `GET /api/telegram/destinations`, export location, export backup.
 - Vitest per `use-telegram-destinations` solo se il formato cambia (non cambia).
 - Verifica nel browser su copia dei dati (mai sui dati vivi).
-- **Non verificabile senza bot reale:** un invio vero su Telegram. Resta "non verificato" finché l'autore non lo prova con un proprio bot e una propria chat.
+- **Non verificabile senza bot reale:** un invio vero su Telegram, di foto e di video (in particolare che un `mp4` parta inline e che il ripiego su `sendDocument` funzioni). Resta "non verificato" finché l'autore non lo prova con un proprio bot e una propria chat.
 
 ## Fuori scope
-Webhook e ricezione messaggi, più bot contemporanei, invio di mappe o di video, ridimensionamento lato server (il ripiego su `sendDocument` basta), autenticazione degli endpoint.
+Webhook e ricezione messaggi, più bot contemporanei, invio delle mappe di sfondo (anche se video), ridimensionamento o ricompressione di foto e video, server Bot API locale per file oltre 50 MB, autenticazione degli endpoint.
