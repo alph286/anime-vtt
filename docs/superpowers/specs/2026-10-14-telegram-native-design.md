@@ -59,7 +59,7 @@ L'evento socket `image:sendTelegram { locationId, imageId }` e la risposta `tele
 Sezione "Telegram" al posto del campo URL PicSender (resta "Nome campagna" e il resto della pagina):
 1. **Bot**: campo token (password) + "Salva". Valida con `getMe`, poi mostra "Bot @nome ✓". Il token non viene mai ricaricato nel campo: dopo il salvataggio compare "configurato" con "Sostituisci" e "Rimuovi". Breve passo-passo: crea il bot con @BotFather, aggiungilo al gruppo, nei gruppi con topic dagli il permesso di scrivere.
 2. **Destinazioni**: tabella nome / `chat_id` / `thread_id` (facoltativo) / elimina, "Aggiungi riga", salvataggio unico, errori di validazione sotto la riga colpevole.
-3. **Rileva**: l'utente scrive un messaggio nel topic voluto, preme il pulsante, vede le chat/topic visti; un click compila una nuova riga (sceglie solo il nome). L'inserimento manuale resta sempre possibile.
+3. **Rileva**: l'utente scrive un messaggio nel topic voluto, preme il pulsante, vede le chat/topic visti; un click compila una nuova riga (sceglie solo il nome). L'inserimento manuale resta sempre possibile. Un bot con privacy mode attiva (default) vede nei gruppi solo comandi e menzioni: l'istruzione chiede quindi di scrivere un messaggio che menziona il bot.
 4. **Prova invio**: pulsante per riga che manda un messaggio di test a quella destinazione.
 
 ## Rimozioni e migrazione

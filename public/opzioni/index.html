@@ -23,27 +23,62 @@
 
 <main>
   <section class="card">
-    <h2>PicSender e campagna</h2>
-
-    <div class="field">
-      <label for="picsender-url-input">URL PicSender</label>
-      <input type="text" id="picsender-url-input" placeholder="http://192.168.1.10:5000">
-      <p class="hint">Usato per inviare foto su Telegram dall'editor. Lascia vuoto se non lo usi.</p>
-    </div>
-
+    <h2>Campagna</h2>
     <div class="field">
       <label for="campaign-name-input">Nome campagna</label>
       <input type="text" id="campaign-name-input" placeholder="Nome campagna">
       <p class="hint">Solo informativo: appare nei metadati di export/import.</p>
     </div>
-
     <div class="card-actions">
       <button id="save-settings-btn" class="btn-accent" disabled>Salva</button>
-      <button id="test-connection-btn" disabled>Testa connessione</button>
     </div>
-    <p class="hint">Verifica l'URL attualmente salvato — se hai modificato il campo, salva prima di testare.</p>
     <p id="settings-status" class="hint" role="status" aria-live="polite" hidden></p>
-    <p id="test-connection-result" class="hint" role="status" aria-live="polite" hidden></p>
+  </section>
+
+  <section class="card">
+    <h2>Telegram</h2>
+    <p class="hint">Per inviare foto e video dalla scheda Media di /control. Serve un bot tuo:</p>
+    <ol class="hint steps">
+      <li>Su Telegram scrivi a <strong>@BotFather</strong>, invia <code>/newbot</code> e copia il token che ti dà.</li>
+      <li>Aggiungi il bot al gruppo (nei gruppi con topic, dagli il permesso di scrivere).</li>
+      <li>Incolla qui sotto il token, poi aggiungi le destinazioni (puoi usare «Rileva»).</li>
+    </ol>
+
+    <div id="token-set" hidden>
+      <div class="field">
+        <label>Bot</label>
+        <p><strong id="bot-name"></strong> <span class="hint">configurato ✓</span></p>
+      </div>
+      <div class="card-actions">
+        <button id="replace-token-btn" type="button">Sostituisci</button>
+        <button id="remove-token-btn" type="button">Rimuovi</button>
+      </div>
+    </div>
+    <div id="token-form">
+      <div class="field">
+        <label for="token-input">Token del bot</label>
+        <input type="password" id="token-input" autocomplete="off" placeholder="123456:ABC-DEF...">
+      </div>
+      <div class="card-actions">
+        <button id="save-token-btn" class="btn-accent" type="button">Salva token</button>
+        <button id="cancel-token-btn" type="button" hidden>Annulla</button>
+      </div>
+    </div>
+    <p id="token-status" class="hint" role="status" aria-live="polite" hidden></p>
+
+    <div class="field">
+      <label>Destinazioni</label>
+      <div id="dest-rows" class="dest-rows"></div>
+      <p class="hint">«thread_id» serve solo per i gruppi con topic (lascialo vuoto altrimenti).</p>
+    </div>
+    <div class="card-actions">
+      <button id="add-dest-btn" type="button">Aggiungi destinazione</button>
+      <button id="detect-btn" type="button">Rileva</button>
+      <button id="save-dest-btn" class="btn-accent" type="button">Salva destinazioni</button>
+    </div>
+    <p class="hint">Per «Rileva»: scrivi nel gruppo o nel topic che vuoi usare un messaggio che <strong>menziona il bot</strong> (es. «@nomebot ciao»), poi premi il pulsante. I bot con la privacy attiva non vedono gli altri messaggi dei gruppi.</p>
+    <div id="detect-results" class="dest-rows" hidden></div>
+    <p id="dest-status" class="hint" role="status" aria-live="polite" hidden></p>
   </section>
 
   <section class="card">

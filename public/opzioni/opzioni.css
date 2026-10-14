@@ -86,7 +86,7 @@ main {
   color: var(--text-secondary);
 }
 
-input[type="text"] {
+input[type="text"], input[type="password"] {
   height: 36px;
   border-radius: 8px;
   border: 1px solid var(--border-control);
@@ -181,4 +181,46 @@ button:hover, .link-btn:hover {
 
 .credits a {
   color: var(--accent);
+}
+
+.steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dest-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dest-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1.4fr 0.8fr auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.dest-row.invalid input {
+  border-color: var(--danger-border);
+}
+
+.dest-row button {
+  padding: 0 10px;
+}
+
+.detect-item {
+  height: auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+@media (max-width: 560px) {
+  .dest-row {
+    grid-template-columns: 1fr 1fr;
+  }
 }
