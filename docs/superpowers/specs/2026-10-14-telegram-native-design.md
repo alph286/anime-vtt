@@ -64,10 +64,10 @@ Sezione "Telegram" al posto del campo URL PicSender (resta "Nome campagna" e il 
 
 ## Rimozioni e migrazione
 - Rimossi: `server/picsender.js` (e il blocco `isVideoFile` in `image:sendTelegram`), `settings.picsenderUrl` (e la sua migrazione in `server/state.js`), il campo e il "Testa connessione" di `/opzioni` (`public/opzioni/index.html`, `opzioni.js`), `PICSENDER_URL` da `.env.example`, le menzioni nel README.
-- `state.settings` resta come contenitore per le altre impostazioni (per ora solo il nome campagna vive in `state.campaign`): una `picsenderUrl` presente in uno `state.json` esistente viene semplicemente ignorata e rimossa al primo salvataggio.
+- `state.settings` conteneva solo `picsenderUrl`: viene eliminato del tutto da `migrate` (uno `state.json` esistente lo perde al primo salvataggio). Nessun altro codice lo legge.
 - `image.telegramDestination` è già un nome: ricreando le destinazioni con gli stessi nomi di PicSender le assegnazioni esistenti tornano valide, senza migrazione.
 - Export/import non contengono impostazioni Telegram (portano solo `telegramDestination`): invariati.
-- Da verificare in implementazione: che l'export "backup" non impacchetti l'intera `data/` (altrimenti `telegram.json` dev'essere escluso esplicitamente).
+- Verificato: `writeBackupArchive` costruisce il manifest da `state` (campagna, griglia, location), non impacchetta `data/`: `telegram.json` non finisce nei backup. Un test di regressione lo copre.
 
 ## Test
 - `node --test` per `telegram.js` con `fetch` finto: successo, ogni codice d'errore, ripiego su `sendDocument`, parsing di `getUpdates` con e senza topic, 409 webhook; scelta del metodo per estensione (foto → `sendPhoto`, `mp4/m4v/mov` → `sendAnimation`, `webm/mkv/…` → `sendDocument`); rifiuto sopra 50 MB senza chiamare Telegram.
