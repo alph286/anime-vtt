@@ -22,7 +22,7 @@ export default function ImagesTab() {
 
   const images = location?.images ?? [];
   const image = images.find((i) => i.id === previewImageId);
-  const isVideo = isVideoFile(image?.file);
+  const isVideo = isVideoFile(image?.file) || Boolean(image?.url); // niente Telegram per video e pagine web
   const unavailable = destinations !== null && destinations.length === 0;
 
   return (
@@ -42,7 +42,7 @@ export default function ImagesTab() {
             )}
             onClick={() => setPreviewImage(img.id)}
           >
-            <MediaPreview file={img.file} name={img.name} className="block size-full object-cover" />
+            <MediaPreview file={img.file} url={img.url} proxy={img.proxy} name={img.name} className="block size-full object-cover" />
             <span className="image-thumb-label absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 py-0.5 text-center text-[11px] leading-snug text-white">
               {img.name}
             </span>
@@ -54,6 +54,8 @@ export default function ImagesTab() {
         <section id="image-detail" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
           <MediaPreview
             file={image.file}
+            url={image.url}
+            proxy={image.proxy}
             name={image.name}
             playing
             className="block max-h-[220px] w-full rounded-lg bg-background object-contain"

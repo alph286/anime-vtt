@@ -10,7 +10,7 @@ export function Lightbox({ image, onClose }: { image: ImageItem | null; onClose:
         <DialogDescription className="sr-only">Anteprima a schermo intero</DialogDescription>
         {image && (
           <div className="flex flex-col items-center gap-2">
-            <MediaPreview file={image.file} name={image.name} playing className="max-h-[85vh] max-w-full rounded-md object-contain" />
+            <MediaPreview file={image.file} url={image.url} proxy={image.proxy} name={image.name} playing className="max-h-[85vh] max-w-full rounded-md object-contain" />
             <p className="text-sm text-foreground">{image.name}</p>
           </div>
         )}

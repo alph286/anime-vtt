@@ -1175,3 +1175,30 @@ video. Nessuna distinzione nel modello dati: il tipo si deduce dall'estensione d
 - Verificato su dati vuoti (porta 3100): upload, miniature, Mostra/Ritorna alla mappa,
   video su /display in loop muto con proporzioni corrette. Non verificato: riproduzione su
   un vero Raspberry/TV, video pesanti, autoplay con /display aperto da molto in background.
+
+## Media "Web": pagine web tra i media (fatto, branch `pagina-web`)
+
+Accanto a immagini e video, `location.images` può contenere un elemento **Web**: nessun
+file, ma `url` (+ `proxy`, default true). Si riconosce da `isWebItem(item)` (`item.url`);
+`file` è `null`. Si aggiunge dal pulsante "Aggiungi pagina web" della scheda Media in
+/editor (`sidebar/AddWebDialog.tsx` → `POST /api/media/web`, solo http/https; accetta
+anche `localhost:8080` o IP di rete locale). Mostra/Ritorna alla mappa usano gli stessi
+eventi `image:show`/`image:hide`.
+- **Proxy** (`server/webproxy.js`, `GET /api/webproxy?url=`): scarica la pagina e NON
+  inoltra `X-Frame-Options`/`Content-Security-Policy`, inietta `<base href>` e
+  `<meta charset>`; le risorse si caricano direttamente dall'origine. Timeout 15s, max
+  20MB. Con `proxy:false` l'iframe punta direttamente all'URL (utile se il proxy rompe
+  una pagina). `webItemSrc(item)` in `public/shared/media.js` sceglie la sorgente.
+- **/display**: `<iframe id="shown-image-web">` a tutto schermo nel `#image-layer`,
+  `sandbox` senza `allow-same-origin`, `pointer-events:none` (sola visualizzazione); il
+  `src` viene tolto quando la pagina non è più in onda. Miniature: icona globo; l'iframe
+  vero solo in lightbox (editor) e dettaglio (control).
+- **Telegram escluso** (come i video). Export/import mantengono `url`/`proxy`; orfani e
+  cancellazione ignorano gli elementi senza file.
+- **Limiti noti**: siti con frame-busting JS, login/cookie di terze parti o che richiedono
+  `localStorage` (iframe senza `allow-same-origin`) possono non funzionare; i link seguiti
+  dentro la pagina non passano dal proxy. Il DM non può scorrere/pilotare la pagina sul
+  display (scelta: solo visualizzazione). **Non verificato**: siti internet reali
+  (l'ambiente di test non esce su internet; provato solo un server locale), resa su una
+  vera TV, nel browser /editor e /control (build compilata, test Vitest 304/304 e
+  `node --test` verdi, ma la UI non è stata aperta).
