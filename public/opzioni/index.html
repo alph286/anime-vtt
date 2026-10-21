@@ -11,6 +11,8 @@
 <svg style="display:none">
   <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></symbol>
   <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4 10 14M9 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12 18 6"/></symbol>
 </svg>
 
 <header class="topbar">
@@ -22,89 +24,114 @@
 </header>
 
 <main>
-  <section class="card">
-    <h2>Campagna</h2>
-    <div class="field">
-      <label for="campaign-name-input">Nome campagna</label>
-      <input type="text" id="campaign-name-input" placeholder="Nome campagna">
-      <p class="hint">Solo informativo: appare nei metadati di export/import.</p>
+  <section class="group" aria-labelledby="h-campagna">
+    <div class="group-intro">
+      <h2 id="h-campagna">Campagna</h2>
+      <p class="hint">Il nome finisce nei metadati di export e import.</p>
     </div>
-    <div class="card-actions">
-      <button id="save-settings-btn" class="btn-accent" disabled>Salva</button>
-    </div>
-    <p id="settings-status" class="hint" role="status" aria-live="polite" hidden></p>
-  </section>
-
-  <section class="card">
-    <h2>Telegram</h2>
-    <p class="hint">Per inviare foto e video dalla scheda Media di /control. Serve un bot tuo:</p>
-    <ol class="hint steps">
-      <li>Su Telegram scrivi a <strong>@BotFather</strong>, invia <code>/newbot</code> e copia il token che ti dà.</li>
-      <li>Aggiungi il bot al gruppo (nei gruppi con topic, dagli il permesso di scrivere).</li>
-      <li>Incolla qui sotto il token, poi aggiungi le destinazioni (puoi usare «Rileva»).</li>
-    </ol>
-
-    <div id="token-set" hidden>
+    <div class="group-body">
       <div class="field">
-        <label>Bot</label>
-        <p><strong id="bot-name"></strong> <span class="hint">configurato ✓</span></p>
+        <label for="campaign-name-input">Nome campagna</label>
+        <input type="text" id="campaign-name-input" placeholder="Anime Salve">
       </div>
       <div class="card-actions">
-        <button id="replace-token-btn" type="button">Sostituisci</button>
-        <button id="remove-token-btn" type="button">Rimuovi</button>
+        <button id="save-settings-btn" class="btn-accent" disabled>Salva</button>
+      </div>
+      <p id="settings-status" class="hint" role="status" aria-live="polite" hidden></p>
+    </div>
+  </section>
+
+  <section class="group" aria-labelledby="h-telegram">
+    <div class="group-intro">
+      <h2 id="h-telegram">Telegram</h2>
+      <p class="hint">Invia foto e video dalla scheda Media di /control, con un bot tuo.</p>
+      <ol class="steps">
+        <li>Su Telegram scrivi a <strong>@BotFather</strong>, invia <code>/newbot</code> e copia il token.</li>
+        <li>Aggiungi il bot al gruppo (con i topic, dagli il permesso di scrivere).</li>
+        <li>Incolla qui il token, poi aggiungi le destinazioni.</li>
+      </ol>
+    </div>
+    <div class="group-body">
+      <div class="subsection">
+        <h3>Bot</h3>
+        <div id="token-set" class="bot-state" hidden>
+          <p class="bot-line"><span class="dot" aria-hidden="true"></span><strong id="bot-name"></strong><span class="hint">collegato</span></p>
+          <div class="card-actions">
+            <button id="replace-token-btn" type="button">Sostituisci</button>
+            <button id="remove-token-btn" type="button" class="btn-quiet-danger">Rimuovi</button>
+          </div>
+        </div>
+        <div id="token-form">
+          <div class="field">
+            <label for="token-input">Token del bot</label>
+            <input type="password" id="token-input" class="mono" autocomplete="off" placeholder="123456:ABC-DEF...">
+          </div>
+          <div class="card-actions">
+            <button id="save-token-btn" class="btn-accent" type="button">Salva token</button>
+            <button id="cancel-token-btn" type="button" hidden>Annulla</button>
+          </div>
+        </div>
+        <p id="token-status" class="hint" role="status" aria-live="polite" hidden></p>
+      </div>
+
+      <div class="subsection">
+        <h3>Destinazioni</h3>
+        <p class="hint">Un nome per ogni posto dove vuoi inviare (es. «Mappe»). <code>thread_id</code> serve solo nei gruppi con topic.</p>
+        <div class="dest-table">
+          <div class="dest-head" aria-hidden="true">
+            <span>Nome</span><span>chat_id</span><span>thread_id</span><span></span>
+          </div>
+          <div id="dest-rows" class="dest-rows"></div>
+          <p id="dest-empty" class="dest-empty hint" hidden>Nessuna destinazione. Aggiungine una o usa «Rileva».</p>
+        </div>
+        <div class="card-actions">
+          <button id="add-dest-btn" type="button" class="with-icon"><svg class="icon"><use href="#i-plus"></use></svg>Aggiungi</button>
+          <button id="detect-btn" type="button" class="with-icon"><svg class="icon"><use href="#i-radar"></use></svg>Rileva</button>
+          <button id="save-dest-btn" class="btn-accent push-end" type="button">Salva destinazioni</button>
+        </div>
+        <p id="dest-status" class="hint" role="status" aria-live="polite" hidden></p>
+        <div id="detect-results" class="detect-results" hidden></div>
+        <details class="how">
+          <summary>Come funziona «Rileva»</summary>
+          <p class="hint">Scrivi nel gruppo o nel topic che vuoi usare un messaggio che <strong>menziona il bot</strong> (es. «@nomebot ciao»), poi premi Rileva. I bot con la privacy attiva non vedono gli altri messaggi dei gruppi.</p>
+        </details>
       </div>
     </div>
-    <div id="token-form">
-      <div class="field">
-        <label for="token-input">Token del bot</label>
-        <input type="password" id="token-input" autocomplete="off" placeholder="123456:ABC-DEF...">
-      </div>
+  </section>
+
+  <section class="group" aria-labelledby="h-link">
+    <div class="group-intro">
+      <h2 id="h-link">Link rapidi</h2>
+      <p class="hint">Si aprono in una nuova scheda.</p>
+    </div>
+    <div class="group-body">
       <div class="card-actions">
-        <button id="save-token-btn" class="btn-accent" type="button">Salva token</button>
-        <button id="cancel-token-btn" type="button" hidden>Annulla</button>
+        <a href="/control" target="_blank" rel="noopener" class="link-btn">
+          <svg class="icon"><use href="#i-external"></use></svg>
+          Apri /control
+        </a>
+        <a href="/display" target="_blank" rel="noopener" class="link-btn">
+          <svg class="icon"><use href="#i-external"></use></svg>
+          Apri /display
+        </a>
       </div>
     </div>
-    <p id="token-status" class="hint" role="status" aria-live="polite" hidden></p>
-
-    <div class="field">
-      <label>Destinazioni</label>
-      <div id="dest-rows" class="dest-rows"></div>
-      <p class="hint">«thread_id» serve solo per i gruppi con topic (lascialo vuoto altrimenti).</p>
-    </div>
-    <div class="card-actions">
-      <button id="add-dest-btn" type="button">Aggiungi destinazione</button>
-      <button id="detect-btn" type="button">Rileva</button>
-      <button id="save-dest-btn" class="btn-accent" type="button">Salva destinazioni</button>
-    </div>
-    <p class="hint">Per «Rileva»: scrivi nel gruppo o nel topic che vuoi usare un messaggio che <strong>menziona il bot</strong> (es. «@nomebot ciao»), poi premi il pulsante. I bot con la privacy attiva non vedono gli altri messaggi dei gruppi.</p>
-    <div id="detect-results" class="dest-rows" hidden></div>
-    <p id="dest-status" class="hint" role="status" aria-live="polite" hidden></p>
   </section>
 
-  <section class="card">
-    <h2>Link rapidi</h2>
-    <div class="card-actions">
-      <a href="/control" target="_blank" rel="noopener" class="btn-accent link-btn">
-        <svg class="icon"><use href="#i-external"></use></svg>
-        Apri /control
-      </a>
-      <a href="/display" target="_blank" rel="noopener" class="btn-accent link-btn">
-        <svg class="icon"><use href="#i-external"></use></svg>
-        Apri /display
-      </a>
+  <section class="group" aria-labelledby="h-percorsi">
+    <div class="group-intro">
+      <h2 id="h-percorsi">Percorsi di salvataggio</h2>
+      <p class="hint">Utili per un backup manuale delle cartelle.</p>
     </div>
-  </section>
-
-  <section class="card">
-    <h2>Percorsi di salvataggio</h2>
-    <p class="hint">Utili per un backup manuale delle cartelle.</p>
-    <div class="path-row">
-      <span class="path-label">Dati (state.json)</span>
-      <code id="data-dir-value" class="path-value">—</code>
-    </div>
-    <div class="path-row">
-      <span class="path-label">File caricati (mappe, immagini, audio)</span>
-      <code id="storage-dir-value" class="path-value">—</code>
+    <div class="group-body">
+      <div class="path-row">
+        <span class="path-label">Dati (state.json)</span>
+        <code id="data-dir-value" class="path-value">—</code>
+      </div>
+      <div class="path-row">
+        <span class="path-label">File caricati (mappe, immagini, audio)</span>
+        <code id="storage-dir-value" class="path-value">—</code>
+      </div>
     </div>
   </section>
 
