@@ -20,6 +20,7 @@ const detectBtn = document.getElementById('detect-btn');
 const saveDestBtn = document.getElementById('save-dest-btn');
 const detectResults = document.getElementById('detect-results');
 const destStatus = document.getElementById('dest-status');
+const destEmpty = document.getElementById('dest-empty');
 
 function showStatus(el, kind, text) {
   el.hidden = false;
@@ -112,16 +113,17 @@ removeTokenBtn.addEventListener('click', async () => {
 function addRow(dest) {
   const row = document.createElement('div');
   row.className = 'dest-row';
-  const make = (placeholder, value) => {
+  const make = (placeholder, value, label) => {
     const input = document.createElement('input');
     input.type = 'text';
     input.placeholder = placeholder;
+    input.setAttribute('aria-label', label);
     input.value = value == null ? '' : String(value);
     return input;
   };
-  const name = make('Nome (es. Mappe)', dest.name);
-  const chatId = make('chat_id (es. -1001234567890)', dest.chatId);
-  const threadId = make('thread_id (facoltativo)', dest.threadId);
+  const name = make('Mappe', dest.name, 'Nome');
+  const chatId = make('-1001234567890', dest.chatId, 'chat_id');
+  const threadId = make('facoltativo', dest.threadId, 'thread_id');
   const testBtn = document.createElement('button');
   testBtn.type = 'button';
   testBtn.textContent = 'Prova';
@@ -133,15 +135,25 @@ function addRow(dest) {
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.textContent = 'Elimina';
-  delBtn.addEventListener('click', () => row.remove());
-  row.append(name, chatId, threadId, testBtn, delBtn);
+  delBtn.className = 'btn-quiet-danger';
+  delBtn.addEventListener('click', () => { row.remove(); syncEmpty(); });
+  const actions = document.createElement('div');
+  actions.className = 'dest-actions';
+  actions.append(testBtn, delBtn);
+  row.append(name, chatId, threadId, actions);
   row._fields = { name, chatId, threadId };
   destRows.appendChild(row);
+  syncEmpty();
+}
+
+function syncEmpty() {
+  destEmpty.hidden = destRows.children.length > 0;
 }
 
 function renderDestinations(list) {
   destRows.replaceChildren();
   list.forEach(addRow);
+  syncEmpty();
 }
 
 function collectDestinations() {
@@ -183,7 +195,13 @@ detectBtn.addEventListener('click', async () => {
     btn.type = 'button';
     btn.className = 'detect-item';
     const topic = chat.threadId == null ? 'chat generale' : `topic ${chat.topicName || chat.threadId}`;
-    btn.textContent = `${chat.chatTitle} — ${topic} (chat_id ${chat.chatId}${chat.threadId == null ? '' : `, thread_id ${chat.threadId}`})`;
+    const title = document.createElement('span');
+    title.className = 'detect-title';
+    title.textContent = `${chat.chatTitle} — ${topic}`;
+    const meta = document.createElement('span');
+    meta.className = 'detect-meta';
+    meta.textContent = `chat_id ${chat.chatId}${chat.threadId == null ? '' : ` · thread_id ${chat.threadId}`}`;
+    btn.append(title, meta);
     btn.addEventListener('click', () => {
       addRow({ name: chat.topicName || chat.chatTitle, chatId: chat.chatId, threadId: chat.threadId });
     });
