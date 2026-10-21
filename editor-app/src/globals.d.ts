@@ -3,6 +3,8 @@ type Pt = [number, number];
 declare function fitRect(containerW: number, containerH: number, naturalW: number, naturalH: number): import('./types').Rect;
 declare function positionFitBox(el: HTMLElement, rect: import('./types').Rect): void;
 declare function isVideoFile(filename: string | null | undefined): boolean;
+declare function isWebItem(item: { url?: string } | null | undefined): boolean;
+declare function webItemSrc(item: { url?: string; proxy?: boolean }): string;
 declare function mediaW(el: HTMLImageElement | HTMLVideoElement): number;
 declare function mediaH(el: HTMLImageElement | HTMLVideoElement): number;
 declare function loadMapMedia(

@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
+const { normalizeWebUrl, handleWebProxy } = require('./webproxy');
 const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
 const { createTelegramClient } = require('./telegram');
 const { createTelegramConfig } = require('./telegram-config');
@@ -155,7 +156,7 @@ function findOrphanFiles() {
   const referencedAudio = new Set();
   state.locations.forEach((location) => {
     if (location.map.file) referencedMaps.add(location.map.file);
-    (location.images || []).forEach((img) => referencedImages.add(img.file));
+    (location.images || []).forEach((img) => { if (img.file) referencedImages.add(img.file); });
     if (location.map.audio && location.map.audio.main && location.map.audio.main.file) referencedAudio.add(location.map.audio.main.file);
     if (location.map.audio && location.map.audio.special && location.map.audio.special.file) referencedAudio.add(location.map.audio.special.file);
   });
@@ -222,6 +223,30 @@ app.post('/api/map/clear', (req, res) => {
   broadcastState();
   res.json({ ok: true });
 });
+
+// Elemento "Web" tra i media: nessun file, solo l'indirizzo da mostrare in un iframe.
+// proxy=true fa passare la pagina da /api/webproxy per aggirare i siti che vietano l'iframe.
+app.post('/api/media/web', (req, res) => {
+  const location = state.locations.find((l) => l.id === req.body.locationId);
+  const url = normalizeWebUrl(req.body.url);
+  if (!location || !url) {
+    return res.status(400).json({ error: 'location mancante o URL non valido (solo http/https)' });
+  }
+  location.images.push({
+    id: nanoid(),
+    name: String(req.body.name || '').slice(0, 120) || new URL(url).host,
+    file: null,
+    url,
+    proxy: req.body.proxy !== false,
+    caption: '',
+    telegramDestination: null
+  });
+  saveState(state);
+  broadcastState();
+  res.json({ ok: true });
+});
+
+app.get('/api/webproxy', (req, res) => handleWebProxy(req, res));
 
 app.post('/api/upload/image', uploadImage.single('file'), (req, res) => {
   const location = state.locations.find((l) => l.id === req.body.locationId);
@@ -351,7 +376,7 @@ app.post('/api/import/apply', async (req, res) => {
       const oldImageFiles = new Set();
       state.locations.forEach((l) => {
         if (l.map.file) oldMapFiles.add(l.map.file);
-        (l.images || []).forEach((img) => oldImageFiles.add(img.file));
+        (l.images || []).forEach((img) => { if (img.file) oldImageFiles.add(img.file); });
       });
 
       await exportImport.saveSafetySnapshot(state, MAPS_DIR, IMAGES_DIR, BACKUPS_DIR);
@@ -621,7 +646,7 @@ io.on('connection', (socket) => {
 
     location.images = location.images.filter((i) => i.id !== imageId);
     if (state.activeImageId === imageId) state.activeImageId = null;
-    deleteUploadedFile(IMAGES_DIR, image.file);
+    if (image.file) deleteUploadedFile(IMAGES_DIR, image.file);
 
     saveState(state);
     broadcastState();
@@ -671,6 +696,10 @@ io.on('connection', (socket) => {
     const image = location?.images.find((i) => i.id === imageId);
     if (!image) {
       socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Immagine non trovata' });
+      return;
+    }
+    if (image.url) {
+      socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Le pagine web non si inviano su Telegram' });
       return;
     }
     const result = await sendStoredMedia({
