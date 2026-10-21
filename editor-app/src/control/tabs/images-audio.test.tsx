@@ -176,15 +176,16 @@ describe('ImagesTab', () => {
 });
 
 describe('ImagesTab con video', () => {
-  it('miniatura <video>; dettaglio senza didascalia/Telegram/Invia; Mostra emette image:show', () => {
-    setServer({}, [loc('L1', [{ id: 'V1', name: 'N-V1', file: 'V1.mp4' }])]);
+  it('miniatura <video>; il dettaglio ha didascalia, destinazione e Invia come per le foto', () => {
+    setServer({}, [loc('L1', [{ id: 'V1', name: 'N-V1', file: 'V1.mp4', telegramDestination: 'Gruppo' }])]);
     render(<ImagesTab />);
     const thumb = screen.getByText('N-V1').closest('button')!;
     expect(thumb.querySelector('video')).toBeTruthy();
     click(thumb);
-    expect(screen.queryByText('Invia')).toBeNull();
-    expect(screen.queryByText('Didascalia')).toBeNull();
-    expect(screen.queryByText('Destinazione Telegram')).toBeNull();
+    expect(screen.getByText('Didascalia')).toBeTruthy();
+    expect(screen.getByLabelText('Destinazione Telegram')).toBeTruthy();
+    click(screen.getByText('Invia'));
+    expect(emitsOf('image:sendTelegram')).toEqual([['image:sendTelegram', { locationId: 'L1', imageId: 'V1' }]]);
     click(screen.getByText('Mostra'));
     expect(emitsOf('image:show')).toEqual([['image:show', { imageId: 'V1' }]]);
   });

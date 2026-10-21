@@ -68,16 +68,10 @@ function migrate(state) {
   if (state.activeAudioTrack === undefined) state.activeAudioTrack = 'main';
   if (state.audioTriggerSeq === undefined) state.audioTriggerSeq = 0;
 
-  // Prima di questa feature, PICSENDER_URL viveva solo in `.env`. La prima
-  // volta che uno state.json non ha ancora `settings`, lo si eredita da lì
-  // (se presente) così chi l'aveva già configurato non deve reinserirlo. Una
-  // volta che `settings` esiste, non si tocca più: l'utente lo gestisce da
-  // /opzioni.
-  if (!state.settings) {
-    state.settings = { picsenderUrl: process.env.PICSENDER_URL || '' };
-  } else if (state.settings.picsenderUrl === undefined) {
-    state.settings.picsenderUrl = '';
-  }
+  // `settings.picsenderUrl` apparteneva all'integrazione PicSender, rimossa:
+  // Telegram si configura ora in un file separato (data/telegram.json, vedi
+  // telegram-config.js) perché il token non deve finire nello stato condiviso.
+  delete state.settings;
 
   (state.locations || []).forEach((location) => {
     delete location.map.rotation;

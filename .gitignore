@@ -1,6 +1,8 @@
 node_modules/
 .env
 data/state.json
+data/telegram.json
+data/telegram.json.*.tmp
 storage/maps/*
 storage/images/*
 storage/audio/*
