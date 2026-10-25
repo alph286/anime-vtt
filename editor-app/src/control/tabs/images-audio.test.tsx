@@ -55,7 +55,7 @@ describe('ImagesTab', () => {
   it('lista vuota: testo di aiuto, nessun dettaglio', () => {
     setServer({}, [loc('L1', [])]);
     render(<ImagesTab />);
-    expect(screen.getByText('nessuna immagine per questa location')).toBeTruthy();
+    expect(screen.getByText('nessun media per questa location')).toBeTruthy();
     expect(screen.queryByText('Mostra')).toBeNull();
   });
 
@@ -173,6 +173,22 @@ describe('ImagesTab', () => {
     act(() => useControlStore.getState().setTelegram({ feedback: { imageId: 'I1', ok: true } }));
     render(<ImagesTab />);
     expect(screen.getByText('Inviata ✓').className).not.toContain('error');
+  });
+});
+
+describe('ImagesTab con video', () => {
+  it('miniatura <video>; il dettaglio ha didascalia, destinazione e Invia come per le foto', () => {
+    setServer({}, [loc('L1', [{ id: 'V1', name: 'N-V1', file: 'V1.mp4', telegramDestination: 'Gruppo' }])]);
+    render(<ImagesTab />);
+    const thumb = screen.getByText('N-V1').closest('button')!;
+    expect(thumb.querySelector('video')).toBeTruthy();
+    click(thumb);
+    expect(screen.getByText('Didascalia')).toBeTruthy();
+    expect(screen.getByLabelText('Destinazione Telegram')).toBeTruthy();
+    click(screen.getByText('Invia'));
+    expect(emitsOf('image:sendTelegram')).toEqual([['image:sendTelegram', { locationId: 'L1', imageId: 'V1' }]]);
+    click(screen.getByText('Mostra'));
+    expect(emitsOf('image:show')).toEqual([['image:show', { imageId: 'V1' }]]);
   });
 });
 

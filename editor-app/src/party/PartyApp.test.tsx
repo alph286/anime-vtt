@@ -85,7 +85,7 @@ describe('PartyApp', () => {
   it('c) nessuna modalita o controllo del DM', () => {
     render(<PartyApp />);
     load(serverState());
-    for (const t of ['Pan', 'Ping', 'Zoom', 'Fog', 'Immagini', 'Audio']) expect(screen.queryByText(t)).toBeNull();
+    for (const t of ['Pan', 'Ping', 'Zoom', 'Fog', 'Media', 'Audio']) expect(screen.queryByText(t)).toBeNull();
     expect(screen.getByText("Area d'effetto")).toBeTruthy();
   });
 

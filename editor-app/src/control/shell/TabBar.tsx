@@ -6,7 +6,7 @@ import { selectIsPreviewing, useControlStore, type TabId } from '../store/contro
 const TABS: { id: TabId; label: string; Icon: ComponentType<{ className?: string }> }[] = [
   { id: 'mappa', label: 'Mappa', Icon: Map },
   { id: 'fog', label: 'Fog', Icon: CloudFog },
-  { id: 'immagini', label: 'Immagini', Icon: Image },
+  { id: 'immagini', label: 'Media', Icon: Image },
 ];
 
 export function TabBar() {

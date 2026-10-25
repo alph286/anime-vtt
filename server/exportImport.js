@@ -40,6 +40,7 @@ function manifestForLocation(location) {
     images: (location.images || []).map((img) => ({
       name: img.name || '',
       file: img.file,
+      ...(img.url ? { url: img.url, proxy: img.proxy !== false } : {}),
       caption: img.caption || '',
       telegramDestination: img.telegramDestination || null
     }))
@@ -343,7 +344,8 @@ function rebuildLocationFromManifest(loc, fileMap, { archived, isDefault }) {
     images: (loc.images || []).map((img) => ({
       id: nanoid(),
       name: img.name || '',
-      file: fileMap.get(img.file),
+      file: img.file ? fileMap.get(img.file) : null,
+      ...(img.url ? { url: img.url, proxy: img.proxy !== false } : {}),
       caption: img.caption || '',
       telegramDestination: img.telegramDestination || null
     })),

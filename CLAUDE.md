@@ -1,3 +1,49 @@
+## Invio su Telegram nativo (branch `telegram-picsender-integration-ebf803`)
+
+Spec e piano: `docs/superpowers/specs/2026-10-14-telegram-native-design.md` e
+`docs/superpowers/plans/2026-10-14-telegram-native.md`.
+
+**Decisione**: esiste solo l'invio Telegram nativo (Bot API chiamata dal server).
+L'integrazione PicSender è stata rimossa (`PICSENDER_URL`, campo URL in /opzioni,
+`settings.picsenderUrl`; `server/state.js` toglie `settings` dagli stati vecchi).
+Chi usava PicSender deve ricreare in /opzioni le destinazioni con gli stessi nomi.
+
+**Perché il token sta in `data/telegram.json` e non in `state`**: `state:update` viene
+trasmesso a OGNI client (display, party, control...) e finisce in backup/esportazioni;
+il token del bot darebbe controllo del bot a chiunque apra una pagina. Il file è
+gitignored, permessi 0600, scrittura atomica (`telegram.json.*.tmp`), e il token non
+viene mai restituito al client (la UI sa solo se è impostato).
+
+**Mappa dei file**
+- `server/telegram.js` (+ `.test.js`): client Bot API (invio, rilevamento chat/topic).
+- `server/telegram-config.js` (+ test): lettura/scrittura di `data/telegram.json`.
+- `server/telegram-routes.js` (+ test): endpoint di configurazione, "Rileva", "Prova",
+  risoluzione della destinazione per nome.
+- `public/opzioni/`: sezione Telegram (token, destinazioni nome+chat_id+thread_id
+  opzionale, Rileva, Prova).
+- Scheda Media (`editor-app/src/control/tabs/ImagesTab.tsx`, `sidebar/ImagePanel.tsx`,
+  `hooks/use-telegram-destinations.ts`): didascalia, destinazione per media e Invia,
+  ora anche per i video. La destinazione è assegnata per NOME: ricreandone una con lo
+  stesso nome le assegnazioni restano.
+
+**Regola metodo / limite**: foto -> `sendPhoto` (ripiego `sendDocument` se Telegram
+rifiuta); `mp4`/`m4v`/`mov` -> `sendAnimation` (tipo GIF: loop, muto; meglio H.264);
+altri video (webm, mkv, avi...) -> `sendDocument`, senza conversione e senza ffmpeg.
+Limite Bot API 50 MB per file: oltre, rifiuto con messaggio chiaro.
+
+**Rileva**: il bot in modalità privacy vede solo comandi e menzioni, quindi per
+rilevare chat/topic bisogna scrivere un messaggio che menziona il bot («@nomebot ciao»).
+
+**Non verificato**: invio reale su Telegram (foto E video) MAI eseguito, in particolare
+un `mp4` come animazione in loop e il ripiego su `sendDocument`; "Rileva" con un bot
+reale e un gruppo con topic; resa grafica di /opzioni (controllato solo il DOM in un
+browser, su dati usa e getta).
+
+**Minori noti rimasti aperti (dalla revisione)**: in /opzioni il pulsante "Prova"
+testa la destinazione SALVATA con quel nome (le modifiche non salvate non vengono
+usate); salvare o rimuovere il token ridisegna le righe delle destinazioni (le righe
+non salvate si perdono).
+
 ## Porting di /editor su React + shadcn/ui (fatto, branch `editor-shadcn`)
 
 `/editor` non è più vanilla JS: è un'app React + shadcn/ui in `editor-app/`
@@ -1191,3 +1237,50 @@ giallo/bianco/Viola Cornelia risolve rispettivamente in
 "none" sul poligono) mentre 25 celle restano evidenziate su un'area
 lanciata; suite di test ancora verde (38/38, `AOE_COLORS.blue` rinominato
 `AOE_COLORS.white` anche nei test).
+
+## Handout video: scheda "Media" (fatto, branch `media-handout`)
+
+Gli handout mostrati ai PG (`location.images`, eventi `image:*`) possono essere anche
+video. Nessuna distinzione nel modello dati: il tipo si deduce dall'estensione del file
+(`isVideoFile` in `public/shared/media.js`, ora esportata anche per il server).
+- Scheda "Immagini" rinominata **Media** in /editor (sidebar) e /control (TabBar);
+  l'editor carica `image/*,video/*` da un solo pulsante (video controllati con
+  `checkVideoSafe`, come le mappe; `/api/upload/image` accetta video fino a 150MB).
+- `/display`: nuovo `<video id="shown-image-video">` accanto all'`<img>`, pilotato da
+  `loadMapMedia` (loop, muto, autoplay). Nascondendo l'handout il video va in pausa.
+- Componente condiviso `editor-app/src/components/MediaPreview.tsx` (miniatura ferma sul
+  primo fotogramma, riproduzione in loop in lightbox/dettaglio).
+- **Telegram escluso per i video** (richiesta esplicita, da riprendere in seguito): UI
+  nascosta per i video e `image:sendTelegram` risponde con errore lato server.
+  (Superato: i video ora si inviano, vedi «Invio su Telegram nativo» in cima; anche
+  PicSender, citato nelle sezioni storiche, è stato rimosso.)
+- Verificato su dati vuoti (porta 3100): upload, miniature, Mostra/Ritorna alla mappa,
+  video su /display in loop muto con proporzioni corrette. Non verificato: riproduzione su
+  un vero Raspberry/TV, video pesanti, autoplay con /display aperto da molto in background.
+
+## Media "Web": pagine web tra i media (fatto, branch `pagina-web`)
+
+Accanto a immagini e video, `location.images` può contenere un elemento **Web**: nessun
+file, ma `url` (+ `proxy`, default true). Si riconosce da `isWebItem(item)` (`item.url`);
+`file` è `null`. Si aggiunge dal pulsante "Aggiungi pagina web" della scheda Media in
+/editor (`sidebar/AddWebDialog.tsx` → `POST /api/media/web`, solo http/https; accetta
+anche `localhost:8080` o IP di rete locale). Mostra/Ritorna alla mappa usano gli stessi
+eventi `image:show`/`image:hide`.
+- **Proxy** (`server/webproxy.js`, `GET /api/webproxy?url=`): scarica la pagina e NON
+  inoltra `X-Frame-Options`/`Content-Security-Policy`, inietta `<base href>` e
+  `<meta charset>`; le risorse si caricano direttamente dall'origine. Timeout 15s, max
+  20MB. Con `proxy:false` l'iframe punta direttamente all'URL (utile se il proxy rompe
+  una pagina). `webItemSrc(item)` in `public/shared/media.js` sceglie la sorgente.
+- **/display**: `<iframe id="shown-image-web">` a tutto schermo nel `#image-layer`,
+  `sandbox` senza `allow-same-origin`, `pointer-events:none` (sola visualizzazione); il
+  `src` viene tolto quando la pagina non è più in onda. Miniature: icona globo; l'iframe
+  vero solo in lightbox (editor) e dettaglio (control).
+- **Telegram escluso** (come i video). Export/import mantengono `url`/`proxy`; orfani e
+  cancellazione ignorano gli elementi senza file.
+- **Limiti noti**: siti con frame-busting JS, login/cookie di terze parti o che richiedono
+  `localStorage` (iframe senza `allow-same-origin`) possono non funzionare; i link seguiti
+  dentro la pagina non passano dal proxy. Il DM non può scorrere/pilotare la pagina sul
+  display (scelta: solo visualizzazione). **Non verificato**: siti internet reali
+  (l'ambiente di test non esce su internet; provato solo un server locale), resa su una
+  vera TV, nel browser /editor e /control (build compilata, test Vitest 304/304 e
+  `node --test` verdi, ma la UI non è stata aperta).

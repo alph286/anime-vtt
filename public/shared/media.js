@@ -52,6 +52,17 @@ function loadImageThen(imgEl, src, onReady) {
 
 const VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogv', 'ogg', 'mov', 'm4v', 'mkv', 'avi', 'wmv', 'flv'];
 
+// Elemento media "Web": nessun file, ha un indirizzo (item.url). Con item.proxy
+// (default) passa dal proxy del server, che toglie i divieti di incorporamento.
+function isWebItem(item) {
+  return Boolean(item && item.url);
+}
+
+function webItemSrc(item) {
+  if (!isWebItem(item)) return '';
+  return item.proxy === false ? item.url : `/api/webproxy?url=${encodeURIComponent(item.url)}`;
+}
+
 function isVideoFile(filename) {
   if (!filename) return false;
   const ext = filename.split('.').pop().toLowerCase();
@@ -83,6 +94,7 @@ function loadMapMedia(imgEl, videoEl, filename, src, onReady) {
   const other = wantVideo ? imgEl : videoEl;
 
   other.hidden = true;
+  if (!wantVideo) other.pause();
   if (other.dataset.mapSrc) {
     other.removeAttribute('src');
     delete other.dataset.mapSrc;
@@ -768,6 +780,9 @@ if (typeof module !== 'undefined' && module.exports) {
     AOE_COLORS_DARK,
     aoeColorHex,
     aoeColorDarkHex,
+    isVideoFile,
+    isWebItem,
+    webItemSrc,
     rotateVector,
     rotateDirectionToBase,
     aoePixelsPerMeter,

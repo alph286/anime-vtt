@@ -205,6 +205,24 @@ export function MenuBar() {
                 ))}
               </MenubarSubContent>
             </MenubarSub>
+            <MenubarSub>
+              <MenubarSubTrigger disabled={disabled}><Sparkles /> Cerchi magici</MenubarSubTrigger>
+              <MenubarSubContent>
+                {[
+                  { id: 'magic_circle_red', label: 'Rosso' },
+                  { id: 'magic_circle_blue', label: 'Blu' },
+                  { id: 'magic_circle_green', label: 'Verde' },
+                ].map((s) => (
+                  <MenubarCheckboxItem
+                    key={s.id}
+                    checked={mode === 'shader-place' && selectedShaderType === s.id}
+                    onCheckedChange={() => useEditorStore.getState().chooseShaderTool(s.id)}
+                  >
+                    <Sparkles /> {s.label}
+                  </MenubarCheckboxItem>
+                ))}
+              </MenubarSubContent>
+            </MenubarSub>
           </MenubarContent>
         </MenubarMenu>
 

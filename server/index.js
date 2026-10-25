@@ -8,9 +8,12 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
+const { normalizeWebUrl, handleWebProxy } = require('./webproxy');
 const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
+const { createTelegramClient } = require('./telegram');
+const { createTelegramConfig } = require('./telegram-config');
+const { registerTelegramRoutes, sendStoredMedia } = require('./telegram-routes');
 const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js');
-const picsender = require('./picsender');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
 const packageJson = require('../package.json');
@@ -22,6 +25,8 @@ const IMAGES_DIR = path.join(STORAGE_DIR, 'images');
 const AUDIO_DIR = path.join(STORAGE_DIR, 'audio');
 const IMPORTS_DIR = path.join(DATA_DIR, 'imports');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
+const telegramConfig = createTelegramConfig(path.join(DATA_DIR, 'telegram.json'));
+const telegramClient = createTelegramClient();
 // Limite di sicurezza per gli AoE: una taglia enorme (o Infinity) farebbe
 // iterare aoeAffectedCells su un numero di celle spropositato lato client.
 const MAX_AOE_SIZE_M = 300;
@@ -29,7 +34,7 @@ const MAX_AOE_SIZE_M = 300;
 // /editor. Il registro con lo shader GLSL vero vive lato client
 // (public/shared/shader-effects.js) -- il server valida solo che la
 // stringa sia una di queste, mai il contenuto GLSL.
-const SHADER_IDS = ['portal', 'portal_red', 'green_fire'];
+const SHADER_IDS = ['portal', 'portal_red', 'green_fire', 'magic_circle_red', 'magic_circle_blue', 'magic_circle_green'];
 const SHADER_MIN_SIZE_M = 0.5;
 const AOE_COLOR_NAMES = Object.keys(AOE_COLORS);
 
@@ -78,8 +83,7 @@ app.get('/api/info', (req, res) => {
 });
 
 app.post('/api/settings', (req, res) => {
-  const { picsenderUrl, campaignName } = req.body;
-  state.settings.picsenderUrl = typeof picsenderUrl === 'string' ? picsenderUrl.trim() : '';
+  const { campaignName } = req.body;
   if (!state.campaign) state.campaign = { name: '' };
   if (typeof campaignName === 'string') state.campaign.name = campaignName.trim();
   saveState(state);
@@ -104,7 +108,9 @@ function makeUpload(destDir, { allowVideo = false, maxFileSize = 50 * 1024 * 102
 // Le mappe possono essere anche video (usati come sfondo animato in loop, muto);
 // un tetto più alto perché un video anche breve pesa molto più di un'immagine.
 const uploadMap = makeUpload(MAPS_DIR, { allowVideo: true, maxFileSize: 300 * 1024 * 1024 });
-const uploadImage = makeUpload(IMAGES_DIR);
+// Gli handout possono essere anche video (loop muto su /display); tetto più basso
+// delle mappe, in linea col limite lato editor.
+const uploadImage = makeUpload(IMAGES_DIR, { allowVideo: true, maxFileSize: 150 * 1024 * 1024 });
 
 // L'audio non riusa makeUpload(): filtro mime (audio/*) e limite dimensione
 // diversi da mappe/immagini, e vogliamo poter cambiare l'uno senza rischiare
@@ -151,7 +157,7 @@ function findOrphanFiles() {
   const referencedAudio = new Set();
   state.locations.forEach((location) => {
     if (location.map.file) referencedMaps.add(location.map.file);
-    (location.images || []).forEach((img) => referencedImages.add(img.file));
+    (location.images || []).forEach((img) => { if (img.file) referencedImages.add(img.file); });
     if (location.map.audio && location.map.audio.main && location.map.audio.main.file) referencedAudio.add(location.map.audio.main.file);
     if (location.map.audio && location.map.audio.special && location.map.audio.special.file) referencedAudio.add(location.map.audio.special.file);
   });
@@ -219,6 +225,30 @@ app.post('/api/map/clear', (req, res) => {
   res.json({ ok: true });
 });
 
+// Elemento "Web" tra i media: nessun file, solo l'indirizzo da mostrare in un iframe.
+// proxy=true fa passare la pagina da /api/webproxy per aggirare i siti che vietano l'iframe.
+app.post('/api/media/web', (req, res) => {
+  const location = state.locations.find((l) => l.id === req.body.locationId);
+  const url = normalizeWebUrl(req.body.url);
+  if (!location || !url) {
+    return res.status(400).json({ error: 'location mancante o URL non valido (solo http/https)' });
+  }
+  location.images.push({
+    id: nanoid(),
+    name: String(req.body.name || '').slice(0, 120) || new URL(url).host,
+    file: null,
+    url,
+    proxy: req.body.proxy !== false,
+    caption: '',
+    telegramDestination: null
+  });
+  saveState(state);
+  broadcastState();
+  res.json({ ok: true });
+});
+
+app.get('/api/webproxy', (req, res) => handleWebProxy(req, res));
+
 app.post('/api/upload/image', uploadImage.single('file'), (req, res) => {
   const location = state.locations.find((l) => l.id === req.body.locationId);
   if (!location || !req.file) {
@@ -268,14 +298,7 @@ app.post('/api/upload/audio', uploadAudio.single('file'), (req, res) => {
   res.json({ ok: true, file: req.file.filename, slot });
 });
 
-app.get('/api/telegram/destinations', async (req, res) => {
-  try {
-    const destinations = await picsender.getDestinations(state.settings.picsenderUrl);
-    res.json(destinations);
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
-});
+registerTelegramRoutes(app, { config: telegramConfig, client: telegramClient });
 
 app.get('/api/export/location/:id', (req, res) => {
   const location = state.locations.find((l) => l.id === req.params.id);
@@ -354,7 +377,7 @@ app.post('/api/import/apply', async (req, res) => {
       const oldImageFiles = new Set();
       state.locations.forEach((l) => {
         if (l.map.file) oldMapFiles.add(l.map.file);
-        (l.images || []).forEach((img) => oldImageFiles.add(img.file));
+        (l.images || []).forEach((img) => { if (img.file) oldImageFiles.add(img.file); });
       });
 
       await exportImport.saveSafetySnapshot(state, MAPS_DIR, IMAGES_DIR, BACKUPS_DIR);
@@ -644,7 +667,7 @@ io.on('connection', (socket) => {
 
     location.images = location.images.filter((i) => i.id !== imageId);
     if (state.activeImageId === imageId) state.activeImageId = null;
-    deleteUploadedFile(IMAGES_DIR, image.file);
+    if (image.file) deleteUploadedFile(IMAGES_DIR, image.file);
 
     saveState(state);
     broadcastState();
@@ -696,8 +719,13 @@ io.on('connection', (socket) => {
       socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Immagine non trovata' });
       return;
     }
-    const result = await picsender.sendImage({
-      url: state.settings.picsenderUrl,
+    if (image.url) {
+      socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Le pagine web non si inviano su Telegram' });
+      return;
+    }
+    const result = await sendStoredMedia({
+      config: telegramConfig,
+      client: telegramClient,
       filePath: path.join(IMAGES_DIR, image.file),
       caption: image.caption,
       destinationName: image.telegramDestination

@@ -88,15 +88,15 @@ describe('ControlApp', () => {
     expect(screen.getByText(/Stai mostrando/)).toBeTruthy();
   });
 
-  it('e) tab Immagini disabilitata in anteprima; se attiva torna a mappa', async () => {
+  it('e) tab Media disabilitata in anteprima; se attiva torna a mappa', async () => {
     get().receiveState(fixture());
     render(<ControlApp />);
-    const imgTab = screen.getByRole('tab', { name: /Immagini/ });
+    const imgTab = screen.getByRole('tab', { name: /Media/ });
     expect((imgTab as HTMLButtonElement).disabled).toBe(false);
     act(() => get().setTab('immagini'));
     expect(get().tab).toBe('immagini');
     act(() => get().setPreviewLocation('L2'));
-    expect((screen.getByRole('tab', { name: /Immagini/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('tab', { name: /Media/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(get().tab).toBe('mappa');
   });
 

@@ -15,7 +15,7 @@ export interface MapData {
   audio: { main: AudioTrack; special: AudioTrack };
   polygons: Polygon[]; shaders: ShaderDeco[];
 }
-export interface ImageItem { id: string; name: string; file: string; caption?: string; telegramDestination?: string | null }
+export interface ImageItem { id: string; name: string; file: string | null; url?: string; proxy?: boolean; caption?: string; telegramDestination?: string | null }
 export interface Location {
   id: string; name: string; map: MapData; images: ImageItem[]; archived: boolean; isDefault?: boolean;
 }

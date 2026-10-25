@@ -18,6 +18,8 @@ const mapAoeShaderCanvas = document.getElementById('map-aoe-shader-canvas');
 const aoeShaderLayer = new AoeShaderLayer(mapAoeShaderCanvas);
 const imageFitBox = document.getElementById('image-fit-box');
 const shownImageImg = document.getElementById('shown-image-img');
+const shownImageVideo = document.getElementById('shown-image-video');
+const shownImageWeb = document.getElementById('shown-image-web');
 const wifiDot = document.getElementById('wifi-dot');
 const compassEl = document.getElementById('compass');
 // Audio della scena: due <audio> alternati dal motore (crossfade, ducking
@@ -223,6 +225,12 @@ function render(state) {
   if (showingImage) {
     renderImage(location, state.activeImageId);
   } else {
+    // Un handout video nascosto non deve continuare a decodificare in background.
+    if (!shownImageVideo.paused) shownImageVideo.pause();
+    if (shownImageWeb.dataset.src) {
+      shownImageWeb.removeAttribute('src');
+      delete shownImageWeb.dataset.src;
+    }
     renderMap(state, location, previousShowingImage);
   }
   previousShowingImage = showingImage;
@@ -262,12 +270,35 @@ function renderImage(location, activeImageId) {
   const image = location.images.find((i) => i.id === activeImageId);
   if (!image) return;
 
+  // Pagina web: iframe a tutto schermo, niente fit-box né proporzioni del media.
+  if (isWebItem(image)) {
+    imageFitBox.hidden = true;
+    shownImageVideo.pause();
+    const src = webItemSrc(image);
+    shownImageWeb.hidden = false;
+    if (shownImageWeb.dataset.src !== src) {
+      shownImageWeb.dataset.src = src;
+      shownImageWeb.src = src;
+    }
+    return;
+  }
+  imageFitBox.hidden = false;
+  shownImageWeb.hidden = true;
+  if (shownImageWeb.dataset.src) {
+    shownImageWeb.removeAttribute('src'); // ferma la pagina quando non è più in onda
+    delete shownImageWeb.dataset.src;
+  }
+
+  // Handout: immagine o video (loop muto), stessa logica delle mappe. L'elemento
+  // attivo si decide prima: loadMapMedia può chiamare onReady in modo sincrono
+  // (media già caricato) e non deve trovarsi con un riferimento ancora vuoto.
+  const el = isVideoFile(image.file) ? shownImageVideo : shownImageImg;
   const applyLayout = () => {
-    const rect = fitRect(imageLayer.clientWidth, imageLayer.clientHeight, shownImageImg.naturalWidth, shownImageImg.naturalHeight);
+    const rect = fitRect(imageLayer.clientWidth, imageLayer.clientHeight, mediaW(el), mediaH(el));
     positionFitBox(imageFitBox, rect);
   };
 
-  loadImageThen(shownImageImg, `/storage/images/${image.file}`, applyLayout);
+  loadMapMedia(shownImageImg, shownImageVideo, image.file, `/storage/images/${image.file}`, applyLayout);
 }
 
 // The wrap element's CSS rotate() transform already turns this locally-flat
