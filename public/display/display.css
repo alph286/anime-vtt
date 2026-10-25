@@ -57,6 +57,12 @@ html, body {
   display: block;
 }
 
+/* `display: block` qui sopra vince sullo stile del browser per [hidden]:
+   senza questa regola, passando da mappa animata a mappa normale (o tra
+   handout immagine/video) l'elemento "nascosto" restava visibile sotto
+   quello nuovo. /control, /party ed editor hanno già la regola equivalente. */
+.media-img[hidden] { display: none; }
+
 .map-placeholder {
   background-color: var(--bg-canvas);
   background-image:

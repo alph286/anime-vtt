@@ -94,6 +94,7 @@ function loadMapMedia(imgEl, videoEl, filename, src, onReady) {
   const other = wantVideo ? imgEl : videoEl;
 
   other.hidden = true;
+  if (!wantVideo) other.pause();
   if (other.dataset.mapSrc) {
     other.removeAttribute('src');
     delete other.dataset.mapSrc;
