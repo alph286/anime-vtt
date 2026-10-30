@@ -15,7 +15,6 @@ const AOE_COLOR_NAMES = Object.keys(AOE_COLORS);
 // suddivisioni *dopo* aver tracciato la griglia, senza dover ritracciare.
 const DEFAULT_GRID = { enabled: false, cellSize: 100, baseCellSize: 100, divisions: 1, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 };
 const DEFAULT_COMPASS = { visible: false, x: 88, y: 85, rotation: 0 };
-const DEFAULT_AUDIO = { name: '', file: null, volume: 0.7 };
 
 const DEFAULT_STATE = {
   campaign: { name: 'Anime Salve' },
@@ -192,4 +191,4 @@ function applyStartupDefault(state) {
   return state;
 }
 
-module.exports = { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR, STATE_FILE };
+module.exports = { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR, STATE_FILE };
