@@ -8,7 +8,7 @@ import {
 import { loadLocalZoom, saveLocalZoom, type LocalZoom } from '../lib/local-zoom';
 
 export type Mode = 'pan' | 'fog' | 'ping' | 'zoom' | 'aoe' | null;
-export type TabId = 'mappa' | 'fog' | 'immagini';
+export type TabId = 'mappa' | 'fog' | 'immagini' | 'audio';
 export interface TelegramFeedback { imageId: string; ok: boolean; error?: string }
 // previewW/H = dimensioni di #map-preview (spazio non zoomato), servono al
 // riquadro giallo e al clamp dello zoom locale.

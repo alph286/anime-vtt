@@ -9,6 +9,7 @@ import { AoeNudgePad } from './aoe/AoeNudgePad';
 import MapTab from './map/MapTab';
 import FogTab from './tabs/FogTab';
 import ImagesTab from './tabs/ImagesTab';
+import AudioTab from './tabs/AudioTab';
 
 // Pannello: colonna a tutta altezza. Sotto 700px una scheda alla volta; da
 // 700px in su la Mappa resta sempre visibile e accanto compare Fog (di
@@ -50,6 +51,9 @@ export default function ControlApp() {
         </TabsContent>
         <TabsContent forceMount value="immagini" className={panel}>
           <ImagesTab />
+        </TabsContent>
+        <TabsContent forceMount value="audio" className={panel}>
+          <AudioTab />
         </TabsContent>
       </div>
       <TabBar />
