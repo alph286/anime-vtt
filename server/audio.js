@@ -35,7 +35,8 @@ function normalizeTrack(t, kind) {
     name: cleanName(t.name),
     file: t.file,
     icon: cleanIcon(t.icon, kind),
-    volume: cleanVolume(t.volume)
+    volume: cleanVolume(t.volume),
+    handout: t.handout === true
   };
   if (kind === 'background') {
     track.restartOnStop = t.restartOnStop === true;
@@ -115,6 +116,10 @@ function updateTrack(location, trackId, fields) {
   }
   if (typeof fields.icon === 'string' && ICON_RE.test(fields.icon)) {
     found.track.icon = fields.icon;
+    changed = true;
+  }
+  if (typeof fields.handout === 'boolean') {
+    found.track.handout = fields.handout;
     changed = true;
   }
   if (found.kind === 'background' && typeof fields.restartOnStop === 'boolean') {

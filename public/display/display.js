@@ -26,21 +26,7 @@ const compassEl = document.getElementById('compass');
 // Un <audio> per traccia, creato nel contenitore nascosto #audio-mixer.
 // Lo si pilota solo da renderAudio e gli si porta fuori stato e fine one-shot.
 const audioMixerBox = document.getElementById('audio-mixer');
-const audioEngine = createAudioMixer({
-  createElement: () => {
-    const el = document.createElement('audio');
-    audioMixerBox.appendChild(el);
-    return el;
-  },
-  now: () => performance.now(),
-  // rAF non scatta se la pagina è nascosta (schermo spento, tab in secondo
-  // piano): senza un timer di riserva i fade resterebbero fermi a volume 0.
-  requestFrame: (fn) => {
-    let done = false;
-    const run = () => { if (!done) { done = true; fn(); } };
-    requestAnimationFrame(run);
-    setTimeout(run, 100);
-  },
+const audioEngine = createPageAudioMixer(audioMixerBox, {
   onStatus: (status) => socket.emit('audio:status', status),
   onOneshotEnded: (trackId, seq) => socket.emit('audio:oneshotEnded', { trackId, seq })
 });
@@ -269,17 +255,7 @@ function renderCompass(location, showingImage) {
 // un'immagine ai giocatori non ferma l'audio. Il motore (shared/audio-fade.js)
 // confronta ogni stato con il precedente e fa solo il minimo necessario.
 function renderAudio(location, audioOneshots) {
-  const audio = location && location.map.audio;
-  const src = (t) => `/storage/audio/${t.file}`;
-  const playable = (list) => (Array.isArray(list) ? list.filter((t) => t && t.file) : []);
-  audioEngine.apply({
-    locationId: location ? location.id : null,
-    background: playable(audio && audio.background).map((t) => ({
-      id: t.id, src: src(t), volume: t.volume, on: Boolean(t.on), restartOnStop: Boolean(t.restartOnStop)
-    })),
-    oneshot: playable(audio && audio.oneshot).map((t) => ({ id: t.id, src: src(t), volume: t.volume })),
-    oneshots: audioOneshots || {}
-  });
+  audioEngine.apply(audioSceneOf(location, audioOneshots));
 }
 
 function renderImage(location, activeImageId) {

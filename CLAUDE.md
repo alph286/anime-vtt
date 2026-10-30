@@ -565,6 +565,20 @@ più `<audio>` insieme; lo stato `blocked` (l'autoplay nel browser di prova non 
 rifiutato); il tocco su un telefono vero; un file corrotto/mancante con il bordo rosso
 nella nuova scheda.
 
+**Audio anche su /handout (branch `audio-handout`)**: ogni traccia (background e one-shot)
+ha `handout: boolean` (default false, casella "Suona anche su /handout" in /editor,
+`audio:update { handout }`). `/handout` carica lo stesso mixer e suona solo le tracce
+spuntate della location attiva (`audioSceneOf(location, audioOneshots, { handoutOnly: true })`
+in `shared/audio-fade.js`, usato anche da /display; `createPageAudioMixer` crea il mixer
+nel browser per entrambe le pagine). L'eco con /display nella stessa stanza è voluto
+(richiesta di Alph). Scelte mie: /display resta l'unica autorità (lo stato a /control e
+la fine dei one-shot arrivano solo da lì, /handout non emette niente); su /handout i
+background si abbassano solo per i one-shot che suonano anche lì; la posizione virtuale
+dei background "sempre a loop" è per dispositivo. Come /display, un clic/tasto riapplica
+la scena (sblocco autoplay). Verificato su copia dei dati (:3100): background e one-shot
+spuntati su /handout, ducking 0,4→0,16 e risalita, stop, one-shot non spuntato assente,
+casella in /editor. Non verificato: l'ascolto vero dei due dispositivi insieme.
+
 
 # Piano di lavoro
 
