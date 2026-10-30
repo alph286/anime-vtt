@@ -22,11 +22,16 @@ const shownImageVideo = document.getElementById('shown-image-video');
 const shownImageWeb = document.getElementById('shown-image-web');
 const wifiDot = document.getElementById('wifi-dot');
 const compassEl = document.getElementById('compass');
-// Audio della scena: due <audio> alternati dal motore (crossfade, ducking
-// dello sting, fade di play/pausa/stop). Il motore decide cosa sfumare; qui lo
-// si pilota solo da renderAudio e gli si porta fuori stato e fine-sting.
-const audioEngine = createAudioEngine({
-  elements: [document.getElementById('scene-audio'), document.getElementById('scene-audio-b')],
+// Audio della scena: mixer a righe (background in loop, one-shot con ducking).
+// Un <audio> per traccia, creato nel contenitore nascosto #audio-mixer.
+// Lo si pilota solo da renderAudio e gli si porta fuori stato e fine one-shot.
+const audioMixerBox = document.getElementById('audio-mixer');
+const audioEngine = createAudioMixer({
+  createElement: () => {
+    const el = document.createElement('audio');
+    audioMixerBox.appendChild(el);
+    return el;
+  },
   now: () => performance.now(),
   // rAF non scatta se la pagina è nascosta (schermo spento, tab in secondo
   // piano): senza un timer di riserva i fade resterebbero fermi a volume 0.
@@ -37,7 +42,7 @@ const audioEngine = createAudioEngine({
     setTimeout(run, 100);
   },
   onStatus: (status) => socket.emit('audio:status', status),
-  onSpecialEnded: (seq) => socket.emit('audio:specialEnded', { seq })
+  onOneshotEnded: (trackId, seq) => socket.emit('audio:oneshotEnded', { trackId, seq })
 });
 
 let socketConnected = false;
@@ -220,7 +225,7 @@ function render(state) {
   imageLayer.style.display = showingImage ? 'block' : 'none';
 
   renderCompass(location, showingImage);
-  renderAudio(location, state.activeAudioTrack, state.audioState, state.audioTriggerSeq);
+  renderAudio(location, state.audioOneshots);
 
   if (showingImage) {
     renderImage(location, state.activeImageId);
@@ -254,15 +259,17 @@ function renderCompass(location, showingImage) {
 // layer (mappa/immagine) è mostrato: è una scelta di design che mostrare
 // un'immagine ai giocatori non ferma l'audio. Il motore (shared/audio-fade.js)
 // confronta ogni stato con il precedente e fa solo il minimo necessario.
-function renderAudio(location, activeAudioTrack, audioState, audioTriggerSeq) {
-  const slot = activeAudioTrack === 'special' ? 'special' : 'main';
-  const track = location && location.map.audio[slot];
+function renderAudio(location, audioOneshots) {
+  const audio = location && location.map.audio;
+  const src = (t) => `/storage/audio/${t.file}`;
+  const playable = (list) => (Array.isArray(list) ? list.filter((t) => t && t.file) : []);
   audioEngine.apply({
-    slot,
-    src: track && track.file ? `/storage/audio/${track.file}` : null,
-    volume: track && track.volume !== undefined ? track.volume : 0.7,
-    state: audioState,
-    seq: audioTriggerSeq
+    locationId: location ? location.id : null,
+    background: playable(audio && audio.background).map((t) => ({
+      id: t.id, src: src(t), volume: t.volume, on: Boolean(t.on), restartOnStop: Boolean(t.restartOnStop)
+    })),
+    oneshot: playable(audio && audio.oneshot).map((t) => ({ id: t.id, src: src(t), volume: t.volume })),
+    oneshots: audioOneshots || {}
   });
 }
 
