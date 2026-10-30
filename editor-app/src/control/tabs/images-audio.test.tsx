@@ -11,7 +11,6 @@ vi.mock('@/hooks/use-telegram-destinations', () => ({
 }));
 
 import { socket } from '@/lib/socket';
-import { AudioBox } from '../boxes/AudioBox';
 import { useControlStore } from '../store/control-store';
 import type { ControlState } from '../types';
 import ImagesTab from './ImagesTab';
@@ -20,20 +19,19 @@ const GRID = {
   enabled: true, cellSize: 50, baseCellSize: 50, divisions: 1,
   offsetX: 0, offsetY: 0, color: '#fff', lineWidth: 0.4, opacity: 0.8,
 };
-const track = (file: string | null, volume?: number) => ({ name: 'x', file, volume });
 function loc(id: string, images: unknown[], audio?: unknown) {
   return {
     id, name: id, archived: false, images,
     map: {
       file: null, type: 'image', scale: 1, flip180: false, rotate90: false, grid: GRID,
-      polygons: [], shaders: [], aoes: [], audio: audio ?? { main: track(null), special: track(null) },
+      polygons: [], shaders: [], aoes: [], audio: audio ?? { background: [], oneshot: [] },
     },
   };
 }
 const IMG = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: `N-${id}`, file: `${id}.png`, ...extra });
 function setServer(over: Record<string, unknown> = {}, locs?: unknown[]) {
   act(() => useControlStore.getState().receiveState({
-    activeLocationId: 'L1', activeImageId: null, activeAudioTrack: 'main', audioState: 'stopped',
+    activeLocationId: 'L1', activeImageId: null, audioOneshots: {},
     displayViewport: null,
     locations: locs ?? [loc('L1', [IMG('I1', { caption: 'cap', telegramDestination: 'Gruppo' }), IMG('I2')])],
     ...over,
@@ -189,105 +187,5 @@ describe('ImagesTab con video', () => {
     expect(emitsOf('image:sendTelegram')).toEqual([['image:sendTelegram', { locationId: 'L1', imageId: 'V1' }]]);
     click(screen.getByText('Mostra'));
     expect(emitsOf('image:show')).toEqual([['image:show', { imageId: 'V1' }]]);
-  });
-});
-
-describe('AudioBox', () => {
-  const audio = (m: string | null, s: string | null, mv?: number) => ({ main: track(m, mv), special: track(s) });
-  const L = (a: unknown) => [loc('L1', [], a)];
-
-  it('nascosto senza tracce', () => {
-    setServer({}, L(audio(null, null)));
-    const { container } = render(<AudioBox />);
-    expect(container.innerHTML).toBe('');
-  });
-
-  it('solo speciale: riga speciale, nessun playback se la traccia attiva e vuota', () => {
-    setServer({ activeAudioTrack: 'main' }, L(audio(null, 's.mp3')));
-    render(<AudioBox />);
-    click(screen.getByTitle('Fai partire la traccia speciale'));
-    expect(emitsOf('audio:playSpecial')).toEqual([['audio:playSpecial', {}]]);
-    expect(screen.queryByTitle('Stop')).toBeNull();
-  });
-
-  it('solo principale: nessuna riga speciale; etichette e play/pausa', () => {
-    setServer({}, L(audio('m.mp3', null)));
-    render(<AudioBox />);
-    expect(screen.queryByTitle('Fai partire la traccia speciale')).toBeNull();
-    expect(screen.getByText('Principale')).toBeTruthy();
-    const pp = screen.getByTitle('Play/Pausa');
-    expect(pp.className).not.toContain('active');
-    click(pp);
-    expect(emitsOf('audio:play')).toEqual([['audio:play', {}]]);
-    setServer({ audioState: 'playing', activeAudioTrack: 'main' }, L(audio('m.mp3', null)));
-    expect(screen.getByTitle('Play/Pausa').className).toContain('active');
-    expect(screen.getByTitle('Play/Pausa').className).toContain('--vtt-accent');
-    click(screen.getByTitle('Play/Pausa'));
-    expect(emitsOf('audio:pause')).toEqual([['audio:pause', {}]]);
-    click(screen.getByTitle('Stop'));
-    expect(emitsOf('audio:stop')).toEqual([['audio:stop', {}]]);
-  });
-
-  it('traccia speciale attiva: etichetta Speciale', () => {
-    setServer({ activeAudioTrack: 'special' }, L(audio('m.mp3', 's.mp3')));
-    render(<AudioBox />);
-    expect(screen.getByText('Speciale')).toBeTruthy();
-  });
-
-  it('volume: default 70%, passo 0.1, clamp 0..1', () => {
-    setServer({}, L(audio('m.mp3', null)));
-    const { unmount } = render(<AudioBox />);
-    expect(screen.getByText('70%')).toBeTruthy();
-    click(screen.getByTitle('Riduci volume'));
-    click(screen.getByTitle('Aumenta volume'));
-    expect(emitsOf('audio:volume')).toEqual([['audio:volume', { volume: 0.6 }], ['audio:volume', { volume: 0.8 }]]);
-    unmount();
-    vi.mocked(socket.emit).mockClear();
-    setServer({}, L(audio('m.mp3', null, 1)));
-    render(<AudioBox />);
-    click(screen.getByTitle('Aumenta volume'));
-    expect(emitsOf('audio:volume')).toEqual([['audio:volume', { volume: 1 }]]);
-    setServer({}, L(audio('m.mp3', null, 0.05)));
-    vi.mocked(socket.emit).mockClear();
-    click(screen.getByTitle('Riduci volume'));
-    expect(emitsOf('audio:volume')).toEqual([['audio:volume', { volume: 0 }]]);
-  });
-
-  it('stato del display: non connesso, poi per ogni stato riportato', () => {
-    const tracks = L(audio('m.mp3', null));
-    act(() => useControlStore.getState().setDisplayConnected(false));
-    setServer({ displayAudio: null }, tracks);
-    render(<AudioBox />);
-    expect(screen.getByTestId('display-audio-status').textContent).toContain('non connesso');
-
-    act(() => useControlStore.getState().setDisplayConnected(true));
-    expect(screen.queryByTestId('display-audio-status')).toBeNull();
-
-    const cases: [string, string, boolean][] = [
-      ['playing', 'in riproduzione', false],
-      ['idle', 'fermo', false],
-      ['error', 'file non trovato o illeggibile', true],
-      ['blocked', 'audio bloccato dal browser', true],
-    ];
-    for (const [status, text, destructive] of cases) {
-      setServer({ displayAudio: { status, slot: 'main' } }, tracks);
-      const row = screen.getByTestId('display-audio-status');
-      expect(row.textContent).toContain(text);
-      expect(row.className.includes('text-destructive')).toBe(destructive);
-    }
-  });
-
-  it('stato del display: non compare se il box e nascosto (nessuna traccia)', () => {
-    act(() => useControlStore.getState().setDisplayConnected(true));
-    setServer({ displayAudio: { status: 'error', slot: 'main' } }, L(audio(null, null)));
-    const { container } = render(<AudioBox />);
-    expect(container.innerHTML).toBe('');
-  });
-
-  it('riflette la location ATTIVA, non l\'anteprima', () => {
-    setServer({}, [loc('L1', [], audio(null, null)), loc('L2', [], audio('m.mp3', null))]);
-    act(() => useControlStore.getState().setPreviewLocation('L2'));
-    const { container } = render(<AudioBox />);
-    expect(container.innerHTML).toBe('');
   });
 });

@@ -4,14 +4,13 @@ import { selectActiveLocation, selectCanUndo, selectUndoTitle, useEditorStore } 
 
 function makeState(activeLocationId: string | null = 'a'): VttState {
   const grid = { enabled: false, cellSize: 100, baseCellSize: 100, divisions: 1, offsetX: 0, offsetY: 0, color: '#fff', lineWidth: 0.3, opacity: 1 };
-  const audio = { name: '', file: null, volume: 0.7 };
   return {
     activeLocationId,
     locations: [{
       id: 'a', name: 'A', archived: false, images: [],
       map: {
         file: null, type: 'image', scale: 1, flip180: false, rotate90: false, grid,
-        audio: { main: audio, special: audio }, shaders: [],
+        audio: { background: [], oneshot: [] }, shaders: [],
         polygons: [{ id: 'p1', name: 'P1', points: [[0, 0], [10, 0], [10, 10]], revealed: false }],
       },
     }],
