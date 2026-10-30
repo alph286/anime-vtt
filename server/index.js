@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -50,7 +51,18 @@ fs.readdirSync(IMPORTS_DIR).forEach((f) => {
   try { fs.unlinkSync(path.join(IMPORTS_DIR, f)); } catch (err) { /* best effort */ }
 });
 
-let state = applyStartupDefault(loadState());
+// Chiave di contenuto di un file audio: file caricati più volte con lo stesso
+// contenuto diventano una sola voce dell'archivio. null se illeggibile (la
+// migrazione ripiega sul nome del file).
+function audioContentKey(file) {
+  try {
+    return crypto.createHash('sha256').update(fs.readFileSync(path.join(AUDIO_DIR, file))).digest('hex');
+  } catch (err) {
+    return null;
+  }
+}
+
+let state = applyStartupDefault(loadState({ audioKey: audioContentKey }));
 
 function getActiveLocation() {
   return state.locations.find((l) => l.id === state.activeLocationId);
@@ -160,8 +172,9 @@ function findOrphanFiles() {
   state.locations.forEach((location) => {
     if (location.map.file) referencedMaps.add(location.map.file);
     (location.images || []).forEach((img) => { if (img.file) referencedImages.add(img.file); });
-    audioModel.audioFilesOf(location).forEach((f) => referencedAudio.add(f));
   });
+  // Un audio è referenziato se sta nell'archivio, anche se nessuna location lo usa.
+  audioModel.libraryFiles(state).forEach((f) => referencedAudio.add(f));
 
   // .gitkeep (nelle cartelle storage/*) è un segnaposto che tiene la
   // cartella tracciata da git quando è vuota: non è mai referenziato da
@@ -267,22 +280,25 @@ app.post('/api/upload/image', uploadImage.single('file'), (req, res) => {
   res.json({ ok: true, file: req.file.filename });
 });
 
+// Carica nell'archivio audio; con `locationId` + `kind` aggiunge anche subito
+// una riga a quella location.
 app.post('/api/upload/audio', uploadAudio.single('file'), (req, res) => {
-  const location = state.locations.find((l) => l.id === req.body.locationId);
-  const kind = req.body.kind;
-  if (!location || !req.file || !audioModel.AUDIO_KINDS.includes(kind)) {
+  const { locationId, kind } = req.body;
+  const location = locationId ? state.locations.find((l) => l.id === locationId) : null;
+  const wantsRow = !!(locationId || kind);
+  if (!req.file || (wantsRow && (!location || !audioModel.AUDIO_KINDS.includes(kind)))) {
     // File già scritto da multer ma non assegnabile: non lasciarlo orfano.
     if (req.file) deleteUploadedFile(AUDIO_DIR, req.file.filename);
-    return res.status(400).json({ error: 'location, file o kind mancante/non valido' });
+    return res.status(400).json({ error: 'file, location o kind mancante/non valido' });
   }
-  const track = audioModel.addTrack(location, kind, {
+  const item = audioModel.addLibraryItem(state, {
     name: req.body.name || req.file.originalname,
-    file: req.file.filename,
-    id: nanoid()
+    file: req.file.filename
   });
+  const track = wantsRow ? audioModel.addTrackFromLibrary(state, location, kind, item.id) : undefined;
   saveState(state);
   broadcastState();
-  res.json({ ok: true, track });
+  res.json({ ok: true, item, track });
 });
 
 registerTelegramRoutes(app, { config: telegramConfig, client: telegramClient });
@@ -355,7 +371,7 @@ app.post('/api/import/apply', async (req, res) => {
       // resterebbe senza quel campo -- e quindi coi controlli muti -- fino al
       // prossimo riavvio del server, l'unico momento in cui loadState()
       // ri-esegue la migrazione.
-      migrate(state);
+      migrate(state, { audioKey: audioContentKey });
       saveState(state);
       broadcastState();
       res.json({ ok: true, kind: 'location', name: newLocation.name });
@@ -379,7 +395,7 @@ app.post('/api/import/apply', async (req, res) => {
       const candidate = { ...state, locations: restored.locations, campaign: restored.campaign, gridPreset: restored.gridPreset };
       // Stesso motivo del ramo 'location': un backup più vecchio dei campi
       // aggiunti dopo va migrato subito, non al prossimo riavvio.
-      migrate(candidate);
+      migrate(candidate, { audioKey: audioContentKey });
       applyStartupDefault(candidate);
       saveState(candidate);
       state = candidate;
@@ -1125,9 +1141,10 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  socket.on('audio:update', ({ locationId, trackId, name, icon, restartOnStop, handout } = {}) => {
+  // Nome e icona si cambiano dall'archivio (`audioLibrary:update`), non dalla riga.
+  socket.on('audio:update', ({ locationId, trackId, restartOnStop, handout } = {}) => {
     const location = state.locations.find((l) => l.id === locationId);
-    if (!location || !audioModel.updateTrack(location, trackId, { name, icon, restartOnStop, handout })) return;
+    if (!location || !audioModel.updateTrack(location, trackId, { restartOnStop, handout })) return;
     saveState(state);
     broadcastState();
   });
@@ -1135,7 +1152,37 @@ io.on('connection', (socket) => {
   socket.on('audio:delete', ({ locationId, trackId } = {}) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
-    const file = audioModel.removeTrack(state, location, trackId);
+    // Il file resta nell'archivio: si cancella solo con `audioLibrary:delete`.
+    if (!audioModel.removeTrack(state, location, trackId)) return;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('audio:add', ({ locationId, kind, audioId } = {}) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location || !audioModel.addTrackFromLibrary(state, location, kind, audioId)) return;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('audio:copyFrom', ({ locationId, fromLocationId } = {}) => {
+    if (locationId === fromLocationId) return;
+    const to = state.locations.find((l) => l.id === locationId);
+    const from = state.locations.find((l) => l.id === fromLocationId);
+    if (!to || !from || !audioModel.copyTracks(state, from, to)) return;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('audioLibrary:update', ({ audioId, name, icon } = {}) => {
+    if (!audioModel.updateLibraryItem(state, audioId, { name, icon })) return;
+    saveState(state);
+    broadcastState();
+  });
+
+  // L'avviso "usato in..." lo mostra /editor prima di emettere.
+  socket.on('audioLibrary:delete', ({ audioId } = {}) => {
+    const file = audioModel.removeLibraryItem(state, audioId);
     if (!file) return;
     deleteUploadedFile(AUDIO_DIR, file);
     saveState(state);
