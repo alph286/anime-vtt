@@ -19,4 +19,8 @@ export interface ImageItem { id: string; name: string; file: string | null; url?
 export interface Location {
   id: string; name: string; map: MapData; images: ImageItem[]; archived: boolean; isDefault?: boolean;
 }
-export interface VttState { locations: Location[]; activeLocationId: string | null }
+export interface HandoutRef { locationId: string; imageId: string }
+export interface VttState {
+  locations: Location[]; activeLocationId: string | null;
+  handout?: { shown: HandoutRef | null; defaultMedia: HandoutRef | null };
+}

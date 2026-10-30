@@ -1250,3 +1250,25 @@ eventi `image:show`/`image:hide`.
   (l'ambiente di test non esce su internet; provato solo un server locale), resa su una
   vera TV, nel browser /editor e /control (build compilata, test Vitest 304/304 e
   `node --test` verdi, ma la UI non è stata aperta).
+
+## Pagina /handout (fatto, branch `handout`)
+
+Nuova pagina vanilla `public/handout/` (route statica in `server/index.js`, voce in home):
+sola visualizzazione, sfondo nero, media a tutto schermo con `object-fit: contain`,
+nessun controllo. Mostra l'**ultimo** media (immagine o video, loop muto) inviato al
+display da /control e lo tiene anche dopo "Ritorna alla mappa", cambi location o
+riavvii; senza un ultimo mostrato valido mostra il **default** scelto in /editor.
+- **Stato**: `state.handout = { shown, defaultMedia }`, riferimenti `{ locationId, imageId }`
+  (persistiti; `migrate` li crea e chiama `pruneHandout`). `image:show` aggiorna `shown`
+  (e salva); nuovo evento `handout:setDefault` (`imageId: null` = nessun default).
+  `image:delete`/`location:delete` chiamano `pruneHandout`: media eliminato → si torna al
+  default (o a niente).
+- **Scelta** in `public/shared/media.js`: `findHandoutMedia`/`resolveHandoutMedia`
+  (pagine Web escluse), testate in `media.test.js`.
+- **Editor**: stella nella riga del media (scheda Media, solo immagini/video) per
+  impostare/togliere il default; build `public/editor/` ricostruita.
+- **Verificato** su copia dei dati, porta 3100 (socket da Node + /handout e /editor in
+  Playwright): default all'apertura, cambio su `image:show`, permanenza dopo hide e cambio
+  location, video webm in loop muto, eliminazione → default, id non valido ignorato,
+  persistenza dopo riavvio, stella in editor. `npm run test:server` 92/92, Vitest 304/304.
+- **Non verificato**: su una vera TV/secondo schermo; mp4 (provato solo webm).

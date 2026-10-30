@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
+const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS, findHandoutMedia } = require('../public/shared/media.js');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -49,7 +49,8 @@ const DEFAULT_STATE = {
   activeImageId: null,
   activeAudioTrack: 'main',
   audioState: 'stopped',
-  audioTriggerSeq: 0
+  audioTriggerSeq: 0,
+  handout: { shown: null, defaultMedia: null }
 };
 
 function migrate(state) {
@@ -67,6 +68,7 @@ function migrate(state) {
   if (state.audioState === undefined) state.audioState = 'stopped';
   if (state.activeAudioTrack === undefined) state.activeAudioTrack = 'main';
   if (state.audioTriggerSeq === undefined) state.audioTriggerSeq = 0;
+  if (!state.handout) state.handout = { shown: null, defaultMedia: null };
 
   // `settings.picsenderUrl` apparteneva all'integrazione PicSender, rimossa:
   // Telegram si configura ora in un file separato (data/telegram.json, vedi
@@ -150,7 +152,17 @@ function migrate(state) {
     });
   });
 
+  pruneHandout(state);
   return state;
+}
+
+// Azzera i riferimenti di /handout che non puntano più a un'immagine/video
+// esistente (media o location eliminati, import di un altro stato): /handout
+// ricade così sul default, o su nulla.
+function pruneHandout(state) {
+  if (!state.handout) return;
+  if (!findHandoutMedia(state, state.handout.shown)) state.handout.shown = null;
+  if (!findHandoutMedia(state, state.handout.defaultMedia)) state.handout.defaultMedia = null;
 }
 
 function loadState() {
@@ -207,4 +219,4 @@ function applyStartupDefault(state) {
   return state;
 }
 
-module.exports = { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR, STATE_FILE };
+module.exports = { loadState, saveState, migrate, pruneHandout, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR, STATE_FILE };
