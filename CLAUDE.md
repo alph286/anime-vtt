@@ -478,39 +478,93 @@ lavorassi su un altro branch ma va bene così per questa volta") — per la
 prossima richiesta di questo tipo, proporre esplicitamente un branch
 dedicato prima di iniziare invece di assumere il branch corrente.
 
-## Audio: dissolvenze e stato reale del display (fatto, branch `claude/audio-development-proposals-664ebb`)
+## Audio a righe: Background e One-shot (fatto, branch `claude/audio-development-proposals-664ebb`)
 
-Spec e piano: `docs/superpowers/specs/2026-10-12-audio-fade-status-design.md`,
-`docs/superpowers/plans/2026-10-12-audio-fade-status.md`.
+Spec e piano: `docs/superpowers/specs/2026-10-30-audio-background-oneshot-design.md` e
+`docs/superpowers/plans/2026-10-30-audio-background-oneshot.md` (sopra il lavoro sulle
+dissolvenze: `2026-10-12-audio-fade-status-*`). Il vecchio modello principale/speciale
+per location è sparito: ogni location ha ora due righe, **Background** (loop, più
+accesi insieme) e **One-shot** (una volta, si sovrappongono, abbassano i background).
 
 **Decisioni chiave**
-- Motore in `public/shared/audio-fade.js` (script classico + `module.exports`,
-  testato con `node --test public/shared/audio-fade.test.js`): due `<audio>` su
-  `/display` (`scene-audio`, `scene-audio-b`), rampe lineari. Costanti
-  `AUDIO_FADE` in un solo punto: 2000/400/600/300/1500 ms.
-- Cambio file della principale = crossfade. Sting = la principale sfuma in
-  pausa MANTENENDO la posizione e riprende da lì (prima ripartiva da zero).
-  Cambio location durante lo sting scarta la principale ducked.
-- `requestFrame` di `display.js` ha un timer di riserva (100 ms): a pagina
-  nascosta `requestAnimationFrame` non scatta e i fade restavano a volume 0.
-- Modello server invariato. Nuovo `audio:status` display → server (solo da un
-  socket con `hello role display`), tenuto in memoria in `displayAudio` e
-  aggiunto a `state:update` con `statePayload()`; azzerato quando l'ultimo
-  display si disconnette. Mai in `state`, mai su disco.
-- `AudioBox` su `/control` mostra "Display: in riproduzione / fermo / file non
-  trovato o illeggibile / audio bloccato dal browser / non connesso".
-- Nessun avviso o click su `/display` (Raspberry in kiosk senza input);
-  l'autoplay non è stato toccato.
-- `public/control/` ricostruita e committata; `/display` è vanilla, nessuna build.
+- Modello: `location.map.audio = { background: [{id,name,file,icon,volume,restartOnStop,on}],
+  oneshot: [{id,name,file,icon,volume}] }`. `on` (solo background) è persistito sulla
+  location: tornando su una location gli ambienti sono come lasciati. Stato globale
+  `state.audioOneshots = {trackId: seq}` + `audioOneshotSeq`, azzerati all'avvio, a ogni
+  cambio location e quando un display si collega o l'ultimo si scollega. Spariti
+  `activeAudioTrack`, `audioState`, `audioTriggerSeq`, `audio.main/special` e gli eventi
+  `audio:play/pause/stop/playSpecial/specialEnded/rename`.
+- Server: logica in `server/audio.js` (+ test), cablata in `server/index.js`; migrazione
+  in `server/state.js`. Eventi `audio:toggle`, `audio:volume`, `audio:update`,
+  `audio:delete`, `audio:oneshotEnded {trackId, seq}` (un "finito" con seq vecchio non
+  spegne una ripartenza più recente); `POST /api/upload/audio` con `locationId` + `kind`
+  (un file per richiesta, 50 MB).
+- `/display`: mixer in `public/shared/audio-fade.js` (script classico + `module.exports`,
+  `node --test`): un `<audio>` per traccia in `#audio-mixer`, creato al volo e rilasciato.
+  Volume effettivo = volume traccia x livello fade x fattore duck. Costanti in un solo
+  punto (`AUDIO_FADE`, ms): `location 2000, bgIn 1000, bgOut 1000, transport 400,
+  duckOut 600, stingIn 300, resumeIn 1500`; `AUDIO_DUCK_LEVEL 0.4`.
+- `requestFrame` di `display.js` ha il timer di riserva (100 ms): a pagina nascosta
+  `requestAnimationFrame` non scatta e i fade restavano a volume 0.
+- `audio:status` display -> server (solo da `hello role display`), payload
+  `{blocked, errors[], playing[]}` validato da `normalizeDisplayAudioStatus`; tenuto solo
+  in memoria in `displayAudio`, aggiunto a `state:update`, azzerato all'uscita
+  dell'ultimo display. Mai su disco, mai in `state`.
+- `/control`: scheda **Audio** (icona `Volume2`, dopo Media), `AudioBox` rimosso. Riga di
+  stato "Display: in riproduzione / fermo / audio bloccato dal browser / non connesso",
+  pulsanti icona (acceso = ambra `--vtt-accent`, errore = bordo `destructive`) con −/+
+  verticale (passo 10%, default 70%).
+- `/editor`: pannello Audio nella sidebar (aggiungi, icona da Popover, nome, checkbox
+  "Riparti dall'inizio quando lo spegni", elimina arma-poi-conferma). Icone: set fisso
+  di lucide in `editor-app/src/lib/audio-icons.ts`, il server valida solo la forma dello
+  slug (`^[a-z0-9-]{1,40}$`).
+- Migrazione: ex principale -> background (`icon music`, `on:true`), ex speciale ->
+  one-shot (`icon zap`); tracce senza file scartate; volumi mancanti 0.7.
+- Build `public/editor` e `public/control` ricostruite e committate.
 
-**Verificato**: server di prova :3100 con dati temporanei; volumi, `paused` e
-`currentTime` dei due `<audio>` durante play, sting, stop, pausa; riga di stato
-su `/control` per fermo/in riproduzione/errore (file corrotto)/non connesso.
-`node --test` media 38/38 + audio-fade 19/19; Vitest tutto verde.
+**Scelte di Claude da rivedere** (non chieste all'utente)
+- Icone da un set fisso di lucide, non caricate dal DM.
+- `restartOnStop` default `false` (sempre a loop).
+- Posizione virtuale dei background "sempre a loop" calcolata localmente dal display
+  (nessun audio muto in sottofondo, niente carico sul Pi); si azzera ricaricando `/display`
+  o eliminando la traccia / cambiando location (l'ancora vive con l'elemento `<audio>`).
+- Ducking a 0.4 e durate dei fade da tarare a orecchio; passo volume 10%, default 70%.
+- Scheda Audio sempre abilitata, legata alla location ATTIVA anche in anteprima (lo dice
+  in testa: "Audio di: ...").
+- Niente riordino delle righe (si aggiungono in coda); più file in un colpo = un upload
+  per file, in sequenza; se uno fallisce gli altri continuano e l'editor segnala quali.
+- Un solo display supportato (come `displayViewport`): vince l'ultimo che scrive
+  `displayAudio`.
+- One-shot senza display connesso: il server ignora `audio:toggle` sui one-shot e
+  `/control` li mostra disabilitati; i background si accendono comunque (stato persistito).
+- Un display che si collega o si ricarica non fa mai ripartire un one-shot vecchio.
+- Pulsante background acceso = `on`; se `on` ma il display lo riporta in `errors`, bordo
+  rosso. "Bloccato dal browser" solo nella riga in testa; `playing` serve solo a quella riga.
+- Migrazione: `on:true` per l'ex principale ovunque, TRANNE nella location attiva se lo
+  stato salvato era `activeAudioTrack:'main'` con `audioState` diverso da `'playing'`.
+- Toggle su traccia non della location attiva o `trackId` sconosciuto: ignorato in silenzio.
+- `restartOnStop` cambiato vale dal prossimo spegnimento/accensione; il volume cambia dal
+  vivo, anche per un one-shot in corso.
+- Codice vecchio (`AudioBox`, `createAudioEngine`, eventi vecchi) rimosso del tutto.
 
-**Non verificato a mano**: l'ascolto (durate e curva dei fade sono da giudicare
-dal vivo: ritoccare `AUDIO_FADE`); due `<audio>` contemporanei sul Pi 4 vero;
-lo stato `blocked` (l'autoplay nel browser di prova non è stato rifiutato).
+**Verificato**: `node --test server/*.test.js public/shared/*.test.js` 137/137, Vitest
+316/316 (37 file). Server di prova :3100 con dati temporanei e `state.json` in formato
+VECCHIO (due location, main+special, `activeAudioTrack:'main'`, `audioState:'paused'`):
+migrazione corretta (ex principale della location attiva `on:false`, dell'altra `on:true`,
+ex speciali one-shot `zap`, campi vecchi spariti). `/editor`: due righe, cambio icona,
+nome, checkbox `restartOnStop`, upload di un secondo background. `/control` (400 e 1200 px):
+due background accesi (volumi sul `<audio>` 0.5 e 0.7), one-shot -> background a 0.2 e 0.28
+(x0.4), stop del one-shot premendolo di nuovo (torna a 0.5/0.7, `audioOneshots` vuoto),
+cambio location e ritorno (gli `on` restano, entrambi di nuovo `playing`), riga di stato
+"in riproduzione", `+` volume applicato al volo (0.5 -> 0.6). Console pulite (solo il
+404 di favicon).
+
+**Non verificato a mano**: l'ascolto (durate, curva dei fade e livello del ducking sono da
+giudicare dal vivo: ritoccare `AUDIO_FADE` / `AUDIO_DUCK_LEVEL`); il Raspberry Pi 4 vero con
+più `<audio>` insieme; lo stato `blocked` (l'autoplay nel browser di prova non è stato
+rifiutato); il tocco su un telefono vero; un file corrotto/mancante con il bordo rosso
+nella nuova scheda.
+
 
 # Piano di lavoro
 
