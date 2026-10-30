@@ -5,6 +5,28 @@
 const socket = io();
 const handoutImg = document.getElementById('handout-img');
 const handoutVideo = document.getElementById('handout-video');
+let lastState = null;
+
+// Audio: suonano qui le tracce della location attiva con la spunta "Suona anche
+// su /handout" (stessi comandi di /control, stesso mixer di /display). Chi
+// comanda resta /display: qui non si riporta lo stato né la fine dei one-shot.
+const audioEngine = createPageAudioMixer(document.getElementById('audio-mixer'), {
+  onStatus: () => {},
+  onOneshotEnded: () => {}
+});
+
+function renderAudio(state) {
+  const location = state.locations.find((l) => l.id === state.activeLocationId);
+  audioEngine.apply(audioSceneOf(location, state.audioOneshots, { handoutOnly: true }));
+}
+
+// Il browser blocca l'audio finché non si interagisce con la pagina: al primo
+// clic/tasto si riapplica la scena e le tracce rifiutate ritentano subito.
+function retryAudio() {
+  if (lastState) renderAudio(lastState);
+}
+window.addEventListener('pointerdown', retryAudio);
+window.addEventListener('keydown', retryAudio);
 
 function clearMedia() {
   [handoutImg, handoutVideo].forEach((el) => {
@@ -22,6 +44,8 @@ socket.on('connect', () => {
 });
 
 socket.on('state:update', (state) => {
+  lastState = state;
+  renderAudio(state);
   const item = resolveHandoutMedia(state);
   if (!item) {
     clearMedia();

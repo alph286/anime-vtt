@@ -12,9 +12,9 @@ test('migrateLocationAudio: main+special pieni -> un background e un one-shot', 
   assert.equal(r.background.length, 1);
   assert.equal(r.oneshot.length, 1);
   const b = r.background[0];
-  assert.deepEqual({ ...b, id: undefined }, { id: undefined, name: 'Taverna', file: 'm.mp3', icon: 'music', volume: 0.5, restartOnStop: false, on: true });
+  assert.deepEqual({ ...b, id: undefined }, { id: undefined, name: 'Taverna', file: 'm.mp3', icon: 'music', volume: 0.5, handout: false, restartOnStop: false, on: true });
   const o = r.oneshot[0];
-  assert.deepEqual({ ...o, id: undefined }, { id: undefined, name: 'Tuono', file: 's.mp3', icon: 'zap', volume: 0.9 });
+  assert.deepEqual({ ...o, id: undefined }, { id: undefined, name: 'Tuono', file: 's.mp3', icon: 'zap', volume: 0.9, handout: false });
   assert.ok(typeof b.id === 'string' && b.id.length > 0);
   assert.ok(typeof o.id === 'string' && o.id.length > 0);
 });
@@ -46,8 +46,8 @@ test('migrateLocationAudio: formato nuovo con campi mancanti -> riempiti', () =>
     background: [{ id: 'b1', name: 'x', file: 'x.mp3' }, { id: 'b2', name: 'senza file' }],
     oneshot: [{ id: 'o1', file: 'o.mp3', on: true, restartOnStop: true }]
   }, { legacyMainOn: true });
-  assert.deepEqual(r.background, [{ id: 'b1', name: 'x', file: 'x.mp3', icon: 'music', volume: 0.7, restartOnStop: false, on: false }]);
-  assert.deepEqual(r.oneshot, [{ id: 'o1', name: '', file: 'o.mp3', icon: 'zap', volume: 0.7 }]);
+  assert.deepEqual(r.background, [{ id: 'b1', name: 'x', file: 'x.mp3', icon: 'music', volume: 0.7, handout: false, restartOnStop: false, on: false }]);
+  assert.deepEqual(r.oneshot, [{ id: 'o1', name: '', file: 'o.mp3', icon: 'zap', volume: 0.7, handout: false }]);
 });
 
 function setup() {
@@ -60,8 +60,8 @@ function setup() {
 
 test('addTrack: default di icona, volume, restartOnStop, on', () => {
   const { bg, os, location } = setup();
-  assert.deepEqual(bg, { id: 'b1', name: 'b', file: 'b.mp3', icon: 'music', volume: 0.7, restartOnStop: false, on: false });
-  assert.deepEqual(os, { id: 'o1', name: 'o', file: 'o.mp3', icon: 'zap', volume: 0.7 });
+  assert.deepEqual(bg, { id: 'b1', name: 'b', file: 'b.mp3', icon: 'music', volume: 0.7, handout: false, restartOnStop: false, on: false });
+  assert.deepEqual(os, { id: 'o1', name: 'o', file: 'o.mp3', icon: 'zap', volume: 0.7, handout: false });
   assert.equal(location.map.audio.background[0], bg);
 });
 
@@ -135,6 +135,25 @@ test('updateTrack: valida icon, tronca name, restartOnStop solo background', () 
   assert.equal(bg.restartOnStop, true);
   assert.equal(A.updateTrack(location, 'o1', { restartOnStop: true }), false);
   assert.equal('restartOnStop' in os, false);
+});
+
+test('updateTrack: handout per background e one-shot, solo booleani', () => {
+  const { location, bg, os } = setup();
+  assert.equal(A.updateTrack(location, 'b1', { handout: true }), true);
+  assert.equal(bg.handout, true);
+  assert.equal(A.updateTrack(location, 'o1', { handout: true }), true);
+  assert.equal(os.handout, true);
+  assert.equal(A.updateTrack(location, 'o1', { handout: 'si' }), false);
+  assert.equal(os.handout, true);
+});
+
+test('migrateLocationAudio: handout persistito resta, altrimenti false', () => {
+  const r = A.migrateLocationAudio({
+    background: [{ id: 'b1', file: 'x.mp3', handout: true }],
+    oneshot: [{ id: 'o1', file: 'o.mp3', handout: 'si' }]
+  }, { legacyMainOn: true });
+  assert.equal(r.background[0].handout, true);
+  assert.equal(r.oneshot[0].handout, false);
 });
 
 test('removeTrack: ritorna il file e toglie la voce da audioOneshots', () => {

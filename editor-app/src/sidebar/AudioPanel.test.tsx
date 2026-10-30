@@ -20,8 +20,8 @@ function state(): VttState {
       map: {
         file: null, type: 'image', scale: 1, flip180: false, rotate90: false, grid: GRID, polygons: [], shaders: [],
         audio: {
-          background: [{ id: 'B1', name: 'Pioggia', file: 'b.mp3', icon: 'music', volume: 0.7, restartOnStop: false, on: false }],
-          oneshot: [{ id: 'O1', name: 'Tuono', file: 'o.mp3', icon: 'zap', volume: 0.7 }],
+          background: [{ id: 'B1', name: 'Pioggia', file: 'b.mp3', icon: 'music', volume: 0.7, handout: false, restartOnStop: false, on: false }],
+          oneshot: [{ id: 'O1', name: 'Tuono', file: 'o.mp3', icon: 'zap', volume: 0.7, handout: true }],
         },
       },
     }],
@@ -70,6 +70,18 @@ describe('AudioPanel', () => {
     expect(boxes).toHaveLength(1);
     fireEvent.click(boxes[0]);
     expect(emitsOf('audio:update')).toEqual([['audio:update', { locationId: 'L1', trackId: 'B1', restartOnStop: true }]]);
+  });
+
+  it('checkbox handout in background e one-shot', () => {
+    render(<AudioPanel />);
+    const boxes = screen.getAllByLabelText('Suona anche su /handout');
+    expect(boxes).toHaveLength(2);
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[1]);
+    expect(emitsOf('audio:update')).toEqual([
+      ['audio:update', { locationId: 'L1', trackId: 'B1', handout: true }],
+      ['audio:update', { locationId: 'L1', trackId: 'O1', handout: false }],
+    ]);
   });
 
   it('elimina richiede due click', () => {

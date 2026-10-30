@@ -1125,9 +1125,9 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  socket.on('audio:update', ({ locationId, trackId, name, icon, restartOnStop } = {}) => {
+  socket.on('audio:update', ({ locationId, trackId, name, icon, restartOnStop, handout } = {}) => {
     const location = state.locations.find((l) => l.id === locationId);
-    if (!location || !audioModel.updateTrack(location, trackId, { name, icon, restartOnStop })) return;
+    if (!location || !audioModel.updateTrack(location, trackId, { name, icon, restartOnStop, handout })) return;
     saveState(state);
     broadcastState();
   });

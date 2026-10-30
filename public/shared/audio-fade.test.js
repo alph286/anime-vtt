@@ -515,3 +515,38 @@ test('one-shot finito da solo e ripremuto: rientra da 0 in stingIn', async () =>
   flush(AUDIO_FADE.stingIn / 2);
   near(x.volume, 0.7);
 });
+
+test('audioSceneOf: tutte le tracce con file, oneshots invariati', () => {
+  const { audioSceneOf } = require('./audio-fade.js');
+  const location = {
+    id: 'L', map: { audio: {
+      background: [{ id: 'b1', file: 'b.mp3', volume: 0.5, on: true, restartOnStop: false, handout: true }, { id: 'b2', file: '' }],
+      oneshot: [{ id: 'o1', file: 'o.mp3', volume: 0.9 }]
+    } }
+  };
+  assert.deepEqual(audioSceneOf(location, { o1: 3 }), {
+    locationId: 'L',
+    background: [{ id: 'b1', src: '/storage/audio/b.mp3', volume: 0.5, on: true, restartOnStop: false }],
+    oneshot: [{ id: 'o1', src: '/storage/audio/o.mp3', volume: 0.9 }],
+    oneshots: { o1: 3 }
+  });
+});
+
+test('audioSceneOf handoutOnly: solo le tracce spuntate, oneshots filtrati', () => {
+  const { audioSceneOf } = require('./audio-fade.js');
+  const location = {
+    id: 'L', map: { audio: {
+      background: [{ id: 'b1', file: 'b.mp3', on: true, handout: true }, { id: 'b2', file: 'c.mp3', on: true }],
+      oneshot: [{ id: 'o1', file: 'o.mp3', handout: true }, { id: 'o2', file: 'p.mp3', handout: false }]
+    } }
+  };
+  const scene = audioSceneOf(location, { o1: 1, o2: 2 }, { handoutOnly: true });
+  assert.deepEqual(scene.background.map((t) => t.id), ['b1']);
+  assert.deepEqual(scene.oneshot.map((t) => t.id), ['o1']);
+  assert.deepEqual(scene.oneshots, { o1: 1 });
+});
+
+test('audioSceneOf: nessuna location -> scena vuota', () => {
+  const { audioSceneOf } = require('./audio-fade.js');
+  assert.deepEqual(audioSceneOf(undefined, undefined), { locationId: null, background: [], oneshot: [], oneshots: {} });
+});

@@ -71,10 +71,10 @@ test('caricamento: uno stato salvato con one-shot in corso riparte da {} (migrat
 });
 
 test('migrate audio: formato nuovo resta invariato (on persistito)', () => {
-  const loc = { id: 'A', map: { audio: { background: [{ id: 'b', name: 'x', file: 'x.mp3', icon: 'wind', volume: 0.3, restartOnStop: true, on: true }], oneshot: [] } } };
+  const loc = { id: 'A', map: { audio: { background: [{ id: 'b', name: 'x', file: 'x.mp3', icon: 'wind', volume: 0.3, handout: true, restartOnStop: true, on: true }], oneshot: [] } } };
   const state = { locations: [loc] };
   migrate(state);
-  assert.deepEqual(loc.map.audio.background[0], { id: 'b', name: 'x', file: 'x.mp3', icon: 'wind', volume: 0.3, restartOnStop: true, on: true });
+  assert.deepEqual(loc.map.audio.background[0], { id: 'b', name: 'x', file: 'x.mp3', icon: 'wind', volume: 0.3, handout: true, restartOnStop: true, on: true });
 });
 
 test('applyStartupDefault: azzera audioOneshots e non reintroduce i campi audio vecchi', () => {

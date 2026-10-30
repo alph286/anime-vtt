@@ -412,12 +412,57 @@ function createAudioMixer({ createElement, now, requestFrame, onStatus, onOnesho
   return { apply, resendStatus };
 }
 
+// Scena del mixer a partire dalla location attiva (stessa forma per /display e
+// /handout). Con `handoutOnly` restano solo le tracce con la spunta "Suona anche
+// su /handout"; i one-shot in corso si filtrano di conseguenza.
+function audioSceneOf(location, audioOneshots, { handoutOnly = false } = {}) {
+  const audio = location && location.map && location.map.audio;
+  const pick = (list) => (Array.isArray(list) ? list : [])
+    .filter((t) => t && t.file && (!handoutOnly || t.handout === true));
+  const src = (t) => `/storage/audio/${t.file}`;
+  const oneshot = pick(audio && audio.oneshot);
+  const oneshots = {};
+  const running = audioOneshots && typeof audioOneshots === 'object' ? audioOneshots : {};
+  for (const t of oneshot) if (t.id in running) oneshots[t.id] = running[t.id];
+  return {
+    locationId: location ? location.id : null,
+    background: pick(audio && audio.background).map((t) => ({
+      id: t.id, src: src(t), volume: t.volume, on: Boolean(t.on), restartOnStop: Boolean(t.restartOnStop)
+    })),
+    oneshot: oneshot.map((t) => ({ id: t.id, src: src(t), volume: t.volume })),
+    oneshots
+  };
+}
+
+// Mixer nel browser: un <audio> per traccia dentro `container` (nascosto).
+function createPageAudioMixer(container, { onStatus, onOneshotEnded }) {
+  return createAudioMixer({
+    createElement: () => {
+      const el = document.createElement('audio');
+      container.appendChild(el);
+      return el;
+    },
+    now: () => performance.now(),
+    // rAF non scatta se la pagina è nascosta (schermo spento, tab in secondo
+    // piano): senza un timer di riserva i fade resterebbero fermi a volume 0.
+    requestFrame: (fn) => {
+      let done = false;
+      const run = () => { if (!done) { done = true; fn(); } };
+      requestAnimationFrame(run);
+      setTimeout(run, 100);
+    },
+    onStatus,
+    onOneshotEnded
+  });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     AUDIO_FADE,
     AUDIO_DUCK_LEVEL,
     audioLevelAt,
     normalizeDisplayAudioStatus,
-    createAudioMixer
+    createAudioMixer,
+    audioSceneOf
   };
 }

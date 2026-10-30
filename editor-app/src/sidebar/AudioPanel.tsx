@@ -46,6 +46,7 @@ function TrackRow({ locationId, kind, track }: { locationId: string; kind: Audio
   const arm = useArmConfirm();
   const key = `${locationId}:${track.id}`;
   const restartId = `restart-${track.id}`;
+  const handoutId = `handout-${track.id}`;
   return (
     <div className="flex flex-col gap-1 rounded-md border p-2">
       <div className="flex items-center gap-1">
@@ -71,6 +72,14 @@ function TrackRow({ locationId, kind, track }: { locationId: string; kind: Audio
           <label htmlFor={restartId}>Riparti dall'inizio quando lo spegni</label>
         </div>
       )}
+      <div className="flex items-center gap-2 text-sm">
+        <Checkbox
+          id={handoutId}
+          checked={track.handout}
+          onCheckedChange={(v) => socket.emit('audio:update', { locationId, trackId: track.id, handout: v === true })}
+        />
+        <label htmlFor={handoutId}>Suona anche su /handout</label>
+      </div>
     </div>
   );
 }
