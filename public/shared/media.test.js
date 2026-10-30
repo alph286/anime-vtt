@@ -301,3 +301,38 @@ test('shaderDecorationRectPercent rispetta assi X/Y separati su un\'immagine non
     heightPct: (100 / 500) * 100
   });
 });
+
+const { findHandoutMedia, resolveHandoutMedia } = require('./media.js');
+
+function handoutState(handout) {
+  return {
+    locations: [{
+      id: 'loc',
+      images: [
+        { id: 'foto', file: 'a.png' },
+        { id: 'clip', file: 'b.mp4' },
+        { id: 'sito', file: null, url: 'http://x' }
+      ]
+    }],
+    handout
+  };
+}
+
+test('findHandoutMedia: immagini e video sì, pagine Web e riferimenti rotti no', () => {
+  const state = handoutState({});
+  assert.equal(findHandoutMedia(state, { locationId: 'loc', imageId: 'foto' }).file, 'a.png');
+  assert.equal(findHandoutMedia(state, { locationId: 'loc', imageId: 'clip' }).file, 'b.mp4');
+  assert.equal(findHandoutMedia(state, { locationId: 'loc', imageId: 'sito' }), null);
+  assert.equal(findHandoutMedia(state, { locationId: 'altra', imageId: 'foto' }), null);
+  assert.equal(findHandoutMedia(state, null), null);
+});
+
+test('resolveHandoutMedia: ultimo mostrato, altrimenti default, altrimenti niente', () => {
+  const foto = { locationId: 'loc', imageId: 'foto' };
+  const clip = { locationId: 'loc', imageId: 'clip' };
+  assert.equal(resolveHandoutMedia(handoutState({ shown: clip, defaultMedia: foto })).id, 'clip');
+  assert.equal(resolveHandoutMedia(handoutState({ shown: null, defaultMedia: foto })).id, 'foto');
+  assert.equal(resolveHandoutMedia(handoutState({ shown: { locationId: 'loc', imageId: 'via' }, defaultMedia: foto })).id, 'foto');
+  assert.equal(resolveHandoutMedia(handoutState({ shown: null, defaultMedia: null })), null);
+  assert.equal(resolveHandoutMedia(handoutState(undefined)), null);
+});

@@ -84,3 +84,19 @@ test('applyStartupDefault: azzera audioOneshots e non reintroduce i campi audio 
   assert.equal('activeAudioTrack' in state, false);
   assert.equal('audioState' in state, false);
 });
+
+test('migrate: aggiunge handout vuoto agli stati vecchi', () => {
+  const state = { locations: [] };
+  migrate(state);
+  assert.deepEqual(state.handout, { shown: null, defaultMedia: null });
+});
+
+test('migrate: azzera i riferimenti handout a media non più esistenti', () => {
+  const state = {
+    locations: [{ id: 'loc', map: {}, images: [{ id: 'foto', file: 'a.png' }] }],
+    handout: { shown: { locationId: 'loc', imageId: 'via' }, defaultMedia: { locationId: 'loc', imageId: 'foto' } }
+  };
+  migrate(state);
+  assert.equal(state.handout.shown, null);
+  assert.deepEqual(state.handout.defaultMedia, { locationId: 'loc', imageId: 'foto' });
+});

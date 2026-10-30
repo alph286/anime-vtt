@@ -7,9 +7,9 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
+const { loadState, saveState, migrate, pruneHandout, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
 const { normalizeWebUrl, handleWebProxy } = require('./webproxy');
-const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
+const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS, findHandoutMedia } = require('../public/shared/media.js');
 const { createTelegramClient } = require('./telegram');
 const { createTelegramConfig } = require('./telegram-config');
 const { registerTelegramRoutes, sendStoredMedia } = require('./telegram-routes');
@@ -62,6 +62,7 @@ app.use('/storage', express.static(STORAGE_DIR));
 app.use('/display', express.static(path.join(__dirname, '..', 'public', 'display')));
 app.use('/control', express.static(path.join(__dirname, '..', 'public', 'control')));
 app.use('/party', express.static(path.join(__dirname, '..', 'public', 'party')));
+app.use('/handout', express.static(path.join(__dirname, '..', 'public', 'handout')));
 app.use('/editor', express.static(path.join(__dirname, '..', 'public', 'editor')));
 app.use('/shared', express.static(path.join(__dirname, '..', 'public', 'shared')));
 app.use('/home', express.static(path.join(__dirname, '..', 'public', 'home')));
@@ -568,6 +569,7 @@ io.on('connection', (socket) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location || !location.archived) return;
     state.locations = state.locations.filter((l) => l.id !== locationId);
+    pruneHandout(state);
     saveState(state);
     broadcastState();
   });
@@ -625,6 +627,26 @@ io.on('connection', (socket) => {
     const location = getActiveLocation();
     if (!location?.images.some((i) => i.id === imageId)) return;
     state.activeImageId = imageId;
+    // /handout tiene l'ultimo media mostrato anche dopo "Ritorna alla mappa"
+    // o un cambio location: si salva perché sopravviva al riavvio.
+    const ref = { locationId: location.id, imageId };
+    if (findHandoutMedia(state, ref)) {
+      state.handout.shown = ref;
+      saveState(state);
+    }
+    broadcastState();
+  });
+
+  // Media di default di /handout, scelto in /editor (imageId null = nessuno).
+  socket.on('handout:setDefault', ({ locationId, imageId } = {}) => {
+    if (imageId == null) {
+      state.handout.defaultMedia = null;
+    } else {
+      const ref = { locationId, imageId };
+      if (!findHandoutMedia(state, ref)) return;
+      state.handout.defaultMedia = ref;
+    }
+    saveState(state);
     broadcastState();
   });
 
@@ -649,6 +671,7 @@ io.on('connection', (socket) => {
 
     location.images = location.images.filter((i) => i.id !== imageId);
     if (state.activeImageId === imageId) state.activeImageId = null;
+    pruneHandout(state);
     if (image.file) deleteUploadedFile(IMAGES_DIR, image.file);
 
     saveState(state);

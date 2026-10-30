@@ -69,6 +69,22 @@ function isVideoFile(filename) {
   return VIDEO_EXTENSIONS.includes(ext);
 }
 
+// Pagina /handout: mostra l'ultimo media inviato al display da /control
+// (state.handout.shown) e, se non c'è o non esiste più, quello di default
+// scelto in /editor (state.handout.defaultMedia). Entrambi sono riferimenti
+// { locationId, imageId }; valgono solo immagini e video (le pagine Web no).
+function findHandoutMedia(state, ref) {
+  if (!state || !ref) return null;
+  const location = (state.locations || []).find((l) => l.id === ref.locationId);
+  const item = location && (location.images || []).find((i) => i.id === ref.imageId);
+  return item && item.file && !isWebItem(item) ? item : null;
+}
+
+function resolveHandoutMedia(state) {
+  const handout = (state && state.handout) || {};
+  return findHandoutMedia(state, handout.shown) || findHandoutMedia(state, handout.defaultMedia);
+}
+
 // Works on whichever kind of element is actually active — an <img> has no
 // videoWidth, a <video> has no naturalWidth, so exactly one side is ever set.
 function mediaW(el) {
@@ -775,6 +791,8 @@ function shaderDecorationRectPercent(deco, grid, naturalW, naturalH) {
 // dove `module` non è definito e questo blocco non viene mai eseguito.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    findHandoutMedia,
+    resolveHandoutMedia,
     AOE_METERS_PER_CELL,
     AOE_COLORS,
     AOE_COLORS_DARK,
