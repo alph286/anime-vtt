@@ -579,6 +579,51 @@ la scena (sblocco autoplay). Verificato su copia dei dati (:3100): background e 
 spuntati su /handout, ducking 0,4→0,16 e risalita, stop, one-shot non spuntato assente,
 casella in /editor. Non verificato: l'ascolto vero dei due dispositivi insieme.
 
+## Archivio audio (fatto, branch `audio-archivio`)
+
+Spec e piano: `docs/superpowers/specs/2026-10-30-audio-archivio-design.md` e
+`docs/superpowers/plans/2026-10-30-audio-archivio.md`. Un audio si carica una volta in un
+archivio unico e le location lo scelgono da una lista.
+
+**Decisioni (di Alph)**: nome e icona vivono nell'archivio (rinominare cambia ovunque);
+volume per location; eliminare dall'archivio un audio usato avvisa con l'elenco delle
+location e poi lo toglie da tutte; "Copia audio da…" porta in blocco le righe di un'altra
+location (dungeon su più mappe).
+
+**Modello**: `state.audioLibrary = [{id,name,icon,file}]`; le righe hanno `audioId` più una
+COPIA di `name/icon/file` riallineata dal server (`syncAudioLibrary` in `server/audio.js`),
+così /display, /handout e /control non sono cambiati. Eventi: `audioLibrary:update`,
+`audioLibrary:delete` (cancella il file), `audio:add`, `audio:copyFrom`; `audio:delete`
+toglie solo la riga (il file resta); `audio:update` accetta solo `restartOnStop`/`handout`.
+`POST /api/upload/audio` carica nell'archivio, con `locationId`+`kind` aggiunge anche la riga.
+File orfani: un audio è referenziato se è nell'archivio, anche se nessuna location lo usa.
+
+**Migrazione**: `migrate(state, { audioKey })`; `index.js` passa `audioContentKey` (sha256
+del file). Righe con lo stesso file o con contenuto identico diventano una voce; i file
+doppioni restano su disco come orfani (si tolgono da "File orfani"). Una riga con `audioId`
+sconosciuto (es. da un backup) ricrea la voce dal suo file invece di sparire. Gli hash si
+calcolano solo se c'è una riga da abbinare (non a ogni avvio).
+
+**Scelte di Claude**: nome/icona modificabili anche dalla riga della location (cambiano
+l'archivio, lo dice un testo in testa al pannello); "Copia audio da…" copia al click sulla
+location (niente conferma: è additiva e salta gli audio già presenti nella stessa riga);
+la copia porta anche `on` (un background acceso copiato nella location attiva parte);
+`IconPicker` estratto in `sidebar/AudioIconPicker.tsx`.
+
+**Verificato**: `npm run test:server` 167/167, Vitest 328/328. Browser su copia dei dati
+(:3100, uno stato con doppione di contenuto e un file mancante): migrazione (doppione unito,
+file mancante tenuto, volumi/`on` invariati), Aggiungi dall'archivio (lista resta aperta),
+Carica nuovo dalla riga, rinomina dalla riga propagata all'altra location, elimina usato
+(avviso "Usato in: Taverna, Nuova Brahill", Annulla/Elimina), elimina non usato (due click,
+file cancellato), copia da location con salto dei doppioni, orfani = solo il doppione.
+
+**Non verificato**: /control e /display aperti nel browser dopo la modifica (leggono gli
+stessi campi di prima); il tempo di avvio sul Raspberry alla prima migrazione con molti audio.
+
+**Minori noti**: caricare due volte lo stesso file crea due voci (l'unione per contenuto c'è
+solo nella migrazione); `addTrack`/`audioFilesOf` in `server/audio.js` non sono più usati
+fuori dai test.
+
 
 # Piano di lavoro
 

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { emptyAudio, migrateLocationAudio } = require('./audio');
+const { emptyAudio, migrateLocationAudio, syncAudioLibrary } = require('./audio');
 const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS, findHandoutMedia } = require('../public/shared/media.js');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -52,7 +52,9 @@ const DEFAULT_STATE = {
   handout: { shown: null, defaultMedia: null }
 };
 
-function migrate(state) {
+// `audioKey(file)` raggruppa i file audio con lo stesso contenuto nell'archivio
+// (server/index.js passa un hash del file; senza, conta solo il nome).
+function migrate(state, { audioKey } = {}) {
   delete state.tvProfiles;
   delete state.activeTvProfileId;
   delete state.liveView;
@@ -140,6 +142,8 @@ function migrate(state) {
     });
   });
 
+  // Dopo il ciclo sulle location: le righe sono già nel formato a righe.
+  syncAudioLibrary(state, audioKey);
   pruneHandout(state);
   return state;
 }
@@ -153,19 +157,19 @@ function pruneHandout(state) {
   if (!findHandoutMedia(state, state.handout.defaultMedia)) state.handout.defaultMedia = null;
 }
 
-function loadState() {
+function loadState({ audioKey } = {}) {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
   if (!fs.existsSync(STATE_FILE)) {
-    const migrated = migrate(JSON.parse(JSON.stringify(DEFAULT_STATE)));
+    const migrated = migrate(JSON.parse(JSON.stringify(DEFAULT_STATE)), { audioKey });
     fs.writeFileSync(STATE_FILE, JSON.stringify(migrated, null, 2));
     return migrated;
   }
   try {
     const loaded = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
     const beforeSnapshot = JSON.stringify(loaded);
-    const migrated = migrate(loaded);
+    const migrated = migrate(loaded, { audioKey });
     // Persist any migration changes back to disk (e.g., new settings field) —
     // compare against beforeSnapshot, not against loaded, since migrate()
     // mutates its argument in place (same object reference).

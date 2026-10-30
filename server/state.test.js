@@ -74,7 +74,7 @@ test('migrate audio: formato nuovo resta invariato (on persistito)', () => {
   const loc = { id: 'A', map: { audio: { background: [{ id: 'b', name: 'x', file: 'x.mp3', icon: 'wind', volume: 0.3, handout: true, restartOnStop: true, on: true }], oneshot: [] } } };
   const state = { locations: [loc] };
   migrate(state);
-  assert.deepEqual(loc.map.audio.background[0], { id: 'b', name: 'x', file: 'x.mp3', icon: 'wind', volume: 0.3, handout: true, restartOnStop: true, on: true });
+  assert.deepEqual(loc.map.audio.background[0], { id: 'b', audioId: state.audioLibrary[0].id, name: 'x', file: 'x.mp3', icon: 'wind', volume: 0.3, handout: true, restartOnStop: true, on: true });
 });
 
 test('applyStartupDefault: azzera audioOneshots e non reintroduce i campi audio vecchi', () => {
@@ -99,4 +99,24 @@ test('migrate: azzera i riferimenti handout a media non più esistenti', () => {
   migrate(state);
   assert.equal(state.handout.shown, null);
   assert.deepEqual(state.handout.defaultMedia, { locationId: 'loc', imageId: 'foto' });
+});
+
+const bgRow = (id, file, extra = {}) => ({ id, name: file, file, icon: 'music', volume: 0.4, handout: false, restartOnStop: false, on: true, ...extra });
+const newLoc = (id, background) => ({ id, map: { audio: { background, oneshot: [] } } });
+
+test('migrate: stato senza audioLibrary -> archivio creato, righe con audioId, volumi e on invariati', () => {
+  const state = { locations: [newLoc('A', [bgRow('b1', 'x.mp3')]), newLoc('B', [bgRow('b2', 'x.mp3', { on: false, volume: 0.9 })])] };
+  migrate(state);
+  assert.equal(state.audioLibrary.length, 1);
+  const [a, b] = state.locations.map((l) => l.map.audio.background[0]);
+  assert.equal(a.audioId, state.audioLibrary[0].id);
+  assert.equal(b.audioId, state.audioLibrary[0].id);
+  assert.deepEqual([a.on, a.volume, b.on, b.volume], [true, 0.4, false, 0.9]);
+});
+
+test('migrate: con audioKey iniettato unisce file con contenuto uguale', () => {
+  const state = { locations: [newLoc('A', [bgRow('b1', 'p.mp3')]), newLoc('B', [bgRow('b2', 'q.mp3')])] };
+  migrate(state, { audioKey: () => 'stesso' });
+  assert.equal(state.audioLibrary.length, 1);
+  assert.equal(state.locations[1].map.audio.background[0].file, 'p.mp3');
 });
