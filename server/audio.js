@@ -8,6 +8,7 @@ const DEFAULT_TRACK_VOLUME = 0.7;
 const DEFAULT_ICONS = { background: 'music', oneshot: 'zap' };
 const ICON_RE = /^[a-z0-9-]{1,40}$/;
 const MAX_NAME = 120;
+const LIBRARY_ICON = 'music';
 
 function emptyAudio() {
   return { background: [], oneshot: [] };
@@ -38,6 +39,7 @@ function normalizeTrack(t, kind) {
     volume: cleanVolume(t.volume),
     handout: t.handout === true
   };
+  if (typeof t.audioId === 'string' && t.audioId) track.audioId = t.audioId;
   if (kind === 'background') {
     track.restartOnStop = t.restartOnStop === true;
     track.on = t.on === true;
@@ -109,15 +111,8 @@ function setTrackVolume(location, trackId, volume) {
 function updateTrack(location, trackId, fields) {
   const found = findTrack(location, trackId);
   if (!found || !fields) return false;
+  // Nome e icona appartengono all'archivio (updateLibraryItem), non alla riga.
   let changed = false;
-  if (typeof fields.name === 'string') {
-    found.track.name = fields.name.slice(0, MAX_NAME);
-    changed = true;
-  }
-  if (typeof fields.icon === 'string' && ICON_RE.test(fields.icon)) {
-    found.track.icon = fields.icon;
-    changed = true;
-  }
   if (typeof fields.handout === 'boolean') {
     found.track.handout = fields.handout;
     changed = true;
@@ -157,7 +152,133 @@ function audioFilesOf(location) {
   return AUDIO_KINDS.flatMap((kind) => (audio[kind] || []).map((t) => t.file).filter(Boolean));
 }
 
+// --- Archivio audio ---
+// `state.audioLibrary` possiede nome, icona e file; le righe delle location
+// puntano a una voce con `audioId` e ne tengono una copia (name/icon/file)
+// che questo modulo riallinea, così chi suona (display, handout) e /control
+// continuano a leggere solo la riga.
+
+function allRows(state) {
+  return (state.locations || []).flatMap((location) => {
+    const audio = (location.map && location.map.audio) || {};
+    return AUDIO_KINDS.flatMap((kind) => (audio[kind] || []).map((track) => ({ location, kind, track })));
+  });
+}
+
+function copyFromItem(track, item) {
+  track.audioId = item.id;
+  track.name = item.name;
+  track.icon = item.icon;
+  track.file = item.file;
+}
+
+function normalizeItem(i) {
+  return {
+    id: typeof i.id === 'string' && i.id ? i.id : nanoid(),
+    name: cleanName(i.name),
+    icon: typeof i.icon === 'string' && ICON_RE.test(i.icon) ? i.icon : LIBRARY_ICON,
+    file: i.file
+  };
+}
+
+// Crea l'archivio se manca e riallinea ogni riga. `audioKey(file)` raggruppa i
+// file con lo stesso contenuto (all'avvio: hash del file); null = usa il nome.
+// Una riga con audioId sconosciuto (es. da un backup) ritrova o ricrea la voce
+// dal suo file invece di sparire.
+function syncAudioLibrary(state, audioKey = (file) => file) {
+  const keyOf = (file) => audioKey(file) || file;
+  state.audioLibrary = (Array.isArray(state.audioLibrary) ? state.audioLibrary : []).filter(hasFile).map(normalizeItem);
+  const byId = new Map(state.audioLibrary.map((i) => [i.id, i]));
+  const byKey = new Map();
+  state.audioLibrary.forEach((i) => { const k = keyOf(i.file); if (!byKey.has(k)) byKey.set(k, i); });
+  allRows(state).forEach(({ track }) => {
+    let item = byId.get(track.audioId);
+    if (!item) {
+      const k = keyOf(track.file);
+      item = byKey.get(k);
+      if (!item) {
+        item = normalizeItem({ name: track.name, icon: track.icon, file: track.file });
+        state.audioLibrary.push(item);
+        byId.set(item.id, item);
+        byKey.set(k, item);
+      }
+    }
+    copyFromItem(track, item);
+  });
+}
+
+function findLibraryItem(state, audioId) {
+  return (state.audioLibrary || []).find((i) => i.id === audioId) || null;
+}
+
+function addLibraryItem(state, { name, file }) {
+  const item = normalizeItem({ name, file });
+  if (!Array.isArray(state.audioLibrary)) state.audioLibrary = [];
+  state.audioLibrary.push(item);
+  return item;
+}
+
+function updateLibraryItem(state, audioId, fields) {
+  const item = findLibraryItem(state, audioId);
+  if (!item || !fields) return false;
+  let changed = false;
+  if (typeof fields.name === 'string') {
+    item.name = cleanName(fields.name);
+    changed = true;
+  }
+  if (typeof fields.icon === 'string' && ICON_RE.test(fields.icon)) {
+    item.icon = fields.icon;
+    changed = true;
+  }
+  if (changed) allRows(state).forEach(({ track }) => { if (track.audioId === audioId) copyFromItem(track, item); });
+  return changed;
+}
+
+// Toglie la voce e tutte le righe che la usano; ritorna il file da cancellare.
+function removeLibraryItem(state, audioId) {
+  const item = findLibraryItem(state, audioId);
+  if (!item) return null;
+  allRows(state).forEach(({ location, kind, track }) => {
+    if (track.audioId !== audioId) return;
+    const row = location.map.audio[kind];
+    row.splice(row.indexOf(track), 1);
+    if (state.audioOneshots) delete state.audioOneshots[track.id];
+  });
+  state.audioLibrary.splice(state.audioLibrary.indexOf(item), 1);
+  return item.file;
+}
+
+function addTrackFromLibrary(state, location, kind, audioId) {
+  const item = findLibraryItem(state, audioId);
+  if (!item || !AUDIO_KINDS.includes(kind)) return null;
+  const track = normalizeTrack({ audioId: item.id, name: item.name, icon: item.icon, file: item.file }, kind);
+  location.map.audio[kind].push(track);
+  return track;
+}
+
+// Copia in coda le righe di `from` in `to`, saltando gli audio già presenti
+// nella stessa riga di destinazione. Ritorna quante righe ha aggiunto.
+function copyTracks(state, from, to) {
+  let added = 0;
+  AUDIO_KINDS.forEach((kind) => {
+    const target = to.map.audio[kind];
+    const present = new Set(target.map((t) => t.audioId));
+    (from.map.audio[kind] || []).forEach((t) => {
+      if (present.has(t.audioId)) return;
+      present.add(t.audioId);
+      target.push(normalizeTrack({ ...t, id: undefined }, kind));
+      added += 1;
+    });
+  });
+  return added;
+}
+
+function libraryFiles(state) {
+  return (state.audioLibrary || []).map((i) => i.file).filter(Boolean);
+}
+
 module.exports = {
   AUDIO_KINDS, DEFAULT_TRACK_VOLUME, emptyAudio, migrateLocationAudio, findTrack, addTrack,
-  toggleTrack, setTrackVolume, updateTrack, removeTrack, oneshotEnded, clearOneshots, audioFilesOf
+  toggleTrack, setTrackVolume, updateTrack, removeTrack, oneshotEnded, clearOneshots, audioFilesOf,
+  syncAudioLibrary, addLibraryItem, updateLibraryItem, removeLibraryItem, addTrackFromLibrary, copyTracks, libraryFiles
 };
