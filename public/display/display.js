@@ -197,6 +197,15 @@ socket.on('state:update', (state) => {
   render(state);
 });
 
+// Il browser blocca l'audio finché non si interagisce con la pagina: al primo
+// clic/tasto si riapplica la scena, così le tracce rifiutate ritentano subito
+// invece di aspettare il prossimo state:update.
+function retryAudio() {
+  if (lastState) renderAudio(getActiveLocation(lastState), lastState.audioOneshots);
+}
+window.addEventListener('pointerdown', retryAudio);
+window.addEventListener('keydown', retryAudio);
+
 window.addEventListener('resize', () => {
   reportViewport();
   if (lastState) render(lastState);
