@@ -1,4 +1,4 @@
-import { CloudFog, Image, Map } from 'lucide-react';
+import { CloudFog, Image, Map, Volume2 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { selectIsPreviewing, useControlStore, type TabId } from '../store/control-store';
@@ -7,6 +7,7 @@ const TABS: { id: TabId; label: string; Icon: ComponentType<{ className?: string
   { id: 'mappa', label: 'Mappa', Icon: Map },
   { id: 'fog', label: 'Fog', Icon: CloudFog },
   { id: 'immagini', label: 'Media', Icon: Image },
+  { id: 'audio', label: 'Audio', Icon: Volume2 },
 ];
 
 export function TabBar() {

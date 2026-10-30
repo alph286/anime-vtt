@@ -8,11 +8,14 @@ export interface Grid {
 export interface Compass { visible: boolean; x: number; y: number; rotation: number }
 export interface Polygon { id: string; name: string; points: Point[]; revealed: boolean }
 export interface ShaderDeco { id: string; shaderId: string; x: number; y: number; widthM: number; heightM: number }
-export interface AudioTrack { name: string; file: string | null; volume: number }
+export interface BackgroundTrack { id: string; name: string; file: string; icon: string; volume: number; restartOnStop: boolean; on: boolean }
+export interface OneshotTrack { id: string; name: string; file: string; icon: string; volume: number }
+export interface LocationAudio { background: BackgroundTrack[]; oneshot: OneshotTrack[] }
+export type AudioKind = 'background' | 'oneshot';
 export interface MapData {
   file: string | null; type: string; scale: number; flip180: boolean; rotate90: boolean;
   grid: Grid; compass?: Compass;
-  audio: { main: AudioTrack; special: AudioTrack };
+  audio: LocationAudio;
   polygons: Polygon[]; shaders: ShaderDeco[];
 }
 export interface ImageItem { id: string; name: string; file: string | null; url?: string; proxy?: boolean; caption?: string; telegramDestination?: string | null }

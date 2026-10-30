@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { emptyAudio, migrateLocationAudio } = require('./audio');
 const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -14,7 +15,6 @@ const AOE_COLOR_NAMES = Object.keys(AOE_COLORS);
 // suddivisioni *dopo* aver tracciato la griglia, senza dover ritracciare.
 const DEFAULT_GRID = { enabled: false, cellSize: 100, baseCellSize: 100, divisions: 1, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 };
 const DEFAULT_COMPASS = { visible: false, x: 88, y: 85, rotation: 0 };
-const DEFAULT_AUDIO = { name: '', file: null, volume: 0.7 };
 
 const DEFAULT_STATE = {
   campaign: { name: 'Anime Salve' },
@@ -32,7 +32,7 @@ const DEFAULT_STATE = {
         liveView: { scale: 1, offsetX: 0, offsetY: 0 },
         grid: { ...DEFAULT_GRID },
         compass: { ...DEFAULT_COMPASS },
-        audio: { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } },
+        audio: emptyAudio(),
         polygons: [
           { id: 'stanza-1', name: 'Stanza 1', points: [[5, 10], [40, 8], [42, 45], [8, 48]], revealed: false },
           { id: 'corridoio', name: 'Corridoio', points: [[55, 50], [92, 45], [94, 88], [58, 92]], revealed: false }
@@ -47,9 +47,8 @@ const DEFAULT_STATE = {
   ],
   activeLocationId: 'taverna',
   activeImageId: null,
-  activeAudioTrack: 'main',
-  audioState: 'stopped',
-  audioTriggerSeq: 0
+  audioOneshots: {},
+  audioOneshotSeq: 0
 };
 
 function migrate(state) {
@@ -64,9 +63,18 @@ function migrate(state) {
   if (state.gridPreset.lineWidth === undefined) state.gridPreset.lineWidth = 0.3;
   if (state.gridPreset.opacity === undefined) state.gridPreset.opacity = 1;
 
-  if (state.audioState === undefined) state.audioState = 'stopped';
-  if (state.activeAudioTrack === undefined) state.activeAudioTrack = 'main';
-  if (state.audioTriggerSeq === undefined) state.audioTriggerSeq = 0;
+  // Audio a righe (background/one-shot): `legacyMainOn` va calcolato PRIMA di
+  // cancellare i campi vecchi. migrate() gira anche a metà sessione (import e
+  // ripristino backup): one-shot in corso e seq si inizializzano solo se
+  // mancano, così il seq non torna mai indietro e un `oneshotEnded` arrivato in
+  // ritardo non può combaciare con un seq nuovo. Gli one-shot in corso li
+  // svuota applyStartupDefault (avvio e ripristino), non questa funzione.
+  const legacyMainPaused = state.activeAudioTrack === 'main' && !!state.audioState && state.audioState !== 'playing';
+  delete state.activeAudioTrack;
+  delete state.audioState;
+  delete state.audioTriggerSeq;
+  if (!state.audioOneshots || typeof state.audioOneshots !== 'object') state.audioOneshots = {};
+  if (!Number.isFinite(state.audioOneshotSeq)) state.audioOneshotSeq = 0;
 
   // `settings.picsenderUrl` apparteneva all'integrazione PicSender, rimossa:
   // Telegram si configura ora in un file separato (data/telegram.json, vedi
@@ -118,29 +126,9 @@ function migrate(state) {
       // tentativo di riscriverlo.
       if (aoe.shaderOverride && !AOE_SHADER_OVERRIDE_IDS.includes(aoe.shaderOverride)) aoe.shaderOverride = null;
     });
-    if (!location.map.audio) {
-      location.map.audio = { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } };
-    } else if (!location.map.audio.main && !location.map.audio.special) {
-      // Forma precedente (una sola traccia, prima di main+special): quella
-      // già caricata diventa la principale, nessuna perdita per chi l'aveva
-      // già caricata con la feature a singola traccia.
-      location.map.audio = {
-        main: {
-          name: location.map.audio.name || '',
-          file: location.map.audio.file === undefined ? null : location.map.audio.file,
-          volume: location.map.audio.volume === undefined ? DEFAULT_AUDIO.volume : location.map.audio.volume
-        },
-        special: { ...DEFAULT_AUDIO }
-      };
-    }
-    if (!location.map.audio.main) location.map.audio.main = { ...DEFAULT_AUDIO };
-    if (!location.map.audio.special) location.map.audio.special = { ...DEFAULT_AUDIO };
-    if (location.map.audio.main.name === undefined) location.map.audio.main.name = '';
-    if (location.map.audio.main.file === undefined) location.map.audio.main.file = null;
-    if (location.map.audio.main.volume === undefined) location.map.audio.main.volume = DEFAULT_AUDIO.volume;
-    if (location.map.audio.special.name === undefined) location.map.audio.special.name = '';
-    if (location.map.audio.special.file === undefined) location.map.audio.special.file = null;
-    if (location.map.audio.special.volume === undefined) location.map.audio.special.volume = DEFAULT_AUDIO.volume;
+    location.map.audio = migrateLocationAudio(location.map.audio, {
+      legacyMainOn: !(location.id === state.activeLocationId && legacyMainPaused)
+    });
     if (location.archived === undefined) location.archived = false;
     if (location.isDefault === undefined) location.isDefault = false;
     (location.images || []).forEach((image) => {
@@ -202,9 +190,10 @@ function applyStartupDefault(state) {
   const chosen = preferred || nonArchived[0] || null;
   state.activeLocationId = chosen ? chosen.id : null;
   state.activeImageId = null;
-  state.activeAudioTrack = 'main';
-  state.audioState = 'stopped';
+  // Gli one-shot in corso non sopravvivono a un riavvio né a un ripristino;
+  // il seq invece resta dov'è (monotono per tutta la vita del processo).
+  state.audioOneshots = {};
   return state;
 }
 
-module.exports = { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR, STATE_FILE };
+module.exports = { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR, STATE_FILE };

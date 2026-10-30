@@ -100,6 +100,15 @@ describe('ControlApp', () => {
     expect(get().tab).toBe('mappa');
   });
 
+  it('e2) tab Audio non disabilitata in anteprima', () => {
+    get().receiveState(fixture());
+    render(<ControlApp />);
+    act(() => get().setPreviewLocation('L2'));
+    expect((screen.getByRole('tab', { name: /Audio/ }) as HTMLButtonElement).disabled).toBe(false);
+    act(() => get().setTab('audio'));
+    expect(get().tab).toBe('audio');
+  });
+
   it('f) pallino wifi ok solo con socket e display connessi', () => {
     render(<ControlApp />);
     const dot = () => screen.getByTestId('wifi-dot');
@@ -111,7 +120,7 @@ describe('ControlApp', () => {
     expect(dot().className).not.toContain('bad');
   });
 
-  it('tiene montati tutti e tre i pannelli', () => {
+  it('tiene montati tutti i pannelli', () => {
     render(<ControlApp />);
     expect(screen.getByTestId('map-tab')).toBeTruthy();
     expect(screen.getByTestId('fog-tab')).toBeTruthy();

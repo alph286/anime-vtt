@@ -7,16 +7,20 @@ interface StepperProps {
   onInc: () => void;
   decTitle: string;
   incTitle: string;
+  vertical?: boolean; // colonna stretta: + / valore / −
 }
 
 // Controllo `[−] valore [+]` (le `.zoom` di index.html); con `label` diventa
 // una riga `.opacity-row` (etichetta a sinistra, stepper a destra).
-export function Stepper({ label, value, onDec, onInc, decTitle, incTitle }: StepperProps) {
+export function Stepper({ label, value, onDec, onInc, decTitle, incTitle, vertical }: StepperProps) {
+  const size = vertical ? 'size-8' : 'size-10';
+  const decBtn = <Button type="button" variant="outline" size="icon" className={size} title={decTitle} aria-label={decTitle} onClick={onDec}>−</Button>;
+  const incBtn = <Button type="button" variant="outline" size="icon" className={size} title={incTitle} aria-label={incTitle} onClick={onInc}>+</Button>;
   const control = (
-    <div className="flex items-center gap-1.5">
-      <Button type="button" variant="outline" size="icon" className="size-10" title={decTitle} aria-label={decTitle} onClick={onDec}>−</Button>
-      <span className="min-w-12 text-center text-sm tabular-nums">{value}</span>
-      <Button type="button" variant="outline" size="icon" className="size-10" title={incTitle} aria-label={incTitle} onClick={onInc}>+</Button>
+    <div className={vertical ? 'flex flex-col items-center gap-1' : 'flex items-center gap-1.5'}>
+      {vertical ? incBtn : decBtn}
+      <span className={vertical ? 'text-center text-xs tabular-nums' : 'min-w-12 text-center text-sm tabular-nums'}>{value}</span>
+      {vertical ? decBtn : incBtn}
     </div>
   );
   if (!label) return control;

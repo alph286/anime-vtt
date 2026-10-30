@@ -8,7 +8,7 @@ function loc(over: Partial<ControlLocation['map']> = {}): ControlLocation {
     map: {
       file: 'm.png', type: 'image', scale: 1, flip180: false, rotate90: false,
       grid: { enabled: true, cellSize: 50, baseCellSize: 50, divisions: 1, offsetX: 0, offsetY: 0, color: '#fff', lineWidth: 1, opacity: 1 },
-      audio: { main: { name: '', file: null, volume: 1 }, special: { name: '', file: null, volume: 1 } },
+      audio: { background: [], oneshot: [] },
       polygons: [], shaders: [], aoes: [], ...over,
     },
   } as ControlLocation;

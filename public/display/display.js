@@ -22,24 +22,27 @@ const shownImageVideo = document.getElementById('shown-image-video');
 const shownImageWeb = document.getElementById('shown-image-web');
 const wifiDot = document.getElementById('wifi-dot');
 const compassEl = document.getElementById('compass');
-const sceneAudioEl = document.getElementById('scene-audio');
-
-// Scatta solo per la speciale (mai in loop): la principale, essendo sempre
-// in loop, non genera mai `ended`. Non decide da solo di tornare alla
-// principale -- si limita a riportare il fatto al server.
-sceneAudioEl.addEventListener('ended', () => {
-  socket.emit('audio:specialEnded', { seq: lastAudioTriggerSeq });
-});
-
-// Un file speciale corrotto/mancante non genera mai `ended` (play() fallisce
-// silenziosamente in renderAudio) -- senza questo, il server resterebbe
-// bloccato su activeAudioTrack:'special' per sempre, perché nessun evento
-// natural-end arriverebbe mai a farlo tornare alla principale. Mai per la
-// principale (sempre in loop): lì "fermare tutta la funzione" per un file
-// rotto sarebbe sbagliato.
-sceneAudioEl.addEventListener('error', () => {
-  if (sceneAudioEl.loop) return; // la principale non ha un "ritorno" da fare
-  socket.emit('audio:specialEnded', { seq: lastAudioTriggerSeq });
+// Audio della scena: mixer a righe (background in loop, one-shot con ducking).
+// Un <audio> per traccia, creato nel contenitore nascosto #audio-mixer.
+// Lo si pilota solo da renderAudio e gli si porta fuori stato e fine one-shot.
+const audioMixerBox = document.getElementById('audio-mixer');
+const audioEngine = createAudioMixer({
+  createElement: () => {
+    const el = document.createElement('audio');
+    audioMixerBox.appendChild(el);
+    return el;
+  },
+  now: () => performance.now(),
+  // rAF non scatta se la pagina è nascosta (schermo spento, tab in secondo
+  // piano): senza un timer di riserva i fade resterebbero fermi a volume 0.
+  requestFrame: (fn) => {
+    let done = false;
+    const run = () => { if (!done) { done = true; fn(); } };
+    requestAnimationFrame(run);
+    setTimeout(run, 100);
+  },
+  onStatus: (status) => socket.emit('audio:status', status),
+  onOneshotEnded: (trackId, seq) => socket.emit('audio:oneshotEnded', { trackId, seq })
 });
 
 let socketConnected = false;
@@ -126,6 +129,7 @@ function reportViewport() {
 socket.on('connect', () => {
   socketConnected = true;
   socket.emit('hello', { role: 'display' });
+  audioEngine.resendStatus();
   reportViewport();
   updateWifi();
 });
@@ -193,6 +197,15 @@ socket.on('state:update', (state) => {
   render(state);
 });
 
+// Il browser blocca l'audio finché non si interagisce con la pagina: al primo
+// clic/tasto si riapplica la scena, così le tracce rifiutate ritentano subito
+// invece di aspettare il prossimo state:update.
+function retryAudio() {
+  if (lastState) renderAudio(getActiveLocation(lastState), lastState.audioOneshots);
+}
+window.addEventListener('pointerdown', retryAudio);
+window.addEventListener('keydown', retryAudio);
+
 window.addEventListener('resize', () => {
   reportViewport();
   if (lastState) render(lastState);
@@ -221,7 +234,7 @@ function render(state) {
   imageLayer.style.display = showingImage ? 'block' : 'none';
 
   renderCompass(location, showingImage);
-  renderAudio(location, state.activeAudioTrack, state.audioState, state.audioTriggerSeq);
+  renderAudio(location, state.audioOneshots);
 
   if (showingImage) {
     renderImage(location, state.activeImageId);
@@ -252,63 +265,21 @@ function renderCompass(location, showingImage) {
 }
 
 // L'elemento <audio> non è mai visibile -- solo suono, indipendente da quale
-// layer (mappa o immagine) è mostrato in quel momento, in linea con la
-// scelta di design che mostrare un'immagine ai giocatori non ferma l'audio.
-// `lastAudioKey` combina slot attivo + file: evita di riassegnare `src`
-// (che farebbe ripartire da zero anche una traccia identica) a ogni singolo
-// state:update, ma forza comunque il reload quando si passa da main a
-// special (o viceversa) anche se per coincidenza nessuno dei due ha un file.
-let lastAudioKey = null;
-// Premere di nuovo "Traccia speciale" mentre sta già suonando non cambia né
-// lo slot né il file (stesso `lastAudioKey`), quindi non ricaricherebbe da
-// solo il src -- ma deve comunque far ripartire la traccia da capo. Il
-// server incrementa `audioTriggerSeq` a ogni audio:playSpecial; qui basta
-// accorgersi che è cambiato mentre la traccia attiva è 'special'.
-let lastAudioTriggerSeq = null;
-
-function renderAudio(location, activeAudioTrack, audioState, audioTriggerSeq) {
-  const track = location && location.map.audio[activeAudioTrack];
-  const file = track && track.file;
-  const key = `${activeAudioTrack}:${file || ''}`;
-  const keyChanged = key !== lastAudioKey;
-
-  if (keyChanged) {
-    lastAudioKey = key;
-    // La principale è sempre in loop, la speciale mai: senza questo, uno
-    // sting speciale non fermerebbe mai da solo per far tornare la
-    // principale, o peggio la principale si fermerebbe dopo un solo giro.
-    sceneAudioEl.loop = activeAudioTrack === 'main';
-    if (file) {
-      sceneAudioEl.src = `/storage/audio/${file}`;
-    } else {
-      sceneAudioEl.removeAttribute('src');
-      sceneAudioEl.load();
-    }
-  }
-
-  const retriggered = activeAudioTrack === 'special' && audioTriggerSeq !== lastAudioTriggerSeq;
-  lastAudioTriggerSeq = audioTriggerSeq;
-  // Se il src è già stato ricaricato sopra (keyChanged), riparte già da zero
-  // da solo -- azzerare di nuovo qui sarebbe innocuo ma ridondante.
-  if (retriggered && !keyChanged) {
-    sceneAudioEl.currentTime = 0;
-  }
-
-  sceneAudioEl.volume = track && track.volume !== undefined ? track.volume : 0.7;
-
-  if (!file) return;
-
-  if (audioState === 'playing') {
-    // Un file audio mancante/corrotto rifiuta play() con una promise
-    // rigettata: fallisce silenziosamente, stesso principio già in uso per
-    // mappe/immagini con riferimenti non validi -- niente crash della pagina.
-    sceneAudioEl.play().catch(() => {});
-  } else if (audioState === 'paused') {
-    sceneAudioEl.pause();
-  } else {
-    sceneAudioEl.pause();
-    sceneAudioEl.currentTime = 0;
-  }
+// layer (mappa/immagine) è mostrato: è una scelta di design che mostrare
+// un'immagine ai giocatori non ferma l'audio. Il motore (shared/audio-fade.js)
+// confronta ogni stato con il precedente e fa solo il minimo necessario.
+function renderAudio(location, audioOneshots) {
+  const audio = location && location.map.audio;
+  const src = (t) => `/storage/audio/${t.file}`;
+  const playable = (list) => (Array.isArray(list) ? list.filter((t) => t && t.file) : []);
+  audioEngine.apply({
+    locationId: location ? location.id : null,
+    background: playable(audio && audio.background).map((t) => ({
+      id: t.id, src: src(t), volume: t.volume, on: Boolean(t.on), restartOnStop: Boolean(t.restartOnStop)
+    })),
+    oneshot: playable(audio && audio.oneshot).map((t) => ({ id: t.id, src: src(t), volume: t.volume })),
+    oneshots: audioOneshots || {}
+  });
 }
 
 function renderImage(location, activeImageId) {

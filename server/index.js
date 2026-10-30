@@ -7,12 +7,14 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DEFAULT_AUDIO, DATA_DIR } = require('./state');
+const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
 const { normalizeWebUrl, handleWebProxy } = require('./webproxy');
 const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
 const { createTelegramClient } = require('./telegram');
 const { createTelegramConfig } = require('./telegram-config');
 const { registerTelegramRoutes, sendStoredMedia } = require('./telegram-routes');
+const audioModel = require('./audio');
+const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
 const packageJson = require('../package.json');
@@ -157,8 +159,7 @@ function findOrphanFiles() {
   state.locations.forEach((location) => {
     if (location.map.file) referencedMaps.add(location.map.file);
     (location.images || []).forEach((img) => { if (img.file) referencedImages.add(img.file); });
-    if (location.map.audio && location.map.audio.main && location.map.audio.main.file) referencedAudio.add(location.map.audio.main.file);
-    if (location.map.audio && location.map.audio.special && location.map.audio.special.file) referencedAudio.add(location.map.audio.special.file);
+    audioModel.audioFilesOf(location).forEach((f) => referencedAudio.add(f));
   });
 
   // .gitkeep (nelle cartelle storage/*) è un segnaposto che tiene la
@@ -267,34 +268,20 @@ app.post('/api/upload/image', uploadImage.single('file'), (req, res) => {
 
 app.post('/api/upload/audio', uploadAudio.single('file'), (req, res) => {
   const location = state.locations.find((l) => l.id === req.body.locationId);
-  const slot = req.body.slot;
-  if (!location || !req.file || (slot !== 'main' && slot !== 'special')) {
-    return res.status(400).json({ error: 'location, file o slot mancante/non valido' });
+  const kind = req.body.kind;
+  if (!location || !req.file || !audioModel.AUDIO_KINDS.includes(kind)) {
+    // File già scritto da multer ma non assegnabile: non lasciarlo orfano.
+    if (req.file) deleteUploadedFile(AUDIO_DIR, req.file.filename);
+    return res.status(400).json({ error: 'location, file o kind mancante/non valido' });
   }
-  const previousFile = location.map.audio[slot].file;
-  const previousVolume = location.map.audio[slot].volume === undefined ? DEFAULT_AUDIO.volume : location.map.audio[slot].volume;
-  location.map.audio[slot] = {
+  const track = audioModel.addTrack(location, kind, {
     name: req.body.name || req.file.originalname,
     file: req.file.filename,
-    // Il volume di default (70%) vale solo alla prima assegnazione di una
-    // traccia: sostituire una traccia già presente conserva il volume già
-    // impostato dall'utente su /control.
-    volume: previousFile ? previousVolume : DEFAULT_AUDIO.volume
-  };
-  if (previousFile) deleteUploadedFile(AUDIO_DIR, previousFile);
-  if (state.activeLocationId === location.id && slot === state.activeAudioTrack) {
-    // Si sta sostituendo la traccia che sta attualmente suonando: se è la
-    // speciale, si torna alla principale (stesso comportamento di una fine
-    // naturale); se è la principale, semplicemente si ferma.
-    if (slot === 'special') {
-      returnToMain(location);
-    } else {
-      state.audioState = 'stopped';
-    }
-  }
+    id: nanoid()
+  });
   saveState(state);
   broadcastState();
-  res.json({ ok: true, file: req.file.filename, slot });
+  res.json({ ok: true, track });
 });
 
 registerTelegramRoutes(app, { config: telegramConfig, client: telegramClient });
@@ -411,14 +398,6 @@ app.post('/api/import/apply', async (req, res) => {
   }
 });
 
-// Riporta la riproduzione alla principale -- stesso comportamento sia che
-// la speciale sia appena finita da sola, sia che sia stata fermata
-// manualmente, sia che sia stata sostituita/eliminata mentre suonava.
-function returnToMain(location) {
-  state.activeAudioTrack = 'main';
-  state.audioState = location.map.audio.main.file ? 'playing' : 'stopped';
-}
-
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -430,8 +409,17 @@ const displaySockets = new Set();
 // `state`), si ri-popola da sé alla riconnessione del display.
 let displayViewport = null;
 
+// Stato reale dell'audio di /display, riportato dal display stesso. Come
+// displayViewport: volutamente fuori da `state` (mai persistito), si ripopola
+// alla riconnessione del display e si azzera quando l'ultimo display se ne va.
+let displayAudio = null;
+
+function statePayload() {
+  return { ...state, displayViewport, displayAudio };
+}
+
 function broadcastState() {
-  io.emit('state:update', { ...state, displayViewport });
+  io.emit('state:update', statePayload());
 }
 
 // Un trascinamento (pan della mappa, spostamento di un'AoE o di una
@@ -476,7 +464,7 @@ function broadcastDisplayStatus() {
 }
 
 io.on('connection', (socket) => {
-  socket.emit('state:update', { ...state, displayViewport });
+  socket.emit('state:update', statePayload());
   socket.emit('control:status', { connected: controlSockets.size > 0 });
   socket.emit('display:status', { connected: displaySockets.size > 0 });
 
@@ -487,6 +475,8 @@ io.on('connection', (socket) => {
     } else if (role === 'display') {
       displaySockets.add(socket.id);
       broadcastDisplayStatus();
+      // Un display nuovo o ricaricato non deve far ripartire one-shot "in corso".
+      if (audioModel.clearOneshots(state)) broadcastState();
     }
   });
 
@@ -495,13 +485,23 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  // Stato reale dell'audio, solo dal display (ha fatto `hello` con role display).
+  // Si ritrasmette solo quando cambia, mai su disco.
+  socket.on('audio:status', (payload) => {
+    if (!displaySockets.has(socket.id)) return;
+    const next = normalizeDisplayAudioStatus(payload);
+    if (!next) return;
+    if (displayAudio && JSON.stringify(displayAudio) === JSON.stringify(next)) return;
+    displayAudio = next;
+    broadcastState();
+  });
+
   socket.on('location:set', ({ locationId }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     state.activeLocationId = locationId;
     state.activeImageId = null;
-    state.activeAudioTrack = 'main';
-    state.audioState = location.map.audio.main.file ? 'playing' : 'stopped';
+    audioModel.clearOneshots(state);
     saveState(state);
     broadcastState();
   });
@@ -519,7 +519,7 @@ io.on('connection', (socket) => {
         liveView: { scale: 1, offsetX: 0, offsetY: 0 },
         grid: { ...DEFAULT_GRID },
         compass: { ...DEFAULT_COMPASS },
-        audio: { main: { ...DEFAULT_AUDIO }, special: { ...DEFAULT_AUDIO } },
+        audio: audioModel.emptyAudio(),
         polygons: [],
         aoes: []
       },
@@ -530,8 +530,7 @@ io.on('connection', (socket) => {
     state.locations.push(location);
     state.activeLocationId = location.id;
     state.activeImageId = null;
-    state.activeAudioTrack = 'main';
-    state.audioState = 'stopped';
+    audioModel.clearOneshots(state);
     saveState(state);
     broadcastState();
   });
@@ -548,7 +547,11 @@ io.on('connection', (socket) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     location.archived = true;
-    if (state.activeLocationId === locationId) state.activeLocationId = null;
+    if (state.activeLocationId === locationId) {
+      state.activeLocationId = null;
+      // Come il cambio location: gli one-shot della location archiviata finiscono qui.
+      audioModel.clearOneshots(state);
+    }
     saveState(state);
     broadcastState();
   });
@@ -578,7 +581,7 @@ io.on('connection', (socket) => {
 
   socket.on('location:reorder', ({ orderedIds }) => {
     if (!Array.isArray(orderedIds)) {
-      socket.emit('state:update', { ...state, displayViewport });
+      socket.emit('state:update', statePayload());
       return;
     }
     const activeIds = state.locations.filter((l) => !l.archived).map((l) => l.id);
@@ -590,7 +593,7 @@ io.on('connection', (socket) => {
       return true;
     });
     if (validOrder.length !== activeIds.length) {
-      socket.emit('state:update', { ...state, displayViewport });
+      socket.emit('state:update', statePayload());
       return;
     }
     const byId = new Map(state.locations.map((l) => [l.id, l]));
@@ -785,7 +788,7 @@ io.on('connection', (socket) => {
   socket.on('polygon:reorder', ({ locationId, orderedIds }) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location || !Array.isArray(orderedIds)) {
-      if (location) socket.emit('state:update', { ...state, displayViewport });
+      if (location) socket.emit('state:update', statePayload());
       return;
     }
     const currentIds = (location.map.polygons || []).map((p) => p.id);
@@ -797,7 +800,7 @@ io.on('connection', (socket) => {
       return true;
     });
     if (validOrder.length !== currentIds.length) {
-      socket.emit('state:update', { ...state, displayViewport });
+      socket.emit('state:update', statePayload());
       return;
     }
     const byId = new Map((location.map.polygons || []).map((p) => [p.id, p]));
@@ -1081,108 +1084,46 @@ io.on('connection', (socket) => {
     io.emit('ping:show', { x, y, strokeId });
   });
 
-  // A differenza di griglia/fog/rosa dei venti, questi comandi agiscono
-  // sempre sulla location attiva -- non esiste un'anteprima silenziosa per
-  // l'audio (suonerebbe comunque subito ai giocatori), quindi niente
-  // locationId dal client: previewLocationId non c'entra qui. Agiscono
-  // sempre su `location.map.audio[state.activeAudioTrack]`, qualunque essa
-  // sia in quel momento -- mai forzatamente sulla principale.
-  socket.on('audio:play', () => {
+  // Audio a righe. `audio:toggle` agisce sempre sulla location attiva (non
+  // esiste un'anteprima silenziosa: suonerebbe subito ai giocatori); volume,
+  // aggiornamento ed eliminazione indicano la location per id.
+  socket.on('audio:toggle', ({ trackId } = {}) => {
     const location = getActiveLocation();
-    const track = location && location.map.audio[state.activeAudioTrack];
-    if (!track || !track.file) return;
-    state.audioState = 'playing';
-    broadcastState();
-  });
-
-  socket.on('audio:pause', () => {
-    const location = getActiveLocation();
-    const track = location && location.map.audio[state.activeAudioTrack];
-    if (!track || !track.file) return;
-    state.audioState = 'paused';
-    broadcastState();
-  });
-
-  socket.on('audio:stop', () => {
-    const location = getActiveLocation();
-    const track = location && location.map.audio[state.activeAudioTrack];
-    if (!track || !track.file) return;
-    if (state.activeAudioTrack === 'special') {
-      returnToMain(location);
-    } else {
-      state.audioState = 'stopped';
-    }
-    broadcastState();
-  });
-
-  socket.on('audio:volume', ({ volume }) => {
-    const location = getActiveLocation();
-    const track = location && location.map.audio[state.activeAudioTrack];
-    if (!track || volume === undefined) return;
-    track.volume = Math.min(1, Math.max(0, volume));
+    if (!location) return;
+    if (!audioModel.toggleTrack(state, location, trackId, { displayConnected: displaySockets.size > 0 })) return;
     saveState(state);
     broadcastState();
   });
 
-  // Fa partire la speciale da capo, sempre, anche se era già in corso --
-  // utile per far ripartire lo sting se il boss "ricompare". `audioTriggerSeq`
-  // è l'unico modo per /display di distinguere questo caso (stesso slot,
-  // stesso file, ma va comunque riazzerata la posizione) da un
-  // state:update qualunque che non deve toccare la posizione di riproduzione.
-  socket.on('audio:playSpecial', () => {
-    const location = getActiveLocation();
-    if (!location || !location.map.audio.special.file) return;
-    state.activeAudioTrack = 'special';
-    state.audioState = 'playing';
-    state.audioTriggerSeq += 1;
-    broadcastState();
-  });
-
-  // /display lo emette quando l'elemento <audio> genera l'evento nativo
-  // `ended` (può succedere solo per la speciale, mai in loop) -- ignorato se
-  // nel frattempo activeAudioTrack non è più 'special' (es. il GM ha già
-  // premuto Stop o cambiato location prima che l'evento arrivasse), per non
-  // annullare uno stato più recente con un evento arrivato in ritardo.
-  socket.on('audio:specialEnded', ({ seq } = {}) => {
-    const location = getActiveLocation();
-    if (!location || state.activeAudioTrack !== 'special') return;
-    // Il contatore protegge da un evento `ended` in transito che appartiene a
-    // una riproduzione già superata da un audio:playSpecial più recente --
-    // senza questo controllo, un retrigger fatto esattamente mentre la
-    // vecchia riproduzione sta finendo verrebbe cancellato dall'evento in
-    // ritardo. seq === undefined (client non aggiornato) mantiene il
-    // comportamento precedente.
-    if (seq !== undefined && seq !== state.audioTriggerSeq) return;
-    returnToMain(location);
-    broadcastState();
-  });
-
-  socket.on('audio:delete', ({ locationId, slot }) => {
+  socket.on('audio:volume', ({ locationId, trackId, volume } = {}) => {
     const location = state.locations.find((l) => l.id === locationId);
-    const track = location && (slot === 'main' || slot === 'special') && location.map.audio[slot];
-    if (!track || !track.file) return;
-
-    deleteUploadedFile(AUDIO_DIR, track.file);
-    location.map.audio[slot] = { ...DEFAULT_AUDIO };
-
-    if (state.activeLocationId === locationId && slot === state.activeAudioTrack) {
-      if (slot === 'special') {
-        returnToMain(location);
-      } else {
-        state.audioState = 'stopped';
-      }
-    }
-
+    if (!location || !audioModel.setTrackVolume(location, trackId, volume)) return;
     saveState(state);
     broadcastState();
   });
 
-  socket.on('audio:rename', ({ locationId, slot, name }) => {
+  socket.on('audio:update', ({ locationId, trackId, name, icon, restartOnStop } = {}) => {
     const location = state.locations.find((l) => l.id === locationId);
-    const track = location && (slot === 'main' || slot === 'special') && location.map.audio[slot];
-    if (!track || !track.file) return;
-    track.name = String(name || '').slice(0, 120);
+    if (!location || !audioModel.updateTrack(location, trackId, { name, icon, restartOnStop })) return;
     saveState(state);
+    broadcastState();
+  });
+
+  socket.on('audio:delete', ({ locationId, trackId } = {}) => {
+    const location = state.locations.find((l) => l.id === locationId);
+    if (!location) return;
+    const file = audioModel.removeTrack(state, location, trackId);
+    if (!file) return;
+    deleteUploadedFile(AUDIO_DIR, file);
+    saveState(state);
+    broadcastState();
+  });
+
+  // /display lo emette quando un one-shot finisce da solo. Solo dal display;
+  // il seq scarta un "finito" in ritardo che riguarda una partenza superata.
+  socket.on('audio:oneshotEnded', ({ trackId, seq } = {}) => {
+    if (!displaySockets.has(socket.id)) return;
+    if (!audioModel.oneshotEnded(state, trackId, seq)) return;
     broadcastState();
   });
 
@@ -1222,8 +1163,15 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     controlSockets.delete(socket.id);
     broadcastControlStatus();
-    displaySockets.delete(socket.id);
+    const wasDisplay = displaySockets.delete(socket.id);
     broadcastDisplayStatus();
+    if (wasDisplay && displaySockets.size === 0) {
+      const cleared = audioModel.clearOneshots(state);
+      if (displayAudio || cleared) {
+        displayAudio = null;
+        broadcastState();
+      }
+    }
   });
 });
 

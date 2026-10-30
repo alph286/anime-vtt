@@ -25,13 +25,10 @@ export interface ControlMapData extends MapData {
 }
 export interface ControlLocation extends Omit<Location, 'map'> { map: ControlMapData }
 
-// Valori impostati da server/index.js e server/state.js.
-export type AudioPlayState = 'playing' | 'paused' | 'stopped';
-
 export interface ControlState extends Omit<VttState, 'locations'> {
   locations: ControlLocation[];
   activeImageId: string | null;
-  activeAudioTrack: 'main' | 'special' | null;
-  audioState: AudioPlayState | null;
+  audioOneshots: Record<string, number>;
   displayViewport: DisplayViewport | null;
+  displayAudio?: { blocked: boolean; errors: string[]; playing: string[] } | null;
 }
