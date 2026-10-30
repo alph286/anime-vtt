@@ -189,11 +189,16 @@ function syncAudioLibrary(state, audioKey = (file) => file) {
   const keyOf = (file) => audioKey(file) || file;
   state.audioLibrary = (Array.isArray(state.audioLibrary) ? state.audioLibrary : []).filter(hasFile).map(normalizeItem);
   const byId = new Map(state.audioLibrary.map((i) => [i.id, i]));
-  const byKey = new Map();
-  state.audioLibrary.forEach((i) => { const k = keyOf(i.file); if (!byKey.has(k)) byKey.set(k, i); });
+  // Le chiavi (hash dei file all'avvio) servono solo se c'è una riga da
+  // abbinare: calcolate al primo bisogno, non a ogni avvio.
+  let byKey = null;
   allRows(state).forEach(({ track }) => {
     let item = byId.get(track.audioId);
     if (!item) {
+      if (!byKey) {
+        byKey = new Map();
+        state.audioLibrary.forEach((i) => { const k = keyOf(i.file); if (!byKey.has(k)) byKey.set(k, i); });
+      }
       const k = keyOf(track.file);
       item = byKey.get(k);
       if (!item) {

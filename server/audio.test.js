@@ -303,3 +303,11 @@ test('libraryFiles: elenca i file dell\'archivio', () => {
   const { s } = synced();
   assert.deepEqual(A.libraryFiles(s).sort(), ['a.mp3', 'b.mp3']);
 });
+
+test('syncAudioLibrary: con tutte le righe già abbinate non calcola nessuna chiave (niente hash a ogni avvio)', () => {
+  const s = libState([loc('A', [row('b1', 'a.mp3', { audioId: 'L1' })])],
+    { audioLibrary: [{ id: 'L1', name: 'P', icon: 'music', file: 'a.mp3' }] });
+  let calls = 0;
+  A.syncAudioLibrary(s, () => { calls += 1; return 'k'; });
+  assert.equal(calls, 0);
+});
