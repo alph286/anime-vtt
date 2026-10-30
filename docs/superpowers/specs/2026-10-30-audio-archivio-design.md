@@ -114,7 +114,9 @@ con lo stato persistito ed è il comportamento atteso tornando sulla location.
   `migrate` pura (che riceve solo lo stato). La parte pura (raggruppa per chiave, assegna
   `audioId`, riallinea le copie) va testata con una funzione hash finta.
 - Idempotente: con `audioLibrary` già presente, la migrazione si limita a riallineare le
-  copie `name/icon/file` delle righe e a scartare righe con `audioId` inesistente.
+  copie `name/icon/file` delle righe. Una riga con `audioId` inesistente (es. location
+  arrivata da un ripristino di backup) non viene scartata: la sua voce viene ricreata
+  dal suo `file` (o unita a una voce con lo stesso contenuto).
 
 ## /editor
 
