@@ -1,18 +1,26 @@
-// Dissolvenze dell'audio di /display e stato reale riportato a /control.
+// Mixer dell'audio di /display e stato reale riportato a /control.
 // Script classico (come media.js): funzioni globali nel browser, module.exports
-// per i test e per il server. Nessun accesso al DOM globale: il motore riceve
-// elementi, clock e scheduler dall'esterno.
+// per i test e per il server. Nessun accesso al DOM globale: il mixer riceve
+// la fabbrica degli elementi, il clock e lo scheduler dall'esterno.
+//
+// Un elemento <audio> per traccia, creato al volo e rilasciato quando non serve
+// più. Righe: Background (loop, più insieme) e One-shot (una volta, si
+// sovrappongono, abbassano i background finché ne suona almeno uno).
 
 const AUDIO_FADE = {
-  location: 2000, // cambio di file della principale (cambio location incluso)
-  transport: 400, // play / pausa / stop, uscita dello sting
-  duckOut: 600, // la principale sfuma in pausa quando parte uno sting
-  stingIn: 300, // ingresso dello sting
-  resumeIn: 1500 // la principale riprende dopo lo sting
+  location: 2000, // cambio location: le vecchie escono, le nuove entrano
+  bgIn: 1000, // background acceso
+  bgOut: 1000, // background spento
+  transport: 400, // one-shot fermato a mano (o eliminato)
+  duckOut: 600, // i background scendono quando parte un one-shot
+  stingIn: 300, // ingresso di un one-shot
+  resumeIn: 1500 // i background risalgono dopo l'ultimo one-shot
 };
 
-const DISPLAY_AUDIO_STATUSES = ['playing', 'idle', 'error', 'blocked'];
-const DISPLAY_AUDIO_SLOTS = ['main', 'special'];
+// Fattore di volume dei background mentre suona almeno un one-shot.
+const AUDIO_DUCK_LEVEL = 0.4;
+
+const DISPLAY_AUDIO_STATUS_MAX = 100;
 
 function audioLevelAt(from, to, elapsedMs, durationMs) {
   if (durationMs <= 0 || elapsedMs >= durationMs) return to;
@@ -20,228 +28,372 @@ function audioLevelAt(from, to, elapsedMs, durationMs) {
   return from + (to - from) * (elapsedMs / durationMs);
 }
 
-function normalizeDisplayAudioStatus(payload) {
-  if (!payload || typeof payload !== 'object') return null;
-  if (!DISPLAY_AUDIO_STATUSES.includes(payload.status)) return null;
-  if (!DISPLAY_AUDIO_SLOTS.includes(payload.slot)) return null;
-  return { status: payload.status, slot: payload.slot };
+function isStatusIdList(list) {
+  return Array.isArray(list)
+    && list.length <= DISPLAY_AUDIO_STATUS_MAX
+    && list.every((id) => typeof id === 'string');
 }
 
-function createAudioEngine({ elements, now, requestFrame, onStatus, onSpecialEnded }) {
-  const players = elements.map((el) => ({
-    el,
-    role: 'free', // free | active | ducked | leaving
-    slot: null,
-    src: null,
-    seq: null,
-    intent: 'stopped', // playing | paused | stopped
-    volume: 0.7,
-    level: 0,
-    fade: null
-  }));
+// Payload di `audio:status` dal display: { blocked, errors: [id], playing: [id] }.
+function normalizeDisplayAudioStatus(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  if (typeof payload.blocked !== 'boolean') return null;
+  if (!isStatusIdList(payload.errors) || !isStatusIdList(payload.playing)) return null;
+  return { blocked: payload.blocked, errors: payload.errors.slice(), playing: payload.playing.slice() };
+}
+
+function createAudioMixer({ createElement, now, requestFrame, onStatus, onOneshotEnded }) {
+  let tracks = new Map(); // `${kind}:${id}` -> traccia della location attiva
+  let leaving = []; // tracce che sfumano prima di essere rilasciate
+  let locationId; // undefined finché non arriva il primo apply
+  let duckTarget = 1;
+  let blocked = false;
   let frame = null;
-  let lastSeq = 0;
   let lastStatus = null;
   let lastStatusKey = null;
 
   const clamp01 = (x) => Math.min(1, Math.max(0, x));
-  const applyVolume = (p) => { p.el.volume = clamp01(p.volume * p.level); };
+  const volumeOf = (v) => (typeof v === 'number' && Number.isFinite(v) ? clamp01(v) : 0.7);
+  const applyVolume = (t) => { t.el.volume = clamp01(t.volume * t.level * t.duck); };
 
-  function report(status, slot) {
-    lastStatus = { status, slot };
-    const key = `${status}:${slot}`;
+  // --- stato riportato a /control ---------------------------------------
+
+  function computeStatus() {
+    const errors = [];
+    const playing = [];
+    for (const t of tracks.values()) {
+      if (t.error) errors.push(t.id);
+      if (t.intent === 'playing' && t.audible) playing.push(t.id);
+    }
+    errors.sort();
+    playing.sort();
+    return { blocked, errors, playing };
+  }
+
+  function report() {
+    const status = computeStatus();
+    lastStatus = status;
+    const key = JSON.stringify(status);
     if (key === lastStatusKey) return;
     lastStatusKey = key;
-    onStatus({ status, slot });
+    onStatus(status);
   }
 
   function resendStatus() {
     if (!lastStatus) return;
     lastStatusKey = null;
-    report(lastStatus.status, lastStatus.slot);
+    report();
   }
 
-  function release(p) {
-    p.el.pause();
-    p.el.removeAttribute('src');
-    p.el.load();
-    p.role = 'free';
-    p.slot = null;
-    p.src = null;
-    p.seq = null;
-    p.intent = 'stopped';
-    p.level = 0;
-    p.fade = null;
+  // --- fade --------------------------------------------------------------
+
+  function release(t) {
+    t.released = true;
+    t.fade = null;
+    t.duckFade = null;
+    t.el.pause();
+    t.el.removeAttribute('src');
+    t.el.load();
+    if (typeof t.el.remove === 'function') t.el.remove();
   }
 
-  function finishFade(p) {
-    const then = p.fade && p.fade.then;
-    p.fade = null;
-    if (then === 'pause') {
-      p.el.pause();
-    } else if (then === 'stop') {
-      p.el.pause();
-      p.el.currentTime = 0;
+  function finishFade(t) {
+    const then = t.fade && t.fade.then;
+    t.fade = null;
+    if (then === 'stop') {
+      t.el.pause();
+      t.parked = true;
+      // Il one-shot si riavvolge sempre; il background solo con restartOnStop
+      // (letto adesso: un cambio vale dal prossimo spegnimento).
+      if (t.kind === 'oneshot' || t.restartOnStop) t.el.currentTime = 0;
     } else if (then === 'release') {
-      release(p);
+      release(t);
+      leaving = leaving.filter((q) => q !== t);
     }
   }
 
   function tick() {
     frame = null;
-    const t = now();
+    const time = now();
     let pending = false;
-    for (const p of players) {
-      if (!p.fade) continue;
-      const f = p.fade;
-      const elapsed = t - f.start;
-      p.level = audioLevelAt(f.from, f.to, elapsed, f.duration);
-      applyVolume(p);
-      if (elapsed >= f.duration) finishFade(p);
-      else pending = true;
+    for (const t of [...tracks.values(), ...leaving]) {
+      if (t.duckFade) {
+        const d = t.duckFade;
+        t.duck = audioLevelAt(d.from, d.to, time - d.start, d.duration);
+        if (time - d.start >= d.duration) t.duckFade = null;
+        else pending = true;
+      }
+      if (t.fade) {
+        const f = t.fade;
+        t.level = audioLevelAt(f.from, f.to, time - f.start, f.duration);
+      }
+      applyVolume(t);
+      if (t.fade) {
+        if (time - t.fade.start >= t.fade.duration) finishFade(t);
+        else pending = true;
+      }
     }
     if (pending && frame === null) frame = requestFrame(tick);
   }
 
-  function startFade(p, to, duration, then) {
-    p.fade = { from: p.level, to, start: now(), duration, then };
-    if (duration <= 0) {
-      p.level = to;
-      applyVolume(p);
-      finishFade(p);
-      return;
-    }
+  function schedule() {
     if (frame === null) frame = requestFrame(tick);
   }
 
-  function play(p) {
-    const result = p.el.play();
-    if (!result || typeof result.then !== 'function') return;
+  function startFade(t, to, duration, then) {
+    t.fade = { from: t.level, to, start: now(), duration, then };
+    if (duration <= 0) {
+      t.level = to;
+      applyVolume(t);
+      finishFade(t);
+      return;
+    }
+    schedule();
+  }
+
+  function startDuck(t, to, duration) {
+    t.duckFade = { from: t.duck, to, start: now(), duration };
+    if (duration <= 0) {
+      t.duck = to;
+      t.duckFade = null;
+      applyVolume(t);
+      return;
+    }
+    schedule();
+  }
+
+  // --- riproduzione -------------------------------------------------------
+
+  function play(t) {
+    t.failed = false;
+    t.parked = false;
+    const token = (t.playToken += 1);
+    const result = t.el.play();
+    if (!result || typeof result.then !== 'function') {
+      onPlayed(t, token);
+      return;
+    }
     result.then(
-      () => {
-        if (p.role === 'active' && p.intent === 'playing') report('playing', p.slot);
-      },
+      () => onPlayed(t, token),
       (err) => {
-        if (p.role !== 'active') return;
+        if (t.released || token !== t.playToken || t.intent !== 'playing') return;
         if (err && err.name === 'AbortError') return;
-        // L'elemento non sta suonando: il prossimo stato "playing" deve poter
-        // ritentare (come faceva il codice precedente a ogni state:update).
-        p.intent = 'paused';
-        report(err && err.name === 'NotAllowedError' ? 'blocked' : 'error', p.slot);
+        // L'elemento non sta suonando: il prossimo apply ritenta (nessun
+        // tentativo a vuoto nel frattempo).
+        t.failed = true;
+        t.audible = false;
+        if (err && err.name === 'NotAllowedError') {
+          blocked = true;
+        } else {
+          t.error = true;
+          if (t.kind === 'oneshot') endOneshot(t);
+        }
+        report();
       }
     );
   }
 
-  function takeFree() {
-    let p = players.find((q) => q.role === 'free');
-    if (p) return p;
-    p = players.find((q) => q.role === 'leaving') || players.find((q) => q.role === 'ducked');
-    release(p);
-    return p;
+  function onPlayed(t, token) {
+    if (t.released || token !== t.playToken || t.intent !== 'playing') return;
+    t.audible = true;
+    t.error = false;
+    blocked = false;
+    // Ancora della posizione virtuale: fissata al primo play riuscito.
+    if (t.anchor === null) t.anchor = now() - (Number(t.el.currentTime) || 0) * 1000;
+    report();
   }
 
-  for (const p of players) {
-    p.el.addEventListener('ended', () => {
-      if (p.role === 'active' && p.slot === 'special') onSpecialEnded(lastSeq);
-    });
-    p.el.addEventListener('error', () => {
-      if (p.role !== 'active') return;
-      report('error', p.slot);
-      if (p.slot === 'special') onSpecialEnded(lastSeq);
-    });
+  // Un one-shot finito (o in errore) resta muto finché il server non lo toglie
+  // da `oneshots`: lo stesso seq non riparte.
+  function endOneshot(t) {
+    if (t.ended) return;
+    t.ended = true;
+    t.intent = 'stopped';
+    t.audible = false;
+    updateDuck();
+    onOneshotEnded(t.id, t.seq);
   }
 
-  function apply(next) {
-    lastSeq = next.seq;
-    const slot = next.slot === 'special' ? 'special' : 'main';
-    const src = next.src || null;
-    const state = next.state;
+  function updateDuck() {
+    let active = false;
+    for (const t of tracks.values()) {
+      if (t.kind === 'oneshot' && t.intent === 'playing' && !t.ended) active = true;
+    }
+    const target = active ? AUDIO_DUCK_LEVEL : 1;
+    if (target === duckTarget) return;
+    duckTarget = target;
+    for (const t of tracks.values()) {
+      if (t.kind !== 'background') continue;
+      startDuck(t, target, active ? AUDIO_FADE.duckOut : AUDIO_FADE.resumeIn);
+    }
+  }
 
-    if (!src) {
-      for (const p of players) {
-        if (p.role === 'active') {
-          p.role = 'leaving';
-          startFade(p, 0, AUDIO_FADE.location, 'release');
-        } else if (p.role === 'ducked') {
-          release(p);
+  function createTrack(kind, def) {
+    const el = createElement();
+    const t = {
+      id: def.id,
+      kind,
+      el,
+      src: def.src,
+      volume: volumeOf(def.volume),
+      restartOnStop: Boolean(def.restartOnStop),
+      level: 0,
+      duck: kind === 'background' ? duckTarget : 1,
+      fade: null,
+      duckFade: null,
+      anchor: null,
+      seq: null,
+      intent: 'stopped', // playing | stopped
+      audible: false, // play() risolto e non fermato da allora
+      parked: false, // fade di spegnimento concluso, elemento in pausa
+      failed: false, // ultimo play() rifiutato: si ritenta al prossimo apply
+      error: false,
+      ended: false,
+      released: false,
+      playToken: 0
+    };
+    el.loop = kind === 'background';
+    el.src = def.src;
+    el.volume = 0;
+    el.addEventListener('ended', () => {
+      if (t.released || t.kind !== 'oneshot' || t.intent !== 'playing') return;
+      endOneshot(t);
+      report();
+    });
+    el.addEventListener('error', () => {
+      if (t.released) return;
+      t.error = true;
+      t.audible = false;
+      if (t.kind === 'oneshot' && t.intent === 'playing') endOneshot(t);
+      report();
+    });
+    return t;
+  }
+
+  function leave(t, duration) {
+    t.intent = 'stopped';
+    t.audible = false;
+    leaving.push(t);
+    startFade(t, 0, duration, 'release');
+  }
+
+  // Posizione "come se avesse sempre suonato", per i background senza restartOnStop.
+  function seekVirtual(t) {
+    const duration = Number(t.el.duration);
+    if (t.anchor === null || !Number.isFinite(duration) || duration <= 0) return;
+    const elapsed = (now() - t.anchor) / 1000;
+    t.el.currentTime = ((elapsed % duration) + duration) % duration;
+  }
+
+  function applyBackground(def, entering) {
+    const key = `background:${def.id}`;
+    let t = tracks.get(key);
+    if (!t) {
+      if (!def.on) return;
+      t = createTrack('background', def);
+      tracks.set(key, t);
+    }
+    t.volume = volumeOf(def.volume);
+    t.restartOnStop = Boolean(def.restartOnStop);
+    applyVolume(t);
+    if (def.on) {
+      if (t.intent !== 'playing') {
+        if (t.parked) {
+          if (t.restartOnStop) t.el.currentTime = 0;
+          else seekVirtual(t);
         }
+        t.intent = 'playing';
+        play(t);
+        startFade(t, 1, entering ? AUDIO_FADE.location : AUDIO_FADE.bgIn, null);
+      } else if (t.failed) {
+        play(t);
       }
-      report('idle', slot);
+    } else if (t.intent === 'playing') {
+      t.intent = 'stopped';
+      t.audible = false;
+      startFade(t, 0, AUDIO_FADE.bgOut, 'stop');
+    }
+  }
+
+  function applyOneshot(def, seq) {
+    const key = `oneshot:${def.id}`;
+    let t = tracks.get(key);
+    if (!t) {
+      if (seq === undefined) return;
+      t = createTrack('oneshot', def);
+      tracks.set(key, t);
+    }
+    t.volume = volumeOf(def.volume);
+    applyVolume(t);
+    if (seq === undefined) {
+      t.seq = null;
+      t.ended = false;
+      if (t.intent === 'playing') {
+        t.intent = 'stopped';
+        t.audible = false;
+        startFade(t, 0, AUDIO_FADE.transport, 'stop');
+      }
       return;
     }
+    if (seq !== t.seq) {
+      // Partenza (o ri-partenza con un seq nuovo): sempre da capo.
+      t.seq = seq;
+      t.ended = false;
+      t.intent = 'playing';
+      t.audible = false;
+      t.el.currentTime = 0;
+      play(t);
+      startFade(t, 1, AUDIO_FADE.stingIn, null);
+    } else if (t.intent === 'playing' && t.failed) {
+      play(t);
+    }
+  }
 
-    let target = players.find((p) => p.slot === slot && p.src === src && (p.role === 'active' || p.role === 'ducked'));
-    const wasDucked = Boolean(target && target.role === 'ducked');
-    const created = !target;
+  function apply(scene) {
+    const next = scene || {};
+    const nextLocation = next.locationId || null;
+    const background = Array.isArray(next.background) ? next.background : [];
+    const oneshot = Array.isArray(next.oneshot) ? next.oneshot : [];
+    const oneshots = next.oneshots && typeof next.oneshots === 'object' ? next.oneshots : {};
 
-    // Una principale ducked con un altro file non serve più.
-    if (slot === 'main') {
-      for (const p of players) {
-        if (p.role === 'ducked' && p !== target) release(p);
+    const entering = locationId !== undefined && nextLocation !== locationId;
+    if (nextLocation !== locationId) {
+      for (const t of tracks.values()) leave(t, AUDIO_FADE.location);
+      tracks = new Map();
+      locationId = nextLocation;
+      // Il ducking riguarda solo i one-shot della location attiva.
+      duckTarget = 1;
+    }
+
+    // Tracce eliminate o con il file cambiato: sfumano e vengono rilasciate.
+    const wanted = new Map();
+    for (const def of background) if (def && def.id && def.src) wanted.set(`background:${def.id}`, def);
+    for (const def of oneshot) if (def && def.id && def.src) wanted.set(`oneshot:${def.id}`, def);
+    for (const [key, t] of [...tracks]) {
+      const def = wanted.get(key);
+      if (def && def.src === t.src) continue;
+      tracks.delete(key);
+      leave(t, t.kind === 'background' ? AUDIO_FADE.bgOut : AUDIO_FADE.transport);
+      // Stesso one-shot con un file nuovo: il seq già suonato non riparte.
+      if (def && t.kind === 'oneshot' && t.seq !== null && oneshots[def.id] === t.seq) {
+        const replacement = createTrack('oneshot', def);
+        replacement.seq = t.seq;
+        replacement.ended = true;
+        tracks.set(key, replacement);
       }
     }
 
-    const crossfading = players.some((p) => p !== target && p.role === 'active' && p.slot === 'main');
-
-    if (created) {
-      target = takeFree();
-      target.role = 'active';
-      target.slot = slot;
-      target.src = src;
-      target.seq = next.seq;
-      target.intent = 'stopped';
-      target.level = 0;
-      target.fade = null;
-      target.el.loop = slot === 'main';
-      target.el.src = src;
-    } else {
-      target.role = 'active';
+    for (const def of background) {
+      if (def && def.id && def.src) applyBackground(def, entering);
+    }
+    for (const def of oneshot) {
+      if (!def || !def.id || !def.src) continue;
+      const raw = oneshots[def.id];
+      applyOneshot(def, Number.isFinite(raw) ? raw : undefined);
     }
 
-    for (const p of players) {
-      if (p === target || p.role !== 'active') continue;
-      if (p.slot === 'main' && slot === 'special') {
-        p.role = 'ducked';
-        p.intent = 'paused';
-        startFade(p, 0, AUDIO_FADE.duckOut, 'pause');
-      } else {
-        p.role = 'leaving';
-        startFade(p, 0, p.slot === 'special' ? AUDIO_FADE.transport : AUDIO_FADE.location, 'release');
-      }
-    }
-
-    target.volume = next.volume;
-    applyVolume(target);
-
-    const retriggered = !created && slot === 'special' && target.seq !== next.seq;
-    target.seq = next.seq;
-    if (retriggered) target.el.currentTime = 0;
-
-    if (state === 'playing') {
-      if (target.intent !== 'playing') {
-        target.intent = 'playing';
-        let duration = AUDIO_FADE.transport;
-        if (slot === 'special') duration = AUDIO_FADE.stingIn;
-        else if (wasDucked) duration = AUDIO_FADE.resumeIn;
-        else if (created && crossfading) duration = AUDIO_FADE.location;
-        play(target);
-        startFade(target, 1, duration, null);
-      } else if (retriggered) {
-        target.fade = null;
-        target.level = 1;
-        applyVolume(target);
-        play(target);
-      }
-    } else {
-      const wanted = state === 'paused' ? 'paused' : 'stopped';
-      if (target.intent === 'playing') {
-        startFade(target, 0, AUDIO_FADE.transport, wanted === 'stopped' ? 'stop' : 'pause');
-      } else if (wanted === 'stopped' && target.intent !== 'stopped') {
-        target.el.currentTime = 0;
-      }
-      target.intent = wanted;
-      report('idle', slot);
-    }
+    updateDuck();
+    report();
   }
 
   return { apply, resendStatus };
@@ -250,10 +402,9 @@ function createAudioEngine({ elements, now, requestFrame, onStatus, onSpecialEnd
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     AUDIO_FADE,
-    DISPLAY_AUDIO_STATUSES,
-    DISPLAY_AUDIO_SLOTS,
+    AUDIO_DUCK_LEVEL,
     audioLevelAt,
     normalizeDisplayAudioStatus,
-    createAudioEngine
+    createAudioMixer
   };
 }
