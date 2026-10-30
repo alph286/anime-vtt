@@ -179,15 +179,19 @@ function createAudioMixer({ createElement, now, requestFrame, onStatus, onOnesho
         if (t.released || token !== t.playToken || t.intent !== 'playing') return;
         if (err && err.name === 'AbortError') return;
         // L'elemento non sta suonando: il prossimo apply ritenta (nessun
-        // tentativo a vuoto nel frattempo).
+        // tentativo a vuoto nel frattempo). Il livello torna a 0 così, quando
+        // il ritentativo riesce, la traccia entra sfumando e non di colpo.
         t.failed = true;
         t.audible = false;
-        if (err && err.name === 'NotAllowedError') {
-          blocked = true;
-        } else {
-          t.error = true;
-          if (t.kind === 'oneshot') endOneshot(t);
-        }
+        t.fade = null;
+        t.level = 0;
+        applyVolume(t);
+        if (err && err.name === 'NotAllowedError') blocked = true;
+        else t.error = true;
+        // Un one-shot che non è partito si chiude subito, anche se bloccato
+        // dall'autoplay: il server lo toglie (il pulsante di /control si spegne,
+        // i background risalgono) e lo stesso seq non riparte più tardi a sorpresa.
+        if (t.kind === 'oneshot') endOneshot(t);
         report();
       }
     );
@@ -198,6 +202,11 @@ function createAudioMixer({ createElement, now, requestFrame, onStatus, onOnesho
     t.audible = true;
     t.error = false;
     blocked = false;
+    // Ritentativo riuscito dopo un blocco: il livello era stato azzerato,
+    // si risale con una sfumatura (se non ce n'è già una in corso verso 1).
+    if (t.level < 1 && !(t.fade && t.fade.to === 1)) {
+      startFade(t, 1, t.kind === 'oneshot' ? AUDIO_FADE.stingIn : AUDIO_FADE.bgIn, null);
+    }
     // Ancora della posizione virtuale: fissata al primo play riuscito.
     if (t.anchor === null) t.anchor = now() - (Number(t.el.currentTime) || 0) * 1000;
     report();
@@ -342,6 +351,10 @@ function createAudioMixer({ createElement, now, requestFrame, onStatus, onOnesho
       t.intent = 'playing';
       t.audible = false;
       t.el.currentTime = 0;
+      // Dopo una fine naturale il livello è rimasto a 1: si riparte da 0
+      // perché l'ingresso in stingIn ci sia sempre.
+      t.level = 0;
+      applyVolume(t);
       play(t);
       startFade(t, 1, AUDIO_FADE.stingIn, null);
     } else if (t.intent === 'playing' && t.failed) {

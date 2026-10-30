@@ -547,7 +547,11 @@ io.on('connection', (socket) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
     location.archived = true;
-    if (state.activeLocationId === locationId) state.activeLocationId = null;
+    if (state.activeLocationId === locationId) {
+      state.activeLocationId = null;
+      // Come il cambio location: gli one-shot della location archiviata finiscono qui.
+      audioModel.clearOneshots(state);
+    }
     saveState(state);
     broadcastState();
   });

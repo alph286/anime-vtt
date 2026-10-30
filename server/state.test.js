@@ -49,11 +49,25 @@ test('migrate audio: main in riproduzione sulla location attiva -> on true', () 
   assert.equal(state.locations[0].map.audio.background[0].on, true);
 });
 
-test('migrate audio: audioOneshots salvato viene azzerato', () => {
-  const state = { audioOneshots: { x: 1 }, audioOneshotSeq: 9, locations: [] };
+test('migrate audio: a metà sessione (import/ripristino) non tocca audioOneshots né audioOneshotSeq', () => {
+  const state = { audioOneshots: { x: 5 }, audioOneshotSeq: 5, locations: [] };
   migrate(state);
+  assert.deepEqual(state.audioOneshots, { x: 5 });
+  assert.equal(state.audioOneshotSeq, 5);
+});
+
+test('applyStartupDefault: svuota audioOneshots ma il seq non torna indietro', () => {
+  const state = { locations: [{ id: 'A', isDefault: true }], audioOneshots: { x: 5 }, audioOneshotSeq: 5 };
+  applyStartupDefault(state);
   assert.deepEqual(state.audioOneshots, {});
-  assert.equal(state.audioOneshotSeq, 0);
+  assert.equal(state.audioOneshotSeq, 5);
+});
+
+test('caricamento: uno stato salvato con one-shot in corso riparte da {} (migrate + applyStartupDefault)', () => {
+  const state = { locations: [{ id: 'A', isDefault: true, map: {} }], audioOneshots: { x: 1 }, audioOneshotSeq: 9 };
+  applyStartupDefault(migrate(state));
+  assert.deepEqual(state.audioOneshots, {});
+  assert.equal(state.audioOneshotSeq, 9);
 });
 
 test('migrate audio: formato nuovo resta invariato (on persistito)', () => {

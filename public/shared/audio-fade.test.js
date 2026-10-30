@@ -95,14 +95,21 @@ class FakeAudio {
   fire(type) { (this.listeners[type] || []).forEach((fn) => fn()); }
 }
 
-function harness() {
+function harness(opts = {}) {
   let t = 0;
   let frames = [];
   const els = [];
   const statuses = [];
   const ended = [];
   const mixer = createAudioMixer({
-    createElement: () => { const el = new FakeAudio(); els.push(el); return el; },
+    createElement: () => {
+      const el = new FakeAudio();
+      // `opts.nextPlay(src)`: comportamento del play() per gli elementi creati
+      // da qui in poi (il src non è ancora impostato alla creazione: si legge al play).
+      if (opts.nextPlay) el.nextPlay = () => opts.nextPlay(el.src);
+      els.push(el);
+      return el;
+    },
     now: () => t,
     requestFrame: (fn) => { frames.push(fn); return frames.length; },
     onStatus: (s) => statuses.push(s),
@@ -440,4 +447,71 @@ test('locationId null: tutto sfuma e viene rilasciato', () => {
   mixer.apply({ locationId: null, background: [], oneshot: [], oneshots: {} });
   flush(AUDIO_FADE.location);
   assert.equal(els[0].src, '');
+});
+
+// --- correzioni della revisione finale -------------------------------------
+
+const notAllowed = () => Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' }));
+
+test('one-shot bloccato dall\'autoplay: chiuso subito (onOneshotEnded), blocked, nessun ducking residuo né ritentativi', async () => {
+  const { mixer, flush, ended, statuses, elBySrc } = harness({
+    nextPlay: (src) => (src === '/a/x.mp3' ? notAllowed() : Promise.resolve())
+  });
+  mixer.apply(scene({ background: [bg('a')] }));
+  flush(AUDIO_FADE.bgIn);
+  const a = elBySrc('/a/a.mp3');
+  const withShot = scene({ background: [bg('a')], oneshot: [os('x')], oneshots: { x: 4 } });
+  mixer.apply(withShot);
+  const x = elBySrc('/a/x.mp3');
+  await settle();
+  assert.deepEqual(ended, [['x', 4]]);
+  assert.equal(last(statuses).blocked, true);
+  assert.deepEqual(last(statuses).playing, ['a']);
+  flush(AUDIO_FADE.duckOut + AUDIO_FADE.resumeIn);
+  near(a.volume, 0.7);
+  // Il server non ha ancora tolto il seq: un apply successivo non lo ritenta.
+  mixer.apply(withShot);
+  mixer.apply(withShot);
+  await settle();
+  assert.equal(x.playCalls, 1);
+  assert.deepEqual(ended, [['x', 4]]);
+  flush(AUDIO_FADE.resumeIn);
+  near(a.volume, 0.7);
+});
+
+test('background bloccato e poi ritentato con successo: entra sfumando in bgIn, non di colpo', async () => {
+  const { mixer, flush, elBySrc } = harness({ nextPlay: () => notAllowed() });
+  mixer.apply(scene({ background: [bg('a')] }));
+  const a = elBySrc('/a/a.mp3');
+  flush(AUDIO_FADE.bgIn / 2);
+  await settle();
+  assert.equal(a.volume, 0);
+  flush(AUDIO_FADE.bgIn);
+  assert.equal(a.volume, 0);
+  a.nextPlay = null;
+  mixer.apply(scene({ background: [bg('a')] }));
+  assert.equal(a.playCalls, 2);
+  await settle();
+  assert.equal(a.volume, 0);
+  flush(AUDIO_FADE.bgIn / 2);
+  near(a.volume, 0.35);
+  flush(AUDIO_FADE.bgIn / 2);
+  near(a.volume, 0.7);
+});
+
+test('one-shot finito da solo e ripremuto: rientra da 0 in stingIn', async () => {
+  const { mixer, flush, elBySrc } = harness();
+  mixer.apply(scene({ oneshot: [os('x')], oneshots: { x: 1 } }));
+  flush(AUDIO_FADE.stingIn);
+  const x = elBySrc('/a/x.mp3');
+  near(x.volume, 0.7);
+  await settle();
+  x.fire('ended');
+  mixer.apply(scene({ oneshot: [os('x')], oneshots: {} }));
+  mixer.apply(scene({ oneshot: [os('x')], oneshots: { x: 2 } }));
+  assert.equal(x.volume, 0);
+  flush(AUDIO_FADE.stingIn / 2);
+  near(x.volume, 0.35);
+  flush(AUDIO_FADE.stingIn / 2);
+  near(x.volume, 0.7);
 });

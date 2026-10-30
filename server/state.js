@@ -64,14 +64,17 @@ function migrate(state) {
   if (state.gridPreset.opacity === undefined) state.gridPreset.opacity = 1;
 
   // Audio a righe (background/one-shot): `legacyMainOn` va calcolato PRIMA di
-  // cancellare i campi vecchi. Gli one-shot in corso non sopravvivono mai a un
-  // riavvio.
+  // cancellare i campi vecchi. migrate() gira anche a metà sessione (import e
+  // ripristino backup): one-shot in corso e seq si inizializzano solo se
+  // mancano, così il seq non torna mai indietro e un `oneshotEnded` arrivato in
+  // ritardo non può combaciare con un seq nuovo. Gli one-shot in corso li
+  // svuota applyStartupDefault (avvio e ripristino), non questa funzione.
   const legacyMainPaused = state.activeAudioTrack === 'main' && !!state.audioState && state.audioState !== 'playing';
   delete state.activeAudioTrack;
   delete state.audioState;
   delete state.audioTriggerSeq;
-  state.audioOneshots = {};
-  state.audioOneshotSeq = 0;
+  if (!state.audioOneshots || typeof state.audioOneshots !== 'object') state.audioOneshots = {};
+  if (!Number.isFinite(state.audioOneshotSeq)) state.audioOneshotSeq = 0;
 
   // `settings.picsenderUrl` apparteneva all'integrazione PicSender, rimossa:
   // Telegram si configura ora in un file separato (data/telegram.json, vedi
@@ -187,6 +190,8 @@ function applyStartupDefault(state) {
   const chosen = preferred || nonArchived[0] || null;
   state.activeLocationId = chosen ? chosen.id : null;
   state.activeImageId = null;
+  // Gli one-shot in corso non sopravvivono a un riavvio né a un ripristino;
+  // il seq invece resta dov'è (monotono per tutta la vita del processo).
   state.audioOneshots = {};
   return state;
 }
