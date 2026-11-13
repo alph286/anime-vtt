@@ -70,6 +70,13 @@ function stopHandoutVideo() {
   updateHandoutDuck();
 }
 
+// Handout non più in onda: scarica <img> e <video> nascosti (un video solo in
+// pausa tiene decoder e fotogrammi in memoria GPU). Rimostrato, si ricarica.
+function releaseHandoutMedia() {
+  releaseMedia(shownImageVideo);
+  releaseMedia(shownImageImg);
+}
+
 function updateHandoutDuck() {
   const v = shownImageVideo;
   audioEngine.setVideoDuck(handoutVideoKey !== null && handoutVideoAudio === true
@@ -302,6 +309,7 @@ function render(state) {
     // Un handout video nascosto non deve continuare a decodificare in background
     // (e i sottofondi risalgono).
     stopHandoutVideo();
+    releaseHandoutMedia();
     if (shownImageWeb.dataset.src) {
       shownImageWeb.removeAttribute('src');
       delete shownImageWeb.dataset.src;
@@ -341,6 +349,7 @@ function renderImage(location, activeImageId) {
   if (isWebItem(image)) {
     imageFitBox.hidden = true;
     stopHandoutVideo();
+    releaseHandoutMedia();
     const src = webItemSrc(image);
     shownImageWeb.hidden = false;
     if (shownImageWeb.dataset.src !== src) {
@@ -486,6 +495,9 @@ function renderMap(state, location, returningFromImage) {
   } else {
     mapImg.hidden = true;
     mapVideo.hidden = true;
+    // Il video della mappa precedente non resta a decodificare nascosto.
+    releaseMedia(mapVideo);
+    if (activeMapEl === mapVideo) activeMapEl = mapImg;
     mapPlaceholder.hidden = false;
     const effective = layoutMapWrap(mapLayer, mapMediaWrap, 0);
     positionFitBox(mapFitBox, { left: 0, top: 0, width: effective.width, height: effective.height });

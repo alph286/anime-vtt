@@ -8,11 +8,21 @@ Resizable BAR), dove Chrome mappa i fotogrammi video. Causa nell'app: le miniatu
 distruggeva il player (molto dopo): BAR1 saliva a ogni cambio (misurato 83 -> 163 MiB in 6
 cambi). Ora `MediaPreview` rilascia il video allo smontaggio (`removeAttribute('src')` +
 `load()`, ref con cleanup, regge StrictMode): stessa prova resta tra 105 e 153.
-**Resta aperto**: /editor + /display + /handout aperti sullo stesso PC decodificano insieme
-3 video ~1,7K a ogni cambio: picco ancora vicino al limite (224 MiB). Rimedi possibili:
-Resizable BAR nel BIOS; `loadMapMedia` che chiama `load()` sul video nascosto (prova A/B:
-rilascio dopo 10 s 152 -> 86 MiB, picco invariato); non aprire /display sul PC dell'editor.
-L'archivio handout non è la causa (aggiunge al più una o due miniature).
+**Seconda parte (branch `fix-video-rilascio`)**: `releaseMedia(el)` in `shared/media.js`
+(pause + `removeAttribute('src')` + `load()` per i `<video>`, solo src per gli `<img>`; no-op
+se non c'è niente caricato). La usano `loadMapMedia` per l'elemento che nasconde, /handout
+(`clearMedia`), /display (`releaseHandoutMedia` quando l'handout non è più in onda o è una
+pagina web; video della mappa se la location non ha file), /control, /party e /editor
+(location senza file). Misura su kratosHard, server di prova :3100 con copia dei dati,
+/editor+/display+/handout+/control+/party aperti in 5 finestre, 4 giri di cambi location
+(0,7 s) e mostra/nascondi di un video handout: prima picco 176 MiB e BAR1 bloccata a 142
+anche su location senza video; dopo picco 170 e ritorno a 28 (base del desktop) appena
+nessun video è in onda.
+**Resta aperto**: il picco (5 pagine che decodificano insieme lo stesso video mappa, ~+145
+MiB) non cambia: con il desktop a 90-130 MiB come la sera del crash si arriva vicino a 256.
+Rimedi: Resizable BAR nel BIOS di kratosHard; non tenere /display, /control e /party aperti
+sul PC dell'editor. Sul Raspberry (kiosk /display, niente NVIDIA) conta la RAM, non la BAR1:
+non misurata. L'archivio handout non è la causa (aggiunge al più una o due miniature).
 
 ## Invio su Telegram nativo (branch `telegram-picsender-integration-ebf803`)
 

@@ -10,6 +10,7 @@ declare function mediaH(el: HTMLImageElement | HTMLVideoElement): number;
 declare function loadMapMedia(
   imgEl: HTMLImageElement, videoEl: HTMLVideoElement, filename: string, src: string, onReady: () => void
 ): HTMLImageElement | HTMLVideoElement;
+declare function releaseMedia(el: HTMLImageElement | HTMLVideoElement | null | undefined): void;
 declare function computeTotalRotation(naturalW: number, naturalH: number, flip180: boolean, rotate90: boolean): number;
 declare function rotatePointToBase(p: Pt, rotation: number): Pt;
 declare function layoutMapWrap(container: HTMLElement, wrapEl: HTMLElement, rotation: number): { width: number; height: number };
