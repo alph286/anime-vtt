@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const { emptyAudio, migrateLocationAudio, syncAudioLibrary } = require('./audio');
-const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS, findHandoutMedia } = require('../public/shared/media.js');
+const { normalizeHandout, addHandoutItem } = require('./handout');
+const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS, isWebItem } = require('../public/shared/media.js');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -49,12 +50,16 @@ const DEFAULT_STATE = {
   activeImageId: null,
   audioOneshots: {},
   audioOneshotSeq: 0,
-  handout: { shown: null, defaultMedia: null }
+  handout: { defaultId: null },
+  handoutLibrary: []
 };
 
 // `audioKey(file)` raggruppa i file audio con lo stesso contenuto nell'archivio
 // (server/index.js passa un hash del file; senza, conta solo il nome).
-function migrate(state, { audioKey } = {}) {
+// `copyHandoutFile(file)` copia un file da storage/images a storage/handout e
+// ritorna il nuovo nome (null se non riesce): serve a portare il vecchio default
+// di /handout nell'archivio, che deve possedere i suoi file.
+function migrate(state, { audioKey, copyHandoutFile } = {}) {
   delete state.tvProfiles;
   delete state.activeTvProfileId;
   delete state.liveView;
@@ -78,7 +83,6 @@ function migrate(state, { audioKey } = {}) {
   delete state.audioTriggerSeq;
   if (!state.audioOneshots || typeof state.audioOneshots !== 'object') state.audioOneshots = {};
   if (!Number.isFinite(state.audioOneshotSeq)) state.audioOneshotSeq = 0;
-  if (!state.handout) state.handout = { shown: null, defaultMedia: null };
 
   // `settings.picsenderUrl` apparteneva all'integrazione PicSender, rimossa:
   // Telegram si configura ora in un file separato (data/telegram.json, vedi
@@ -144,32 +148,40 @@ function migrate(state, { audioKey } = {}) {
 
   // Dopo il ciclo sulle location: le righe sono già nel formato a righe.
   syncAudioLibrary(state, audioKey);
-  pruneHandout(state);
+  migrateOldHandoutDefault(state, copyHandoutFile);
+  normalizeHandout(state);
   return state;
 }
 
-// Azzera i riferimenti di /handout che non puntano più a un'immagine/video
-// esistente (media o location eliminati, import di un altro stato): /handout
-// ricade così sul default, o su nulla.
-function pruneHandout(state) {
-  if (!state.handout) return;
-  if (!findHandoutMedia(state, state.handout.shown)) state.handout.shown = null;
-  if (!findHandoutMedia(state, state.handout.defaultMedia)) state.handout.defaultMedia = null;
+// Stato di prima dell'archivio: `handout.defaultMedia` era un riferimento
+// { locationId, imageId } a un media di una location. Diventa una voce
+// dell'archivio (con una copia del file) e default globale; `normalizeHandout`
+// toglie poi i campi vecchi, quindi non si ripete.
+function migrateOldHandoutDefault(state, copyHandoutFile) {
+  const ref = state.handout && state.handout.defaultMedia;
+  if (!ref || typeof copyHandoutFile !== 'function') return;
+  const location = (state.locations || []).find((l) => l.id === ref.locationId);
+  const media = location && (location.images || []).find((i) => i.id === ref.imageId);
+  if (!media || !media.file || isWebItem(media)) return;
+  const file = copyHandoutFile(media.file);
+  if (!file) return;
+  const item = addHandoutItem(state, { name: media.name || media.file, file });
+  state.handout.defaultId = item.id;
 }
 
-function loadState({ audioKey } = {}) {
+function loadState({ audioKey, copyHandoutFile } = {}) {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
   if (!fs.existsSync(STATE_FILE)) {
-    const migrated = migrate(JSON.parse(JSON.stringify(DEFAULT_STATE)), { audioKey });
+    const migrated = migrate(JSON.parse(JSON.stringify(DEFAULT_STATE)), { audioKey, copyHandoutFile });
     fs.writeFileSync(STATE_FILE, JSON.stringify(migrated, null, 2));
     return migrated;
   }
   try {
     const loaded = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
     const beforeSnapshot = JSON.stringify(loaded);
-    const migrated = migrate(loaded, { audioKey });
+    const migrated = migrate(loaded, { audioKey, copyHandoutFile });
     // Persist any migration changes back to disk (e.g., new settings field) —
     // compare against beforeSnapshot, not against loaded, since migrate()
     // mutates its argument in place (same object reference).
@@ -212,4 +224,4 @@ function applyStartupDefault(state) {
   return state;
 }
 
-module.exports = { loadState, saveState, migrate, pruneHandout, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR, STATE_FILE };
+module.exports = { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR, STATE_FILE };
