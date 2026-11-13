@@ -101,10 +101,12 @@ function mediaH(el) {
  * A map video is a silent looping backdrop, never a piece of media with its
  * own transport: muted/loop/playsInline are (re)asserted on every call so
  * that autoplay is never blocked by the browser and audio never plays.
+ * With `managed: true` (handout video on /display) muted/loop/play are left
+ * to the caller, which plays a video with sound once instead of looping it.
  * Returns the element that is now active — callers must read its size via
  * mediaW/mediaH instead of assuming it's always the <img>.
  */
-function loadMapMedia(imgEl, videoEl, filename, src, onReady) {
+function loadMapMedia(imgEl, videoEl, filename, src, onReady, { managed = false } = {}) {
   const wantVideo = isVideoFile(filename);
   const el = wantVideo ? videoEl : imgEl;
   const other = wantVideo ? imgEl : videoEl;
@@ -118,7 +120,7 @@ function loadMapMedia(imgEl, videoEl, filename, src, onReady) {
 
   el.hidden = false;
 
-  if (wantVideo) {
+  if (wantVideo && !managed) {
     el.muted = true;
     el.defaultMuted = true;
     el.loop = true;
@@ -138,9 +140,26 @@ function loadMapMedia(imgEl, videoEl, filename, src, onReady) {
 
   const ready = wantVideo ? el.readyState >= 1 && el.videoWidth : el.complete && el.naturalWidth;
   if (alreadyLoaded && ready) onReady();
-  if (wantVideo) el.play().catch(() => {});
+  if (wantVideo && !managed) el.play().catch(() => {});
 
   return el;
+}
+
+/**
+ * Il video ha una traccia audio? true/false, oppure null se non si può ancora
+ * dire. Firefox (mozHasAudio) e Safari (audioTracks) lo sanno dai metadati;
+ * Chromium solo dai byte audio decodificati, quindi un video è "muto" quando ha
+ * suonato almeno `minSec` secondi (o è finito) senza decodificare audio.
+ */
+function videoHasAudio(el, minSec = 0.5) {
+  if (!el) return null;
+  const hasMeta = Number(el.readyState) >= 1;
+  if (hasMeta && typeof el.mozHasAudio === 'boolean') return el.mozHasAudio;
+  if (hasMeta && el.audioTracks && typeof el.audioTracks.length === 'number') return el.audioTracks.length > 0;
+  const bytes = el.webkitAudioDecodedByteCount;
+  if (typeof bytes === 'number' && bytes > 0) return true;
+  if (el.ended || (Number(el.currentTime) || 0) >= minSec) return false;
+  return null;
 }
 
 /**
@@ -799,6 +818,7 @@ if (typeof module !== 'undefined' && module.exports) {
     aoeColorHex,
     aoeColorDarkHex,
     isVideoFile,
+    videoHasAudio,
     isWebItem,
     webItemSrc,
     rotateVector,

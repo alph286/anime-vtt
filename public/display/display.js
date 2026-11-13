@@ -31,6 +31,74 @@ const audioEngine = createPageAudioMixer(audioMixerBox, {
   onOneshotEnded: (trackId, seq) => socket.emit('audio:oneshotEnded', { trackId, seq })
 });
 
+// Handout video: uno con audio suona una volta con l'audio (sottofondi a un
+// filo, vedi AUDIO_VIDEO_DUCK_LEVEL), uno muto gira in loop come prima. Alla
+// fine resta fermo sull'ultimo fotogramma; nascosto e rimostrato riparte.
+const HANDOUT_AUDIO_PROBE_SEC = 0.6;
+let handoutVideoKey = null; // `${imageId}:${file}` del video in onda, null se nessuno
+let handoutVideoAudio = null; // true | false | null (non ancora noto)
+
+function playHandoutVideo() {
+  const v = shownImageVideo;
+  v.play().catch((err) => {
+    // Autoplay con audio rifiutato: parte muto, l'audio torna al primo clic/tasto.
+    if (err && err.name === 'NotAllowedError' && !v.muted && handoutVideoKey !== null) {
+      v.muted = true;
+      v.play().catch(() => {});
+    }
+  });
+}
+
+function startHandoutVideo(key) {
+  const v = shownImageVideo;
+  handoutVideoKey = key;
+  handoutVideoAudio = null;
+  v.loop = false;
+  v.muted = false;
+  v.defaultMuted = false;
+  v.playsInline = true;
+  try { v.currentTime = 0; } catch { /* metadati non ancora caricati: è già a 0 */ }
+  playHandoutVideo();
+  updateHandoutDuck();
+}
+
+function stopHandoutVideo() {
+  if (!shownImageVideo.paused) shownImageVideo.pause();
+  if (handoutVideoKey === null) return;
+  handoutVideoKey = null;
+  handoutVideoAudio = null;
+  updateHandoutDuck();
+}
+
+function updateHandoutDuck() {
+  const v = shownImageVideo;
+  audioEngine.setVideoDuck(handoutVideoKey !== null && handoutVideoAudio === true
+    && !v.muted && !v.paused && !v.ended);
+}
+
+function probeHandoutAudio() {
+  if (handoutVideoKey === null || handoutVideoAudio !== null) return;
+  const v = shownImageVideo;
+  const has = videoHasAudio(v, HANDOUT_AUDIO_PROBE_SEC);
+  if (has === null) return;
+  handoutVideoAudio = has;
+  if (!has) {
+    // Video muto: torna il loop di sempre (anche se era già finito).
+    v.loop = true;
+    if (v.ended || v.paused) {
+      v.currentTime = 0;
+      playHandoutVideo();
+    }
+  }
+}
+
+for (const type of ['timeupdate', 'playing', 'pause', 'ended', 'volumechange']) {
+  shownImageVideo.addEventListener(type, () => {
+    probeHandoutAudio();
+    updateHandoutDuck();
+  });
+}
+
 let socketConnected = false;
 let controlConnected = false;
 let lastState = null;
@@ -188,6 +256,12 @@ socket.on('state:update', (state) => {
 // invece di aspettare il prossimo state:update.
 function retryAudio() {
   if (lastState) renderAudio(getActiveLocation(lastState), lastState.audioOneshots);
+  // Video handout partito muto perché l'audio era bloccato: ora può suonare.
+  const v = shownImageVideo;
+  if (handoutVideoKey !== null && v.muted && handoutVideoAudio !== false && !v.ended) {
+    v.muted = false;
+    if (v.paused) playHandoutVideo();
+  }
 }
 window.addEventListener('pointerdown', retryAudio);
 window.addEventListener('keydown', retryAudio);
@@ -225,8 +299,9 @@ function render(state) {
   if (showingImage) {
     renderImage(location, state.activeImageId);
   } else {
-    // Un handout video nascosto non deve continuare a decodificare in background.
-    if (!shownImageVideo.paused) shownImageVideo.pause();
+    // Un handout video nascosto non deve continuare a decodificare in background
+    // (e i sottofondi risalgono).
+    stopHandoutVideo();
     if (shownImageWeb.dataset.src) {
       shownImageWeb.removeAttribute('src');
       delete shownImageWeb.dataset.src;
@@ -265,7 +340,7 @@ function renderImage(location, activeImageId) {
   // Pagina web: iframe a tutto schermo, niente fit-box né proporzioni del media.
   if (isWebItem(image)) {
     imageFitBox.hidden = true;
-    shownImageVideo.pause();
+    stopHandoutVideo();
     const src = webItemSrc(image);
     shownImageWeb.hidden = false;
     if (shownImageWeb.dataset.src !== src) {
@@ -281,16 +356,21 @@ function renderImage(location, activeImageId) {
     delete shownImageWeb.dataset.src;
   }
 
-  // Handout: immagine o video (loop muto), stessa logica delle mappe. L'elemento
-  // attivo si decide prima: loadMapMedia può chiamare onReady in modo sincrono
-  // (media già caricato) e non deve trovarsi con un riferimento ancora vuoto.
-  const el = isVideoFile(image.file) ? shownImageVideo : shownImageImg;
+  // Handout: immagine o video, stessa logica delle mappe; muted/loop/play del
+  // video li decide startHandoutVideo (managed). L'elemento attivo si decide
+  // prima: loadMapMedia può chiamare onReady in modo sincrono (media già
+  // caricato) e non deve trovarsi con un riferimento ancora vuoto.
+  const isVideo = isVideoFile(image.file);
+  const el = isVideo ? shownImageVideo : shownImageImg;
   const applyLayout = () => {
     const rect = fitRect(imageLayer.clientWidth, imageLayer.clientHeight, mediaW(el), mediaH(el));
     positionFitBox(imageFitBox, rect);
   };
 
-  loadMapMedia(shownImageImg, shownImageVideo, image.file, `/storage/images/${image.file}`, applyLayout);
+  if (!isVideo) stopHandoutVideo();
+  loadMapMedia(shownImageImg, shownImageVideo, image.file, `/storage/images/${image.file}`, applyLayout, { managed: true });
+  const key = `${image.id}:${image.file}`;
+  if (isVideo && key !== handoutVideoKey) startHandoutVideo(key);
 }
 
 // The wrap element's CSS rotate() transform already turns this locally-flat

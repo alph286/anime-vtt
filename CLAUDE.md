@@ -579,6 +579,30 @@ la scena (sblocco autoplay). Verificato su copia dei dati (:3100): background e 
 spuntati su /handout, ducking 0,4→0,16 e risalita, stop, one-shot non spuntato assente,
 casella in /editor. Non verificato: l'ascolto vero dei due dispositivi insieme.
 
+## Video handout con audio su /display (fatto, branch `video-audio-display`)
+
+Un video handout mostrato su /display che ha una traccia audio suona CON l'audio, una volta
+sola: alla fine resta sull'ultimo fotogramma; nascosto e rimostrato riparte da capo. Finché
+suona, i background scendono a un filo (`AUDIO_VIDEO_DUCK_LEVEL = 0.1`, fade `duckOut`/
+`resumeIn`), poi risalgono. I video muti restano in loop come prima. /handout resta muto
+(decisioni di Alph). Server invariato.
+- `shared/media.js`: `videoHasAudio(el, minSec)` (mozHasAudio / audioTracks /
+  `webkitAudioDecodedByteCount`: in Chromium un video è "muto" dopo 0,6 s senza byte audio);
+  `loadMapMedia(..., { managed: true })` non tocca muted/loop/play.
+- `shared/audio-fade.js`: `mixer.setVideoDuck(on)`; vince il livello più basso tra one-shot
+  (0.4) e video (0.1); al cambio location le tracce nuove entrano già abbassate.
+- `display.js`: `startHandoutVideo`/`stopHandoutVideo`/`probeHandoutAudio`, chiave
+  `imageId:file`. Autoplay con audio rifiutato: parte muto, `retryAudio` lo smuta al primo clic.
+- **Scelte di Claude**: livello 0.1 da tarare a orecchio; one-shot durante il video non
+  abbassati; volume del video pieno, nessun controllo in /control; ricaricare /display con il
+  video mostrato lo fa ripartire; un video partito muto per autoplay bloccato e finito prima
+  del clic resta fermo (non torna in loop).
+- **Verificato** (Playwright, dati finti :3100): background 0.7 → 0.07 durante il video, fine
+  → fermo all'ultimo frame e risalita a 0.7, rimostrato riparte, video muto in loop senza
+  ducking, nascosto → pausa. Test: `npm run test:server` 174/174.
+- **Non verificato**: l'ascolto vero sulla TV/Raspberry; mp4 (solo webm); Firefox; il caso
+  autoplay bloccato.
+
 ## Archivio audio (fatto, branch `audio-archivio`)
 
 Spec e piano: `docs/superpowers/specs/2026-10-30-audio-archivio-design.md` e

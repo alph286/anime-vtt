@@ -19,6 +19,9 @@ const AUDIO_FADE = {
 
 // Fattore di volume dei background mentre suona almeno un one-shot.
 const AUDIO_DUCK_LEVEL = 0.4;
+// Fattore dei background mentre /display suona un video handout con audio:
+// un filo appena udibile. Prevale sul ducking dei one-shot (vince il più basso).
+const AUDIO_VIDEO_DUCK_LEVEL = 0.1;
 
 const DISPLAY_AUDIO_STATUS_MAX = 100;
 
@@ -47,6 +50,7 @@ function createAudioMixer({ createElement, now, requestFrame, onStatus, onOnesho
   let leaving = []; // tracce che sfumano prima di essere rilasciate
   let locationId; // undefined finché non arriva il primo apply
   let duckTarget = 1;
+  let videoDuck = false; // un video handout con audio sta suonando
   let blocked = false;
   let frame = null;
   let lastStatus = null;
@@ -228,13 +232,20 @@ function createAudioMixer({ createElement, now, requestFrame, onStatus, onOnesho
     for (const t of tracks.values()) {
       if (t.kind === 'oneshot' && t.intent === 'playing' && !t.ended) active = true;
     }
-    const target = active ? AUDIO_DUCK_LEVEL : 1;
+    const target = Math.min(active ? AUDIO_DUCK_LEVEL : 1, videoDuck ? AUDIO_VIDEO_DUCK_LEVEL : 1);
     if (target === duckTarget) return;
+    const down = target < duckTarget;
     duckTarget = target;
     for (const t of tracks.values()) {
       if (t.kind !== 'background') continue;
-      startDuck(t, target, active ? AUDIO_FADE.duckOut : AUDIO_FADE.resumeIn);
+      startDuck(t, target, down ? AUDIO_FADE.duckOut : AUDIO_FADE.resumeIn);
     }
+  }
+
+  // Il display segnala se sta suonando un video handout con audio.
+  function setVideoDuck(on) {
+    videoDuck = Boolean(on);
+    updateDuck();
   }
 
   function createTrack(kind, def) {
@@ -374,8 +385,9 @@ function createAudioMixer({ createElement, now, requestFrame, onStatus, onOnesho
       for (const t of tracks.values()) leave(t, AUDIO_FADE.location);
       tracks = new Map();
       locationId = nextLocation;
-      // Il ducking riguarda solo i one-shot della location attiva.
-      duckTarget = 1;
+      // Il ducking dei one-shot riguarda solo la location attiva; quello del
+      // video no: le tracce nuove entrano già abbassate.
+      duckTarget = videoDuck ? AUDIO_VIDEO_DUCK_LEVEL : 1;
     }
 
     // Tracce eliminate o con il file cambiato: sfumano e vengono rilasciate.
@@ -409,7 +421,7 @@ function createAudioMixer({ createElement, now, requestFrame, onStatus, onOnesho
     report();
   }
 
-  return { apply, resendStatus };
+  return { apply, resendStatus, setVideoDuck };
 }
 
 // Scena del mixer a partire dalla location attiva (stessa forma per /display e
@@ -460,6 +472,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     AUDIO_FADE,
     AUDIO_DUCK_LEVEL,
+    AUDIO_VIDEO_DUCK_LEVEL,
     audioLevelAt,
     normalizeDisplayAudioStatus,
     createAudioMixer,
