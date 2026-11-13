@@ -336,3 +336,31 @@ test('resolveHandoutMedia: ultimo mostrato, altrimenti default, altrimenti nient
   assert.equal(resolveHandoutMedia(handoutState({ shown: null, defaultMedia: null })), null);
   assert.equal(resolveHandoutMedia(handoutState(undefined)), null);
 });
+
+const { videoHasAudio } = require('./media.js');
+
+test('videoHasAudio: Firefox (mozHasAudio) dopo i metadati', () => {
+  assert.equal(videoHasAudio({ readyState: 1, mozHasAudio: true, currentTime: 0 }), true);
+  assert.equal(videoHasAudio({ readyState: 1, mozHasAudio: false, currentTime: 0 }), false);
+  // prima dei metadati mozHasAudio vale false anche se l'audio c'è: non si decide
+  assert.equal(videoHasAudio({ readyState: 0, mozHasAudio: false, currentTime: 0 }), null);
+});
+
+test('videoHasAudio: audioTracks (Safari) dopo i metadati', () => {
+  assert.equal(videoHasAudio({ readyState: 1, audioTracks: { length: 1 }, currentTime: 0 }), true);
+  assert.equal(videoHasAudio({ readyState: 1, audioTracks: { length: 0 }, currentTime: 0 }), false);
+});
+
+test('videoHasAudio: Chromium (byte audio decodificati)', () => {
+  assert.equal(videoHasAudio({ readyState: 2, webkitAudioDecodedByteCount: 2048, currentTime: 0.1 }), true);
+  // ancora presto per dire che è muto
+  assert.equal(videoHasAudio({ readyState: 2, webkitAudioDecodedByteCount: 0, currentTime: 0.1 }), null);
+  // dopo la soglia senza byte audio: muto
+  assert.equal(videoHasAudio({ readyState: 2, webkitAudioDecodedByteCount: 0, currentTime: 0.7 }, 0.6), false);
+  // video più corto della soglia, finito: muto
+  assert.equal(videoHasAudio({ readyState: 4, webkitAudioDecodedByteCount: 0, currentTime: 0.3, ended: true }, 0.6), false);
+});
+
+test('videoHasAudio: nessun elemento', () => {
+  assert.equal(videoHasAudio(null), null);
+});

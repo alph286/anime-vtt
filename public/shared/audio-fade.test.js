@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   AUDIO_FADE,
   AUDIO_DUCK_LEVEL,
+  AUDIO_VIDEO_DUCK_LEVEL,
   audioLevelAt,
   normalizeDisplayAudioStatus,
   createAudioMixer
@@ -13,6 +14,7 @@ test('AUDIO_FADE e AUDIO_DUCK_LEVEL hanno i valori concordati', () => {
     location: 2000, bgIn: 1000, bgOut: 1000, transport: 400, duckOut: 600, stingIn: 300, resumeIn: 1500
   });
   assert.equal(AUDIO_DUCK_LEVEL, 0.4);
+  assert.equal(AUDIO_VIDEO_DUCK_LEVEL, 0.1);
 });
 
 test('il motore vecchio non è più esportato', () => {
@@ -298,6 +300,50 @@ test('due one-shot insieme: entrambi suonano, il ducking resta finché ne suona 
   near(a.volume, 0.28 + (0.7 - 0.28) / 2);
   flush(AUDIO_FADE.resumeIn / 2);
   near(a.volume, 0.7);
+});
+
+test('video con audio: i background scendono a un filo in duckOut e risalgono in resumeIn', () => {
+  const { mixer, flush, elBySrc } = harness();
+  mixer.apply(scene({ background: [bg('a')] }));
+  flush(AUDIO_FADE.bgIn);
+  const a = elBySrc('/a/a.mp3');
+  mixer.setVideoDuck(true);
+  flush(AUDIO_FADE.duckOut);
+  near(a.volume, 0.7 * AUDIO_VIDEO_DUCK_LEVEL);
+  mixer.setVideoDuck(true); // ripetuto: nessun effetto
+  flush(AUDIO_FADE.duckOut);
+  near(a.volume, 0.07);
+  mixer.setVideoDuck(false);
+  flush(AUDIO_FADE.resumeIn);
+  near(a.volume, 0.7);
+});
+
+test('video con audio e one-shot insieme: vince il livello più basso; finito il video si torna al ducking del one-shot', () => {
+  const { mixer, flush, elBySrc } = harness();
+  mixer.apply(scene({ background: [bg('a')] }));
+  flush(AUDIO_FADE.bgIn);
+  const a = elBySrc('/a/a.mp3');
+  mixer.setVideoDuck(true);
+  mixer.apply(scene({ background: [bg('a')], oneshot: [os('x')], oneshots: { x: 1 } }));
+  flush(AUDIO_FADE.resumeIn);
+  near(a.volume, 0.07);
+  // il one-shot suona al suo volume, non abbassato
+  near(elBySrc('/a/x.mp3').volume, 0.7);
+  mixer.setVideoDuck(false);
+  flush(AUDIO_FADE.resumeIn);
+  near(a.volume, 0.28);
+  elBySrc('/a/x.mp3').fire('ended');
+  flush(AUDIO_FADE.resumeIn);
+  near(a.volume, 0.7);
+});
+
+test('video con audio durante un cambio location: le tracce nuove entrano già abbassate', () => {
+  const { mixer, flush, elBySrc } = harness();
+  mixer.apply(scene({ background: [bg('a')] }));
+  mixer.setVideoDuck(true);
+  mixer.apply(scene({ locationId: 'L2', background: [bg('b')] }));
+  flush(AUDIO_FADE.location);
+  near(elBySrc('/a/b.mp3').volume, 0.07);
 });
 
 test('background acceso durante un one-shot entra già abbassato', () => {
