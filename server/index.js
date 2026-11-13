@@ -8,13 +8,14 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { loadState, saveState, migrate, pruneHandout, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
+const { loadState, saveState, migrate, applyStartupDefault, DEFAULT_GRID, DEFAULT_COMPASS, DATA_DIR } = require('./state');
 const { normalizeWebUrl, handleWebProxy } = require('./webproxy');
-const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS, findHandoutMedia } = require('../public/shared/media.js');
+const { AOE_COLORS, AOE_SHADER_OVERRIDE_IDS } = require('../public/shared/media.js');
 const { createTelegramClient } = require('./telegram');
 const { createTelegramConfig } = require('./telegram-config');
 const { registerTelegramRoutes, sendStoredMedia } = require('./telegram-routes');
 const audioModel = require('./audio');
+const handoutModel = require('./handout');
 const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js');
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
@@ -25,6 +26,7 @@ const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'stora
 const MAPS_DIR = path.join(STORAGE_DIR, 'maps');
 const IMAGES_DIR = path.join(STORAGE_DIR, 'images');
 const AUDIO_DIR = path.join(STORAGE_DIR, 'audio');
+const HANDOUT_DIR = path.join(STORAGE_DIR, 'handout');
 const IMPORTS_DIR = path.join(DATA_DIR, 'imports');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 const telegramConfig = createTelegramConfig(path.join(DATA_DIR, 'telegram.json'));
@@ -40,7 +42,7 @@ const SHADER_IDS = ['portal', 'portal_red', 'green_fire', 'magic_circle_red', 'm
 const SHADER_MIN_SIZE_M = 0.5;
 const AOE_COLOR_NAMES = Object.keys(AOE_COLORS);
 
-for (const dir of [MAPS_DIR, IMAGES_DIR, AUDIO_DIR, IMPORTS_DIR, BACKUPS_DIR]) {
+for (const dir of [MAPS_DIR, IMAGES_DIR, AUDIO_DIR, HANDOUT_DIR, IMPORTS_DIR, BACKUPS_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -62,7 +64,24 @@ function audioContentKey(file) {
   }
 }
 
-let state = applyStartupDefault(loadState({ audioKey: audioContentKey }));
+// Migrazione del vecchio default di /handout: copia il file del media in
+// storage/handout, così l'archivio possiede i suoi file. null se non riesce.
+function copyHandoutFile(file) {
+  const source = path.resolve(IMAGES_DIR, file);
+  if (path.dirname(source) !== path.resolve(IMAGES_DIR)) return null;
+  const name = `${nanoid()}${path.extname(file)}`;
+  try {
+    fs.copyFileSync(source, path.join(HANDOUT_DIR, name));
+    return name;
+  } catch (err) {
+    console.error(`Impossibile copiare ${source} nell'archivio handout:`, err.message);
+    return null;
+  }
+}
+
+const migrateOptions = { audioKey: audioContentKey, copyHandoutFile };
+
+let state = applyStartupDefault(loadState(migrateOptions));
 
 function getActiveLocation() {
   return state.locations.find((l) => l.id === state.activeLocationId);
@@ -125,6 +144,8 @@ const uploadMap = makeUpload(MAPS_DIR, { allowVideo: true, maxFileSize: 300 * 10
 // Gli handout possono essere anche video (loop muto su /display); tetto più basso
 // delle mappe, in linea col limite lato editor.
 const uploadImage = makeUpload(IMAGES_DIR, { allowVideo: true, maxFileSize: 150 * 1024 * 1024 });
+// Archivio dei default di /handout: stessi tipi e limite degli handout.
+const uploadHandout = makeUpload(HANDOUT_DIR, { allowVideo: true, maxFileSize: 150 * 1024 * 1024 });
 
 // L'audio non riusa makeUpload(): filtro mime (audio/*) e limite dimensione
 // diversi da mappe/immagini, e vogliamo poter cambiare l'uno senza rischiare
@@ -175,6 +196,7 @@ function findOrphanFiles() {
   });
   // Un audio è referenziato se sta nell'archivio, anche se nessuna location lo usa.
   audioModel.libraryFiles(state).forEach((f) => referencedAudio.add(f));
+  const referencedHandout = new Set(handoutModel.handoutLibraryFiles(state));
 
   // .gitkeep (nelle cartelle storage/*) è un segnaposto che tiene la
   // cartella tracciata da git quando è vuota: non è mai referenziato da
@@ -188,7 +210,8 @@ function findOrphanFiles() {
   return [
     ...scanDir(MAPS_DIR, referencedMaps, 'maps'),
     ...scanDir(IMAGES_DIR, referencedImages, 'images'),
-    ...scanDir(AUDIO_DIR, referencedAudio, 'audio')
+    ...scanDir(AUDIO_DIR, referencedAudio, 'audio'),
+    ...scanDir(HANDOUT_DIR, referencedHandout, 'handout')
   ];
 }
 
@@ -301,6 +324,25 @@ app.post('/api/upload/audio', uploadAudio.single('file'), (req, res) => {
   res.json({ ok: true, item, track });
 });
 
+// Carica nell'archivio di /handout; con `locationId` (o `global=1`) la voce
+// diventa anche il default di quella location (o quello globale).
+app.post('/api/upload/handout', uploadHandout.single('file'), (req, res) => {
+  const { locationId } = req.body;
+  const isGlobal = req.body.global === '1';
+  if (!req.file || (locationId && !state.locations.some((l) => l.id === locationId))) {
+    if (req.file) deleteUploadedFile(HANDOUT_DIR, req.file.filename);
+    return res.status(400).json({ error: 'file o location mancante/non valido' });
+  }
+  const item = handoutModel.addHandoutItem(state, {
+    name: req.body.name || req.file.originalname,
+    file: req.file.filename
+  });
+  if (locationId || isGlobal) handoutModel.setHandoutDefault(state, { locationId: locationId || null, id: item.id });
+  saveState(state);
+  broadcastState();
+  res.json({ ok: true, item });
+});
+
 registerTelegramRoutes(app, { config: telegramConfig, client: telegramClient });
 
 app.get('/api/export/location/:id', (req, res) => {
@@ -371,7 +413,7 @@ app.post('/api/import/apply', async (req, res) => {
       // resterebbe senza quel campo -- e quindi coi controlli muti -- fino al
       // prossimo riavvio del server, l'unico momento in cui loadState()
       // ri-esegue la migrazione.
-      migrate(state, { audioKey: audioContentKey });
+      migrate(state, migrateOptions);
       saveState(state);
       broadcastState();
       res.json({ ok: true, kind: 'location', name: newLocation.name });
@@ -395,7 +437,7 @@ app.post('/api/import/apply', async (req, res) => {
       const candidate = { ...state, locations: restored.locations, campaign: restored.campaign, gridPreset: restored.gridPreset };
       // Stesso motivo del ramo 'location': un backup più vecchio dei campi
       // aggiunti dopo va migrato subito, non al prossimo riavvio.
-      migrate(candidate, { audioKey: audioContentKey });
+      migrate(candidate, migrateOptions);
       applyStartupDefault(candidate);
       saveState(candidate);
       state = candidate;
@@ -585,7 +627,6 @@ io.on('connection', (socket) => {
     const location = state.locations.find((l) => l.id === locationId);
     if (!location || !location.archived) return;
     state.locations = state.locations.filter((l) => l.id !== locationId);
-    pruneHandout(state);
     saveState(state);
     broadcastState();
   });
@@ -643,25 +684,26 @@ io.on('connection', (socket) => {
     const location = getActiveLocation();
     if (!location?.images.some((i) => i.id === imageId)) return;
     state.activeImageId = imageId;
-    // /handout tiene l'ultimo media mostrato anche dopo "Ritorna alla mappa"
-    // o un cambio location: si salva perché sopravviva al riavvio.
-    const ref = { locationId: location.id, imageId };
-    if (findHandoutMedia(state, ref)) {
-      state.handout.shown = ref;
-      saveState(state);
-    }
     broadcastState();
   });
 
-  // Media di default di /handout, scelto in /editor (imageId null = nessuno).
-  socket.on('handout:setDefault', ({ locationId, imageId } = {}) => {
-    if (imageId == null) {
-      state.handout.defaultMedia = null;
-    } else {
-      const ref = { locationId, imageId };
-      if (!findHandoutMedia(state, ref)) return;
-      state.handout.defaultMedia = ref;
-    }
+  // Default di /handout: `locationId` null = globale, `id` null = nessuno.
+  socket.on('handout:setDefault', ({ locationId = null, id = null } = {}) => {
+    if (!handoutModel.setHandoutDefault(state, { locationId, id })) return;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('handoutLibrary:update', ({ id, name } = {}) => {
+    if (!handoutModel.renameHandoutItem(state, id, name)) return;
+    saveState(state);
+    broadcastState();
+  });
+
+  socket.on('handoutLibrary:delete', ({ id } = {}) => {
+    const file = handoutModel.removeHandoutItem(state, id);
+    if (!file) return;
+    deleteUploadedFile(HANDOUT_DIR, file);
     saveState(state);
     broadcastState();
   });
@@ -687,7 +729,6 @@ io.on('connection', (socket) => {
 
     location.images = location.images.filter((i) => i.id !== imageId);
     if (state.activeImageId === imageId) state.activeImageId = null;
-    pruneHandout(state);
     if (image.file) deleteUploadedFile(IMAGES_DIR, image.file);
 
     saveState(state);
