@@ -1,7 +1,7 @@
-// /handout: sola visualizzazione. Mostra l'ultimo media (immagine o video)
-// inviato al display da /control e lo tiene finché non se ne mostra un altro;
-// se non ce n'è uno, il media di default scelto in /editor. La scelta sta in
-// resolveHandoutMedia (shared/media.js), lo stato lo tiene il server.
+// /handout: sola visualizzazione. Mostra il media (immagine o video) in onda su
+// /display; altrimenti il default della location attiva, poi quello globale,
+// scelti in /editor dall'archivio handout. La scelta sta in resolveHandoutMedia
+// (shared/media.js), lo stato lo tiene il server.
 const socket = io();
 const handoutImg = document.getElementById('handout-img');
 const handoutVideo = document.getElementById('handout-video');
@@ -52,5 +52,5 @@ socket.on('state:update', (state) => {
     return;
   }
   // object-fit: contain fa già da sé l'adattamento: nessun layout da ricalcolare.
-  loadMapMedia(handoutImg, handoutVideo, item.file, `/storage/images/${item.file}`, () => {});
+  loadMapMedia(handoutImg, handoutVideo, item.file, item.src, () => {});
 });
