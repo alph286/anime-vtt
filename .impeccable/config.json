@@ -74,6 +74,15 @@
         ],
         "createdAt": "2026-10-04T13:45:45.049Z",
         "reason": "SVG compass-rose glyph coords (N/S/E/O at viewBox edges) copied verbatim from the already-shipped public/display/index.html #compass icon; decorative rose-point labels, not body text in a padded container"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "editor-app/src/components/MediaPreview.test.tsx"
+        ],
+        "createdAt": "2026-11-13T19:12:00.457Z",
+        "reason": "Claude: test file, querySelector('img') assertions, no rendered <img> tag"
       }
     ]
   }

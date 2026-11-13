@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { Globe } from 'lucide-react';
 
 // Anteprima di un media: <img> per le immagini, <video> muto per i video, pagina
@@ -31,9 +32,30 @@ export function MediaPreview({ file, url, proxy, name, className, playing = fals
   }
   const src = `/storage/${dir}/${file}`;
   if (!isVideoFile(file)) return <img src={src} alt={name || ''} className={className} />;
+  return <VideoPreview src={playing ? src : `${src}#t=0.1`} name={name} className={className} playing={playing} />;
+}
+
+// Smontato, il <video> va rilasciato a mano: togliere src e chiamare load() fa
+// liberare subito decoder e fotogrammi. Altrimenti il browser li tiene finché non
+// distrugge il player, molto dopo; cambiando location in fretta le miniature
+// smontate si accumulano in memoria GPU (su NVIDIA: renderer di Chrome in crash).
+function releaseVideo(el: HTMLVideoElement) {
+  el.pause();
+  el.removeAttribute('src');
+  el.load();
+}
+
+function VideoPreview({ src, name, className, playing }: { src: string; name?: string; className?: string; playing: boolean }) {
+  const ref = useCallback((el: HTMLVideoElement | null) => {
+    if (!el) return;
+    // StrictMode (dev) attacca, stacca e riattacca il ref: rimette il src tolto.
+    if (el.getAttribute('src') !== src) el.setAttribute('src', src);
+    return () => releaseVideo(el);
+  }, [src]);
   return (
     <video
-      src={playing ? src : `${src}#t=0.1`}
+      ref={ref}
+      src={src}
       className={className}
       muted
       loop={playing}

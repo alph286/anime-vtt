@@ -1,3 +1,19 @@
+## Crash di /editor cambiando location in fretta (fix, branch `fix-editor-cambio-location`)
+
+13 nov 2026: tab di Chrome su kratosHard in crash ("Aw, Snap") scorrendo le location; server
+sano. Dump: renderer, `gfx-mmap_size_plane_size 2103808` (piano Y 1792x1174 di un video),
+insieme a `NVRM ... Out of memory` nel kernel: finita la BAR1 della RTX 3060 (256 MiB, senza
+Resizable BAR), dove Chrome mappa i fotogrammi video. Causa nell'app: le miniature `<video>` di
+`MediaPreview` smontate a ogni cambio location tenevano decoder e fotogrammi finché Chrome non
+distruggeva il player (molto dopo): BAR1 saliva a ogni cambio (misurato 83 -> 163 MiB in 6
+cambi). Ora `MediaPreview` rilascia il video allo smontaggio (`removeAttribute('src')` +
+`load()`, ref con cleanup, regge StrictMode): stessa prova resta tra 105 e 153.
+**Resta aperto**: /editor + /display + /handout aperti sullo stesso PC decodificano insieme
+3 video ~1,7K a ogni cambio: picco ancora vicino al limite (224 MiB). Rimedi possibili:
+Resizable BAR nel BIOS; `loadMapMedia` che chiama `load()` sul video nascosto (prova A/B:
+rilascio dopo 10 s 152 -> 86 MiB, picco invariato); non aprire /display sul PC dell'editor.
+L'archivio handout non è la causa (aggiunge al più una o due miniature).
+
 ## Invio su Telegram nativo (branch `telegram-picsender-integration-ebf803`)
 
 Spec e piano: `docs/superpowers/specs/2026-10-14-telegram-native-design.md` e
