@@ -83,6 +83,33 @@
         ],
         "createdAt": "2026-11-13T19:12:00.457Z",
         "reason": "Claude: test file, querySelector('img') assertions, no rendered <img> tag"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "editor-app/src/control/map/MapPreview.tsx"
+        ],
+        "createdAt": "2026-11-13T19:49:56.006Z",
+        "reason": "Claude: src assegnato a runtime da loadMapMedia (public/shared/media.js), come MediaPreview in a71f094"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "editor-app/src/party/PartyMap.tsx"
+        ],
+        "createdAt": "2026-11-13T19:49:56.017Z",
+        "reason": "Claude: src assegnato a runtime da loadMapMedia (public/shared/media.js), come MediaPreview in a71f094"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "editor-app/src/stage/MapStage.tsx"
+        ],
+        "createdAt": "2026-11-13T19:49:56.028Z",
+        "reason": "Claude: src assegnato a runtime da loadMapMedia (public/shared/media.js), come MediaPreview in a71f094"
       }
     ]
   }

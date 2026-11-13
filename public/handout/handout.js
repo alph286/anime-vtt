@@ -31,11 +31,7 @@ window.addEventListener('keydown', retryAudio);
 function clearMedia() {
   [handoutImg, handoutVideo].forEach((el) => {
     el.hidden = true;
-    if (el === handoutVideo) el.pause();
-    if (el.dataset.mapSrc) {
-      el.removeAttribute('src');
-      delete el.dataset.mapSrc;
-    }
+    releaseMedia(el);
   });
 }
 

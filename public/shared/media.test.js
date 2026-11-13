@@ -364,3 +364,59 @@ test('videoHasAudio: Chromium (byte audio decodificati)', () => {
 test('videoHasAudio: nessun elemento', () => {
   assert.equal(videoHasAudio(null), null);
 });
+
+// --- Rilascio dei <video> nascosti (BAR1 / memoria del decoder) ---------------
+// Togliere solo `src` non fa ripartire l'algoritmo di caricamento: il <video>
+// tiene risorsa e fotogrammi decodificati. Serve anche load().
+function fakeMedia(kind) {
+  const el = {
+    kind, hidden: false, paused: true, dataset: {}, attrs: {}, calls: [],
+    readyState: 0, videoWidth: 0, complete: false, naturalWidth: 0,
+    set src(v) { this.attrs.src = v; this.calls.push('src'); },
+    get src() { return this.attrs.src || ''; },
+    removeAttribute(n) { delete this.attrs[n]; this.calls.push(`remove:${n}`); },
+    pause() { this.paused = true; this.calls.push('pause'); },
+    play() { this.paused = false; this.calls.push('play'); return Promise.resolve(); },
+  };
+  if (kind === 'video') el.load = function load() { this.calls.push('load'); };
+  return el;
+}
+
+const { loadMapMedia: loadMapMediaFn, releaseMedia } = require('./media.js');
+
+test('loadMapMedia: passando da video a immagine il <video> viene rilasciato con load()', () => {
+  const img = fakeMedia('img');
+  const video = fakeMedia('video');
+  loadMapMediaFn(img, video, 'mappa.webm', '/storage/maps/mappa.webm', () => {});
+  video.calls.length = 0;
+  loadMapMediaFn(img, video, 'mappa.png', '/storage/maps/mappa.png', () => {});
+  assert.equal(video.hidden, true);
+  assert.equal(video.attrs.src, undefined);
+  assert.deepEqual(video.calls.filter((c) => c !== 'pause'), ['remove:src', 'load']);
+  assert.equal(video.dataset.mapSrc, undefined);
+});
+
+test('releaseMedia: ferma e rilascia un <video> caricato, una volta sola', () => {
+  const video = fakeMedia('video');
+  video.dataset.mapSrc = '/x.webm';
+  video.attrs.src = '/x.webm';
+  video.paused = false;
+  releaseMedia(video);
+  assert.equal(video.paused, true);
+  assert.equal(video.attrs.src, undefined);
+  assert.equal(video.dataset.mapSrc, undefined);
+  assert.deepEqual(video.calls, ['pause', 'remove:src', 'load']);
+  video.calls.length = 0;
+  releaseMedia(video); // niente caricato: nessuna chiamata (si richiama a ogni render)
+  assert.deepEqual(video.calls, []);
+});
+
+test('releaseMedia: su un <img> toglie solo src', () => {
+  const img = fakeMedia('img');
+  img.dataset.mapSrc = '/x.png';
+  img.attrs.src = '/x.png';
+  releaseMedia(img);
+  assert.equal(img.attrs.src, undefined);
+  assert.equal(img.dataset.mapSrc, undefined);
+  assert.deepEqual(img.calls, ['remove:src']);
+});

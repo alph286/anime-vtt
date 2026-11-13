@@ -94,15 +94,8 @@ export default function MapPreview() {
     } else {
       img.hidden = true;
       video.hidden = true;
-      if (img.dataset.mapSrc) {
-        img.removeAttribute('src');
-        delete img.dataset.mapSrc;
-      }
-      if (video.dataset.mapSrc) {
-        video.removeAttribute('src');
-        video.load();
-        delete video.dataset.mapSrc;
-      }
+      releaseMedia(img);
+      releaseMedia(video);
       placeholder.hidden = false;
       mediaRef.current = null;
     }

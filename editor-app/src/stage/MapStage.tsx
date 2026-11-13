@@ -75,6 +75,7 @@ export function MapStage({
     } else {
       img.hidden = true;
       video.hidden = true;
+      releaseMedia(video); // il video della mappa precedente non resta caricato
       placeholder.hidden = false;
       mediaRef.current = img;
     }

@@ -96,6 +96,24 @@ function mediaH(el) {
 }
 
 /**
+ * Scarica il media caricato in `el` (<img> o <video>). Togliere solo `src` non
+ * basta per un <video>: senza load() l'elemento tiene decoder e fotogrammi
+ * decodificati (in Chrome finiscono nella BAR1 della GPU) finché il player non
+ * viene distrutto. Senza niente caricato non fa nulla: si può richiamare a ogni
+ * render.
+ */
+function releaseMedia(el) {
+  if (!el) return;
+  const loaded = (el.dataset && el.dataset.mapSrc) || el.getAttribute?.('src') || el.src;
+  if (!loaded) return;
+  const isVideo = typeof el.load === 'function';
+  if (isVideo) el.pause();
+  el.removeAttribute('src');
+  if (isVideo) el.load();
+  if (el.dataset) delete el.dataset.mapSrc;
+}
+
+/**
  * Shows whichever of `imgEl`/`videoEl` matches `filename`'s type and hides the
  * other, loading `src` into it and calling `onReady` once its dimensions are
  * known (both for a fresh load and for an already-loaded/unchanged source).
@@ -113,11 +131,7 @@ function loadMapMedia(imgEl, videoEl, filename, src, onReady, { managed = false 
   const other = wantVideo ? imgEl : videoEl;
 
   other.hidden = true;
-  if (!wantVideo) other.pause();
-  if (other.dataset.mapSrc) {
-    other.removeAttribute('src');
-    delete other.dataset.mapSrc;
-  }
+  releaseMedia(other);
 
   el.hidden = false;
 
@@ -819,6 +833,8 @@ if (typeof module !== 'undefined' && module.exports) {
     aoeColorDarkHex,
     isVideoFile,
     videoHasAudio,
+    loadMapMedia,
+    releaseMedia,
     isWebItem,
     webItemSrc,
     rotateVector,
