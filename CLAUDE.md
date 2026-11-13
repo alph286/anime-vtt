@@ -1451,7 +1451,11 @@ file dell'archivio contano come usati.
 - Migrazione (`migrate(state, { copyHandoutFile })`): il vecchio `handout.defaultMedia`
   diventa una voce dell'archivio con una COPIA del file ed è il default globale.
 - Backup/esportazioni: come gli audio, l'archivio non entra nei pacchetti e un ripristino
-  non lo tocca; un `handoutDefaultId` importato sconosciuto viene azzerato.
+  non lo tocca; il `handoutDefaultId` di ogni location viaggia nel manifest
+  (`server/exportImport.js`): sullo stesso server il default torna, altrove viene azzerato.
+- Minori noti: "Carica" nel dialog non imposta il default (serve "Usa"; il server lo
+  supporterebbe con `locationId`/`global=1`, oggi non usato); se alla prima migrazione la
+  copia del vecchio file fallisce, il vecchio default si perde (niente nuovo tentativo).
 - **Scelte di Claude**: video ammessi nell'archivio; nomi modificabili; "Carica" nel dialog
   aggiunge solo all'archivio (il default si sceglie con "Usa"); /control invariato.
 - **Verificato** (server :3100, dati finti, stato in formato vecchio): migrazione (voce
