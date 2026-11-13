@@ -22,10 +22,12 @@ export interface MapData {
 export interface ImageItem { id: string; name: string; file: string | null; url?: string; proxy?: boolean; caption?: string; telegramDestination?: string | null }
 export interface Location {
   id: string; name: string; map: MapData; images: ImageItem[]; archived: boolean; isDefault?: boolean;
+  handoutDefaultId?: string | null;
 }
-export interface HandoutRef { locationId: string; imageId: string }
+export interface HandoutLibraryItem { id: string; name: string; file: string }
 export interface VttState {
   locations: Location[]; activeLocationId: string | null;
-  handout?: { shown: HandoutRef | null; defaultMedia: HandoutRef | null };
+  handout?: { defaultId: string | null };
+  handoutLibrary?: HandoutLibraryItem[];
   audioLibrary?: AudioLibraryItem[];
 }

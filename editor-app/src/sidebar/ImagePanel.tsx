@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GripVertical, Maximize2, Star, Trash2 } from 'lucide-react';
+import { GripVertical, Maximize2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CommitInput } from '@/components/CommitInput';
@@ -13,13 +13,13 @@ import { cn } from '@/lib/utils';
 import { selectActiveLocation, useEditorStore } from '@/store/editor-store';
 import type { ImageItem } from '@/types';
 import { AddWebDialog } from './AddWebDialog';
+import { HandoutDefaultBox } from './HandoutDefaultBox';
 import { Lightbox } from './Lightbox';
 
 const NONE = '__none__';
 
 export function ImagePanel() {
   const location = useEditorStore(selectActiveLocation);
-  const handoutDefault = useEditorStore((s) => s.server?.handout?.defaultMedia ?? null);
   const destinations = useTelegramDestinations();
   const arm = useArmConfirm();
   const [preview, setPreview] = useState<ImageItem | null>(null);
@@ -52,13 +52,13 @@ export function ImagePanel() {
 
   return (
     <div className="flex flex-col gap-3">
+      <HandoutDefaultBox location={location} />
       {images.length === 0 && <p className="text-sm text-muted-foreground">Nessun media per questa location.</p>}
       <div className="flex flex-col gap-2">
         {sortable.order.map((id) => {
           const img = byId.get(id);
           if (!img) return null;
           const armed = arm.isArmed(id);
-          const isHandoutDefault = handoutDefault?.locationId === location.id && handoutDefault.imageId === id;
           return (
             <div key={id} ref={sortable.rowRef(id)} className={cn('flex flex-col gap-1 rounded-md border p-2', sortable.isDragging && 'select-none')}>
               <div className="flex items-center gap-1">
@@ -71,14 +71,6 @@ export function ImagePanel() {
                 </button>
                 <CommitInput className="h-8" placeholder="etichetta" value={img.name}
                   onCommit={(name) => socket.emit('image:rename', { locationId: location.id, imageId: id, name })} />
-                {!img.url && <Button
-                  variant="ghost"
-                  size="icon"
-                  title={isHandoutDefault ? 'Media di default di /handout (click per toglierlo)' : 'Imposta come media di default di /handout'}
-                  onClick={() => socket.emit('handout:setDefault', isHandoutDefault ? { imageId: null } : { locationId: location.id, imageId: id })}
-                >
-                  <Star className={cn(isHandoutDefault && 'fill-[var(--vtt-accent)] text-[var(--vtt-accent)]')} />
-                </Button>}
                 <Button
                   variant={armed ? 'destructive' : 'ghost'}
                   size="icon"

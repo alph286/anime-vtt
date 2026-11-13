@@ -4,8 +4,11 @@ import { Globe } from 'lucide-react';
 // web per gli elementi Web. Con `playing` il video si riproduce in loop e la
 // pagina web si carica davvero in un iframe (lightbox/dettaglio); altrimenti
 // miniature leggere: primo fotogramma del video, icona globo per il web.
-export function MediaPreview({ file, url, proxy, name, className, playing = false }: {
+// `dir` è la cartella di storage del file: 'images' per i media delle location,
+// 'handout' per l'archivio dei default di /handout.
+export function MediaPreview({ file, url, proxy, name, className, playing = false, dir = 'images' }: {
   file?: string | null; url?: string; proxy?: boolean; name?: string; className?: string; playing?: boolean;
+  dir?: 'images' | 'handout';
 }) {
   if (url) {
     if (!playing) {
@@ -26,7 +29,7 @@ export function MediaPreview({ file, url, proxy, name, className, playing = fals
       />
     );
   }
-  const src = `/storage/images/${file}`;
+  const src = `/storage/${dir}/${file}`;
   if (!isVideoFile(file)) return <img src={src} alt={name || ''} className={className} />;
   return (
     <video
