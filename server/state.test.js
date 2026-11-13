@@ -85,20 +85,48 @@ test('applyStartupDefault: azzera audioOneshots e non reintroduce i campi audio 
   assert.equal('audioState' in state, false);
 });
 
-test('migrate: aggiunge handout vuoto agli stati vecchi', () => {
+test('migrate: aggiunge handout e archivio vuoti agli stati vecchi', () => {
   const state = { locations: [] };
   migrate(state);
-  assert.deepEqual(state.handout, { shown: null, defaultMedia: null });
+  assert.deepEqual(state.handout, { defaultId: null });
+  assert.deepEqual(state.handoutLibrary, []);
 });
 
-test('migrate: azzera i riferimenti handout a media non più esistenti', () => {
-  const state = {
-    locations: [{ id: 'loc', map: {}, images: [{ id: 'foto', file: 'a.png' }] }],
-    handout: { shown: { locationId: 'loc', imageId: 'via' }, defaultMedia: { locationId: 'loc', imageId: 'foto' } }
+function oldHandoutState(imageId = 'foto') {
+  return {
+    locations: [{
+      id: 'loc', map: {},
+      images: [{ id: 'foto', name: 'Copertina', file: 'a.png' }, { id: 'sito', name: 'Web', file: null, url: 'http://x' }]
+    }],
+    handout: { shown: { locationId: 'loc', imageId: 'foto' }, defaultMedia: { locationId: 'loc', imageId } }
   };
+}
+
+test('migrate: il vecchio default diventa una voce dell archivio e default globale', () => {
+  const state = oldHandoutState();
+  migrate(state, { copyHandoutFile: (f) => `copia-${f}` });
+  assert.equal(state.handoutLibrary.length, 1);
+  assert.equal(state.handoutLibrary[0].name, 'Copertina');
+  assert.equal(state.handoutLibrary[0].file, 'copia-a.png');
+  assert.deepEqual(state.handout, { defaultId: state.handoutLibrary[0].id });
+  // Idempotente: una seconda migrazione non duplica.
+  migrate(state, { copyHandoutFile: (f) => `copia-${f}` });
+  assert.equal(state.handoutLibrary.length, 1);
+});
+
+test('migrate: copia fallita, pagina Web o media inesistente -> nessuna voce', () => {
+  for (const [imageId, copy] of [['foto', () => null], ['sito', (f) => `c-${f}`], ['via', (f) => `c-${f}`]]) {
+    const state = oldHandoutState(imageId);
+    migrate(state, { copyHandoutFile: copy });
+    assert.deepEqual(state.handoutLibrary, []);
+    assert.deepEqual(state.handout, { defaultId: null });
+  }
+});
+
+test('migrate: handoutDefaultId sconosciuto (location importata) viene azzerato', () => {
+  const state = { locations: [{ id: 'loc', map: {}, images: [], handoutDefaultId: 'estraneo' }] };
   migrate(state);
-  assert.equal(state.handout.shown, null);
-  assert.deepEqual(state.handout.defaultMedia, { locationId: 'loc', imageId: 'foto' });
+  assert.equal(state.locations[0].handoutDefaultId, null);
 });
 
 const bgRow = (id, file, extra = {}) => ({ id, name: file, file, icon: 'music', volume: 0.4, handout: false, restartOnStop: false, on: true, ...extra });

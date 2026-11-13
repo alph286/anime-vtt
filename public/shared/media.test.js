@@ -302,39 +302,39 @@ test('shaderDecorationRectPercent rispetta assi X/Y separati su un\'immagine non
   });
 });
 
-const { findHandoutMedia, resolveHandoutMedia } = require('./media.js');
+const { resolveHandoutMedia } = require('./media.js');
 
-function handoutState(handout) {
+function handoutState({ activeImageId = null, handoutDefaultId = null, defaultId = 'G', activeLocationId = 'L' } = {}) {
   return {
+    activeLocationId,
+    activeImageId,
     locations: [{
-      id: 'loc',
+      id: 'L',
+      handoutDefaultId,
       images: [
         { id: 'foto', file: 'a.png' },
-        { id: 'clip', file: 'b.mp4' },
         { id: 'sito', file: null, url: 'http://x' }
       ]
     }],
-    handout
+    handoutLibrary: [
+      { id: 'H1', name: 'Mappa', file: 'h1.png' },
+      { id: 'G', name: 'Copertina', file: 'g.mp4' }
+    ],
+    handout: { defaultId }
   };
 }
 
-test('findHandoutMedia: immagini e video sì, pagine Web e riferimenti rotti no', () => {
-  const state = handoutState({});
-  assert.equal(findHandoutMedia(state, { locationId: 'loc', imageId: 'foto' }).file, 'a.png');
-  assert.equal(findHandoutMedia(state, { locationId: 'loc', imageId: 'clip' }).file, 'b.mp4');
-  assert.equal(findHandoutMedia(state, { locationId: 'loc', imageId: 'sito' }), null);
-  assert.equal(findHandoutMedia(state, { locationId: 'altra', imageId: 'foto' }), null);
-  assert.equal(findHandoutMedia(state, null), null);
-});
-
-test('resolveHandoutMedia: ultimo mostrato, altrimenti default, altrimenti niente', () => {
-  const foto = { locationId: 'loc', imageId: 'foto' };
-  const clip = { locationId: 'loc', imageId: 'clip' };
-  assert.equal(resolveHandoutMedia(handoutState({ shown: clip, defaultMedia: foto })).id, 'clip');
-  assert.equal(resolveHandoutMedia(handoutState({ shown: null, defaultMedia: foto })).id, 'foto');
-  assert.equal(resolveHandoutMedia(handoutState({ shown: { locationId: 'loc', imageId: 'via' }, defaultMedia: foto })).id, 'foto');
-  assert.equal(resolveHandoutMedia(handoutState({ shown: null, defaultMedia: null })), null);
-  assert.equal(resolveHandoutMedia(handoutState(undefined)), null);
+test('resolveHandoutMedia: in onda, poi default location, poi globale, poi niente', () => {
+  assert.deepEqual(resolveHandoutMedia(handoutState({ activeImageId: 'foto', handoutDefaultId: 'H1' })),
+    { file: 'a.png', src: '/storage/images/a.png' });
+  assert.deepEqual(resolveHandoutMedia(handoutState({ activeImageId: 'sito', handoutDefaultId: 'H1' })),
+    { file: 'h1.png', src: '/storage/handout/h1.png' });
+  assert.equal(resolveHandoutMedia(handoutState({ activeImageId: 'via', handoutDefaultId: 'H1' })).file, 'h1.png');
+  assert.deepEqual(resolveHandoutMedia(handoutState()), { file: 'g.mp4', src: '/storage/handout/g.mp4' });
+  assert.equal(resolveHandoutMedia(handoutState({ handoutDefaultId: 'sparito' })).file, 'g.mp4');
+  assert.equal(resolveHandoutMedia(handoutState({ activeLocationId: 'nessuna' })).file, 'g.mp4');
+  assert.equal(resolveHandoutMedia(handoutState({ defaultId: null })), null);
+  assert.equal(resolveHandoutMedia(undefined), null);
 });
 
 const { videoHasAudio } = require('./media.js');

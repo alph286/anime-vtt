@@ -69,20 +69,21 @@ function isVideoFile(filename) {
   return VIDEO_EXTENSIONS.includes(ext);
 }
 
-// Pagina /handout: mostra l'ultimo media inviato al display da /control
-// (state.handout.shown) e, se non c'è o non esiste più, quello di default
-// scelto in /editor (state.handout.defaultMedia). Entrambi sono riferimenti
-// { locationId, imageId }; valgono solo immagini e video (le pagine Web no).
-function findHandoutMedia(state, ref) {
-  if (!state || !ref) return null;
-  const location = (state.locations || []).find((l) => l.id === ref.locationId);
-  const item = location && (location.images || []).find((i) => i.id === ref.imageId);
-  return item && item.file && !isWebItem(item) ? item : null;
-}
-
+// Pagina /handout: mostra il media in onda su /display (immagine o video della
+// location attiva, mai una pagina Web); altrimenti il default della location
+// attiva, poi il default globale, entrambi voci dell'archivio
+// state.handoutLibrary (file in /storage/handout). Riferimenti rotti saltati.
 function resolveHandoutMedia(state) {
-  const handout = (state && state.handout) || {};
-  return findHandoutMedia(state, handout.shown) || findHandoutMedia(state, handout.defaultMedia);
+  if (!state) return null;
+  const location = (state.locations || []).find((l) => l.id === state.activeLocationId);
+  const shown = location && state.activeImageId
+    ? (location.images || []).find((i) => i.id === state.activeImageId)
+    : null;
+  if (shown && shown.file && !isWebItem(shown)) return { file: shown.file, src: `/storage/images/${shown.file}` };
+  const library = state.handoutLibrary || [];
+  const pick = (id) => (id ? library.find((i) => i.id === id && i.file) : null);
+  const item = pick(location && location.handoutDefaultId) || pick(state.handout && state.handout.defaultId);
+  return item ? { file: item.file, src: `/storage/handout/${item.file}` } : null;
 }
 
 // Works on whichever kind of element is actually active — an <img> has no
@@ -810,7 +811,6 @@ function shaderDecorationRectPercent(deco, grid, naturalW, naturalH) {
 // dove `module` non è definito e questo blocco non viene mai eseguito.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    findHandoutMedia,
     resolveHandoutMedia,
     AOE_METERS_PER_CELL,
     AOE_COLORS,

@@ -29,6 +29,9 @@ function extOf(filename) {
 function manifestForLocation(location) {
   return {
     name: location.name,
+    // Riferimento a una voce dell'archivio handout (che non viaggia nel
+    // pacchetto): sullo stesso server il default torna, altrove migrate() lo azzera.
+    handoutDefaultId: location.handoutDefaultId || null,
     map: {
       ...location.map,
       polygons: (location.map.polygons || []).map((p) => ({ ...p })),
@@ -336,6 +339,7 @@ function rebuildLocationFromManifest(loc, fileMap, { archived, isDefault }) {
   return {
     id: nanoid(),
     name: loc.name || 'Location importata',
+    handoutDefaultId: typeof loc.handoutDefaultId === 'string' ? loc.handoutDefaultId : null,
     map: {
       ...loc.map,
       file: loc.map.file ? fileMap.get(loc.map.file) : null,
@@ -429,5 +433,8 @@ module.exports = {
   inspectImport,
   applyLocationImport,
   applyBackupRestore,
-  saveSafetySnapshot
+  saveSafetySnapshot,
+  // Esportate per i test.
+  manifestForLocation,
+  rebuildLocationFromManifest
 };

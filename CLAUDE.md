@@ -1422,24 +1422,47 @@ eventi `image:show`/`image:hide`.
   vera TV, nel browser /editor e /control (build compilata, test Vitest 304/304 e
   `node --test` verdi, ma la UI non è stata aperta).
 
-## Pagina /handout (fatto, branch `handout`)
+## Pagina /handout (fatto, branch `handout`; default per location: branch `handout-default-location`)
 
-Nuova pagina vanilla `public/handout/` (route statica in `server/index.js`, voce in home):
-sola visualizzazione, sfondo nero, media a tutto schermo con `object-fit: contain`,
-nessun controllo. Mostra l'**ultimo** media (immagine o video, loop muto) inviato al
-display da /control e lo tiene anche dopo "Ritorna alla mappa", cambi location o
-riavvii; senza un ultimo mostrato valido mostra il **default** scelto in /editor.
-- **Stato**: `state.handout = { shown, defaultMedia }`, riferimenti `{ locationId, imageId }`
-  (persistiti; `migrate` li crea e chiama `pruneHandout`). `image:show` aggiorna `shown`
-  (e salva); nuovo evento `handout:setDefault` (`imageId: null` = nessun default).
-  `image:delete`/`location:delete` chiamano `pruneHandout`: media eliminato → si torna al
-  default (o a niente).
-- **Scelta** in `public/shared/media.js`: `findHandoutMedia`/`resolveHandoutMedia`
-  (pagine Web escluse), testate in `media.test.js`.
-- **Editor**: stella nella riga del media (scheda Media, solo immagini/video) per
-  impostare/togliere il default; build `public/editor/` ricostruita.
-- **Verificato** su copia dei dati, porta 3100 (socket da Node + /handout e /editor in
-  Playwright): default all'apertura, cambio su `image:show`, permanenza dopo hide e cambio
-  location, video webm in loop muto, eliminazione → default, id non valido ignorato,
-  persistenza dopo riavvio, stella in editor. `npm run test:server` 92/92, Vitest 304/304.
-- **Non verificato**: su una vera TV/secondo schermo; mp4 (provato solo webm).
+Pagina vanilla `public/handout/` (route statica in `server/index.js`, voce in home): sola
+visualizzazione, sfondo nero, media a tutto schermo con `object-fit: contain`. Spec e piano
+del default per location: `docs/superpowers/specs/2026-11-13-handout-default-location-design.md`
+e `docs/superpowers/plans/2026-11-13-handout-default-location.md`.
+
+**Cosa mostra** (`resolveHandoutMedia` in `public/shared/media.js`, ritorna `{file, src}`):
+1. il media in onda su /display (`activeImageId` della location attiva; le pagine Web no);
+2. il default della location attiva (`location.handoutDefaultId`);
+3. il default globale (`state.handout.defaultId`);
+4. nero. "Ritorna alla mappa" e il cambio location tornano quindi al default (decisione di
+   Alph: prima /handout restava sull'ultimo media mostrato).
+
+**Archivio dei default** (scelta B di Alph: dedicato, separato dai Media delle location,
+stesso sistema dell'archivio audio): `state.handoutLibrary = [{id,name,file}]`, file in
+`storage/handout/`. Modello in `server/handout.js` (+ test); `POST /api/upload/handout`
+(immagini e video, 150 MB, con `locationId` o `global=1` imposta anche il default); eventi
+`handout:setDefault {locationId|null, id|null}`, `handoutLibrary:update {id,name}`,
+`handoutLibrary:delete {id}` (cancella il file e azzera i default che la usavano).
+`image:show` non tocca più lo stato di /handout (`handout.shown` sparito). File orfani: i
+file dell'archivio contano come usati.
+- `/editor`, scheda Media: riquadro "Handout di default" (righe "Questa location" e
+  "Globale", "Scegli…") e `sidebar/HandoutLibraryDialog.tsx` (Usa, Nessuno, Carica,
+  rinomina, elimina con avviso "Usato in: …, default globale"). La stella sulle righe è
+  sparita. `MediaPreview` ha la prop `dir` (`images`|`handout`).
+- Migrazione (`migrate(state, { copyHandoutFile })`): il vecchio `handout.defaultMedia`
+  diventa una voce dell'archivio con una COPIA del file ed è il default globale.
+- Backup/esportazioni: come gli audio, l'archivio non entra nei pacchetti e un ripristino
+  non lo tocca; il `handoutDefaultId` di ogni location viaggia nel manifest
+  (`server/exportImport.js`): sullo stesso server il default torna, altrove viene azzerato.
+- Minori noti: "Carica" nel dialog non imposta il default (serve "Usa"; il server lo
+  supporterebbe con `locationId`/`global=1`, oggi non usato); se alla prima migrazione la
+  copia del vecchio file fallisce, il vecchio default si perde (niente nuovo tentativo).
+- **Scelte di Claude**: video ammessi nell'archivio; nomi modificabili; "Carica" nel dialog
+  aggiunge solo all'archivio (il default si sceglie con "Usa"); /control invariato.
+- **Verificato** (server :3100, dati finti, stato in formato vecchio): migrazione (voce
+  "Copertina vecchia" con file copiato, default globale), riquadro e dialog in /editor,
+  upload + "Usa" per la location, /handout: default location → media in onda → hide torna
+  al default → location senza default mostra il globale → eliminata la voce usata ricade
+  sul globale → nessun default = nero; avviso "Usato in: default globale"; orfani vuoti.
+  `npm run test:server` e Vitest verdi.
+- **Non verificato**: su una vera TV/secondo schermo; un video come default nell'archivio;
+  il controllo di sicurezza dei video nel dialog.
