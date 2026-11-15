@@ -52,7 +52,10 @@ async function startServer({ state, files = {} } = {}) {
   const exited = new Promise((resolve) => proc.on('exit', (code, signal) => resolve({ code, signal })));
 
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`server non partito in 10 s:\n${output}`)), 10000);
+    const timer = setTimeout(() => {
+      proc.kill('SIGKILL');
+      reject(new Error(`server non partito in 10 s:\n${output}`));
+    }, 10000);
     const onData = () => {
       if (output.includes('in ascolto')) {
         clearTimeout(timer);
@@ -87,6 +90,7 @@ async function startServer({ state, files = {} } = {}) {
 // Client socket.io con un registro degli eventi ricevuti e l'ultimo stato.
 function connect(server) {
   const client = io(server.url, { transports: ['websocket'], forceNew: true, reconnection: false });
+  client.server = server;
   client.state = null;
   client.received = [];
   client.waiters = [];
@@ -144,15 +148,65 @@ async function barrier(client) {
   return wait;
 }
 
-async function emitAndWait(client, event, payload, predicate) {
-  const wait = waitState(client, predicate);
-  client.emit(event, payload);
-  return wait;
-}
-
 function persisted(state) {
   const { displayViewport, displayAudio, ...rest } = state;
   return rest;
+}
+
+function readDisk(server) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(server.dataDir, 'state.json'), 'utf-8'));
+  } catch {
+    return null; // file assente o scritto a metà: si riprova
+  }
+}
+
+// Il server salva `state` intero (saveState(state)) e trasmette
+// { ...state, displayViewport, displayAudio }: gli unici campi trasmessi ma mai
+// su disco sono quindi displayViewport e displayAudio (persisted() li toglie).
+// Qui si attende (poll breve, per i salvataggi con throttle di 60 ms) che
+// data/state.json del server di prova coincida con lo stato trasmesso.
+//
+// Eventi che per scelta del server cambiano lo stato in memoria senza salvarlo
+// (verificato in server/index.js): image:show e image:hide toccano solo
+// activeImageId, audio:oneshotEnded solo audioOneshots. Per questi il campo è
+// escluso dal confronto (e solo quello); gli altri campi restano confrontati.
+const NOT_SAVED_FIELDS = {
+  'image:show': ['activeImageId'],
+  'image:hide': ['activeImageId'],
+  'audio:oneshotEnded': ['audioOneshots']
+};
+
+async function expectOnDisk(server, state, ms = 1500, omit = []) {
+  const strip = (s) => {
+    const copy = { ...s };
+    for (const k of omit) delete copy[k];
+    return copy;
+  };
+  const expected = strip(persisted(state));
+  const deadline = Date.now() + ms;
+  let disk = null;
+  for (;;) {
+    disk = readDisk(server);
+    try {
+      assert.deepStrictEqual(disk && strip(disk), expected);
+      return;
+    } catch (err) {
+      if (Date.now() >= deadline) {
+        err.message = `state.json su disco diverso dallo stato trasmesso (salvataggio mancante?)\n${err.message}`;
+        throw err;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
+async function emitAndWait(client, event, payload, predicate) {
+  const wait = waitState(client, predicate);
+  client.emit(event, payload);
+  const state = await wait;
+  if (client.server) await expectOnDisk(client.server, state, 1500, NOT_SAVED_FIELDS[event] || []);
+  return state;
 }
 
 // L'evento non deve cambiare nulla dello stato (esclusi i campi solo in memoria
@@ -181,5 +235,5 @@ function loc(state, id) {
 
 module.exports = {
   startServer, connect, waitFor, waitState, barrier, emitAndWait,
-  expectUnchanged, expectNoEvent, persisted, loc
+  expectUnchanged, expectNoEvent, expectOnDisk, persisted, loc
 };
