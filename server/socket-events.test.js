@@ -1608,4 +1608,25 @@ describe('eccezione in un handler', () => {
       c.disconnect();
     }
   });
+
+  test('extra | audio:toggle con payload null fa terminare il server (anche con default = {})', async () => {
+    const own = await startServer();
+    const c = await connect(own);
+    try {
+      // BUG noto: il default `= {}` vale solo per undefined; con `null` anche gli
+      // handler che lo hanno (audio:toggle, handoutLibrary:delete, ...) lanciano
+      // TypeError sul destrutturamento e il processo termina.
+      c.emit('audio:toggle', null);
+      let timer;
+      const { code } = await Promise.race([
+        own.exited,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('il server è ancora vivo')), 3000); })
+      ]).finally(() => clearTimeout(timer));
+      assert.notEqual(code, 0);
+      assert.match(own.output(), /TypeError/);
+    } finally {
+      c.disconnect();
+      await own.stop();
+    }
+  });
 });
