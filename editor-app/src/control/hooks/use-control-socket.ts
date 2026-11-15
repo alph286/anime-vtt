@@ -47,7 +47,13 @@ export function useControlSocket(): void {
     socket.on('state:update', onState);
     socket.on('telegram:sendResult', onTelegram);
     // Gia connesso al mount (StrictMode/HMR): l'evento 'connect' e passato.
-    if (socket.connected) onConnect();
+    if (socket.connected) {
+      // Il server invia lo state:update iniziale solo alla connessione: se e
+      // avvenuta prima di questo effetto, quell'evento e andato perso e la
+      // pagina resterebbe vuota fino alla prossima modifica. Senza stato si
+      // riconnette (il 'connect' successivo chiama onConnect).
+      if (!st().server) { socket.disconnect(); socket.connect(); } else onConnect();
+    }
 
     return () => {
       socket.off('connect', onConnect);
