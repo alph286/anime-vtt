@@ -16,7 +16,7 @@ parte che non conosci. Spec e piani: `docs/superpowers/specs/` e `plans/`.
 | `/control` | regia in sessione (DM, telefono) | `editor-app/src/control/` |
 | `/party` | mappa e aree d'effetto per i giocatori | `editor-app/src/party/` (riusa store e componenti di /control, mai copie) |
 | `/display` | TV dei giocatori, kiosk sul Raspberry | `public/display/` (vanilla, lasciato così apposta) |
-| `/handout` | secondo schermo: media in onda su /display, altrimenti default della location, poi globale, poi nero | `public/handout/` (vanilla) |
+| `/handout` | secondo schermo: media in onda su /display, altrimenti default della location attiva, poi globale, poi nero | `public/handout/` (vanilla) |
 | `/opzioni` | campagna e Telegram | `public/opzioni/` (vanilla) |
 
 `public/shared/media.js`, `shader-effects.js` e `audio-fade.js` sono script
