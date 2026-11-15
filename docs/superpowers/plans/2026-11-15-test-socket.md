@@ -127,29 +127,47 @@ Legenda: V = caso valido (stato dopo l'evento), R = caso rifiutato (stato invari
 
 **Files:** Modify `package.json`, `package-lock.json`; Create `server/test-support/socket-harness.js`
 
-- [ ] `npm install --save-dev socket.io-client@4.8.3`
-- [ ] Scrivere il modulo di supporto come descritto sopra.
-- [ ] Commit: `test(socket): socket.io-client e supporto per i test sul server vero`
+- [x] `npm install --save-dev socket.io-client@4.8.3`
+- [x] Scrivere il modulo di supporto come descritto sopra.
+- [x] Commit: `test(socket): socket.io-client e supporto per i test sul server vero`
 
 ### Task 2: stato di prova e test per gruppi
 
 **Files:** Create `server/socket-events.test.js`
 
 Un commit per gruppo, con `npm run test:server` verde prima di ogni commit:
-- [ ] connessione e display (`hello`, `display:viewport`, `audio:status`, `disconnect`)
-- [ ] location (`location:*`)
-- [ ] fog, immagini, handout (`fow:*`, `image:*`, `handout*`)
-- [ ] vista, poligoni, mappa, griglia, bussola (`view:*`, `polygon:*`, `map*`, `grid*`, `compass:update`)
-- [ ] AoE, shader, ping (`aoe:*`, `shader:*`, `ping:show`)
-- [ ] audio (`audio:*`, `audioLibrary:*`)
-- [ ] casi extra (throttle, one-shot, ripristino backup, eccezione)
-- [ ] test di copertura (ogni `socket.on(` con almeno due test)
+- [x] connessione e display (`hello`, `display:viewport`, `audio:status`, `disconnect`)
+- [x] location (`location:*`)
+- [x] fog, immagini, handout (`fow:*`, `image:*`, `handout*`)
+- [x] vista, poligoni, mappa, griglia, bussola (`view:*`, `polygon:*`, `map*`, `grid*`, `compass:update`)
+- [x] AoE, shader, ping (`aoe:*`, `shader:*`, `ping:show`)
+- [x] audio (`audio:*`, `audioLibrary:*`)
+- [x] casi extra (throttle, one-shot, ripristino backup, eccezione)
+- [x] test di copertura (ogni `socket.on(` con almeno due test)
 
 ### Task 3: verifica
 
-- [ ] `npm test` dalla radice tre volte di fila, tutte verdi; annotare la durata di `socket-events.test.js`.
-- [ ] `git diff manutenzione-pin-dm -- server/index.js server/state.js server/audio.js server/handout.js server/auth.js server/exportImport.js` vuoto.
+- [x] `npm test` dalla radice tre volte di fila, tutte verdi; annotare la durata di `socket-events.test.js`.
+- [x] `git diff manutenzione-pin-dm -- server/index.js server/state.js server/audio.js server/handout.js server/auth.js server/exportImport.js` vuoto.
 
 ## Resoconto finale
 
 `git log --oneline manutenzione-pin-dm..HEAD`, eventi trovati e coperti, BUG noti trovati, esito delle tre esecuzioni di `npm test` e durata della suite socket, scostamenti dal piano generale.
+
+## Esito (15 nov 2026)
+
+- 64 `socket.on(` in `server/index.js`, tutti con almeno due test (55 con due, 8 con tre, 1 con quattro): 138 test legati a un evento più 11 casi extra, 149 in tutto. Il controllo è il test «copertura» in fondo al gruppo condiviso (si aspetta 64 eventi: va aggiornato se se ne aggiungono).
+- `npm test` verde tre volte di fila; `socket-events.test.js` circa 1,8 s (gruppo condiviso 1,4 s).
+- Nessun file del server modificato.
+
+**BUG noti fissati nei test** (cercare `BUG noto` nel file):
+1. Un evento senza payload su un handler che destruttura senza default (`({ role }) =>`, `({ locationId }) =>`, quasi tutti) lancia `TypeError` dentro `process.nextTick` di socket.io: il processo termina. Provato con `hello`, che resta pubblico anche con il PIN acceso. Fanno eccezione gli handler con `= {}` (handout, archivio handout, audio).
+2. `view:pan`: dx/dy non controllati; una stringa viene concatenata (`offsetX` diventa `'05'`).
+3. `view:zoom` e `mapScale:set`: scala non controllata (negativa, stringa).
+4. `grid:update`: `divisions` non numerico dà `NaN` in `divisions` e `cellSize` (`null` nel JSON).
+5. `compass:update`: x/y non numerici danno `NaN` (`null` nel JSON).
+6. `polygon:update`: punti non controllati (una stringa sostituisce l'elenco).
+7. `shader:restore`: posizione e misure non controllate (a differenza di `shader:place`).
+8. `display:viewport`: nessun controllo sui valori.
+
+**Comportamenti notati, non segnati come bug**: `location:reorder`, `image:reorder` e `polygon:reorder` scartano in silenzio id doppi o sconosciuti e accettano l'ordine se resta una permutazione completa; una location creata con `location:create` non ha `map.shaders` né `handoutDefaultId` finché il server non riparte; `polygon:delete` con zona sconosciuta salva e trasmette lo stesso stato; dopo il ripristino di un backup le location hanno id nuovi e le righe audio vuote (l'audio non viaggia nei pacchetti).
