@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const SKIP_DIRS = new Set(['node_modules', 'dist']);
 const TEST_FILE = /\.test\.tsx?$/;
@@ -19,9 +20,21 @@ function listFiles(dir, rel = '') {
   return out;
 }
 
-function computeHash(dir) {
+function excluded(rel) {
+  return rel.split('/').some((p) => SKIP_DIRS.has(p)) || TEST_FILE.test(path.basename(rel));
+}
+
+// File tracciati da git sotto `dir` (percorsi relativi a dir). Il contenuto si
+// legge dal disco, quindi le modifiche non committate contano; i file ignorati
+// da git (cache locali) e quelli non ancora aggiunti no.
+function listTrackedFiles(dir) {
+  const out = execFileSync('git', ['ls-files', '-z', '--', '.'], { cwd: dir, maxBuffer: 64 * 1024 * 1024 });
+  return out.toString('utf8').split('\0').filter((r) => r && !excluded(r) && fs.existsSync(path.join(dir, r)));
+}
+
+function computeHash(dir, files = listFiles(dir)) {
   const hash = crypto.createHash('sha256');
-  for (const rel of listFiles(dir).sort()) {
+  for (const rel of [...files].sort()) {
     hash.update(rel + '\0');
     hash.update(fs.readFileSync(path.join(dir, rel)));
     hash.update('\0');
@@ -29,12 +42,13 @@ function computeHash(dir) {
   return hash.digest('hex');
 }
 
-module.exports = { computeHash };
+module.exports = { computeHash, listTrackedFiles };
 
 if (require.main === module) {
   const root = path.join(__dirname, '..');
   const hashFile = path.join(root, 'public', 'editor-app.build-hash');
-  const current = computeHash(path.join(root, 'editor-app'));
+  const appDir = path.join(root, 'editor-app');
+  const current = computeHash(appDir, listTrackedFiles(appDir));
   const cmd = process.argv[2];
   if (cmd === 'write') {
     fs.writeFileSync(hashFile, current + '\n');

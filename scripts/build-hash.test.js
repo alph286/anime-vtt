@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { computeHash } = require('./build-hash');
+const { execFileSync } = require('child_process');
+const { computeHash, listTrackedFiles } = require('./build-hash');
 
 function mk(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bh-'));
@@ -59,4 +60,19 @@ test('file fuori da src contano', () => {
   const before = computeHash(d);
   put(d, 'vite.config.ts', 'c');
   assert.notEqual(computeHash(d), before);
+});
+
+test('solo file tracciati da git: un file ignorato non cambia l\'impronta, una modifica non committata si', () => {
+  const d = mk({ ...base(), '.gitignore': 'cache.json\n' });
+  const git = (...a) => execFileSync('git', a, { cwd: d, stdio: 'pipe' });
+  git('init', '-q');
+  git('add', '-A');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'x');
+  const before = computeHash(d, listTrackedFiles(d));
+  put(d, 'cache.json', 'locale');
+  assert.equal(computeHash(d, listTrackedFiles(d)), before);
+  put(d, 'untracked.ts', 'nuovo');
+  assert.equal(computeHash(d, listTrackedFiles(d)), before);
+  put(d, 'src/a.ts', 'modificato');
+  assert.notEqual(computeHash(d, listTrackedFiles(d)), before);
 });
