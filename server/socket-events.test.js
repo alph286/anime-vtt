@@ -951,5 +951,247 @@ describe('eventi socket (server condiviso)', () => {
     await expectUnchanged(c, 'gridPreset:apply', { locationId: 'nessuna' });
   });
 
+  // --- aree d'effetto (AoE) ------------------------------------------------------------------
+
+  const aoes = (s) => loc(s, 'loc-aoe').map.aoes;
+  const aoeById = (s, id) => aoes(s).find((a) => a.id === id);
+
+  ev('aoe:place', 'valido: nuova area con i default', async () => {
+    const c = await open();
+    const n = aoes(await barrier(c)).length;
+    let s = await emitAndWait(c, 'aoe:place', { locationId: 'loc-aoe', shape: 'sphere', sizeM: 6, widthM: 3, x: 1, y: 2, color: 'green', shaderOverride: 'web_area' }, (st) => aoes(st).length === n + 1);
+    assert.deepStrictEqual({ ...aoes(s)[n], id: 'X' }, {
+      id: 'X', shape: 'sphere', sizeM: 6, widthM: null, x: 1, y: 2, rotation: 0,
+      color: 'green', shapeVisible: true, shaderOverride: 'web_area', cast: false
+    });
+    s = await emitAndWait(c, 'aoe:place', { locationId: 'loc-aoe', shape: 'line', sizeM: 9, widthM: 1.5, x: 0, y: 0, color: 'blu', shaderOverride: 'gold_divine_light' }, (st) => aoes(st).length === n + 2);
+    const line = aoes(s)[n + 1];
+    assert.deepStrictEqual([line.widthM, line.color, line.shaderOverride], [1.5, 'red', null]);
+    c.emit('aoe:remove', { locationId: 'loc-aoe', aoeId: aoes(s)[n].id });
+    await emitAndWait(c, 'aoe:remove', { locationId: 'loc-aoe', aoeId: line.id }, (st) => aoes(st).length === n);
+  });
+
+  ev('aoe:place', 'forma sconosciuta, taglia fuori limite, x non numerico: stato invariato', async () => {
+    const c = await open();
+    const base = { locationId: 'loc-aoe', shape: 'cube', sizeM: 3, x: 0, y: 0 };
+    await expectUnchanged(c, 'aoe:place', { ...base, shape: 'pyramid' });
+    await expectUnchanged(c, 'aoe:place', { ...base, sizeM: 301 });
+    await expectUnchanged(c, 'aoe:place', { ...base, sizeM: 0 });
+    await expectUnchanged(c, 'aoe:place', { ...base, x: '1' });
+    await expectUnchanged(c, 'aoe:place', { ...base, locationId: 'nessuna' });
+  });
+
+  ev('aoe:move', 'valido: nuova posizione', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'aoe:move', { locationId: 'loc-aoe', aoeId: 'aoe-cube', x: 33, y: 44 }, (st) => aoeById(st, 'aoe-cube').x === 33);
+    assert.deepStrictEqual([aoeById(s, 'aoe-cube').x, aoeById(s, 'aoe-cube').y], [33, 44]);
+  });
+
+  ev('aoe:move', 'x non numerico o area sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'aoe:move', { locationId: 'loc-aoe', aoeId: 'aoe-cube', x: '1', y: 2 });
+    await expectUnchanged(c, 'aoe:move', { locationId: 'loc-aoe', aoeId: 'aoe-cube', x: null, y: 2 });
+    await expectUnchanged(c, 'aoe:move', { locationId: 'loc-aoe', aoeId: 'nessuna', x: 1, y: 2 });
+  });
+
+  ev('aoe:rotate', 'valido: cono ruotato (modulo 360) e origine ricalcolata', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'aoe:rotate', { locationId: 'loc-aoe', aoeId: 'aoe-cone', rotation: -45.3, x: 11, y: 12 }, (st) => aoeById(st, 'aoe-cone').rotation === 315);
+    const a = aoeById(s, 'aoe-cone');
+    assert.deepStrictEqual([a.rotation, a.x, a.y], [315, 11, 12]);
+  });
+
+  ev('aoe:rotate', 'cubo o sfera, rotazione non numerica: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'aoe:rotate', { locationId: 'loc-aoe', aoeId: 'aoe-cube', rotation: 90, x: 0, y: 0 });
+    await expectUnchanged(c, 'aoe:rotate', { locationId: 'loc-aoe', aoeId: 'aoe-line', rotation: '90', x: 0, y: 0 });
+    await expectUnchanged(c, 'aoe:rotate', { locationId: 'loc-aoe', aoeId: 'aoe-line', rotation: 90, x: 0 });
+  });
+
+  ev('aoe:resize', 'valido: taglia; la larghezza solo per la linea', async () => {
+    const c = await open();
+    let s = await emitAndWait(c, 'aoe:resize', { locationId: 'loc-aoe', aoeId: 'aoe-line', sizeM: 12, widthM: 3, x: 5, y: 6 }, (st) => aoeById(st, 'aoe-line').sizeM === 12);
+    assert.deepStrictEqual((({ sizeM, widthM, x, y }) => ({ sizeM, widthM, x, y }))(aoeById(s, 'aoe-line')), { sizeM: 12, widthM: 3, x: 5, y: 6 });
+    s = await emitAndWait(c, 'aoe:resize', { locationId: 'loc-aoe', aoeId: 'aoe-cube', sizeM: 9, widthM: 3, x: 5, y: 6 }, (st) => aoeById(st, 'aoe-cube').sizeM === 9);
+    assert.equal(aoeById(s, 'aoe-cube').widthM, null);
+    s = await emitAndWait(c, 'aoe:resize', { locationId: 'loc-aoe', aoeId: 'aoe-line', sizeM: 15, widthM: 999, x: 5, y: 6 }, (st) => aoeById(st, 'aoe-line').sizeM === 15);
+    assert.equal(aoeById(s, 'aoe-line').widthM, 3, 'larghezza fuori limite ignorata, taglia applicata');
+  });
+
+  ev('aoe:resize', 'taglia 0 o oltre 300, area sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'aoe:resize', { locationId: 'loc-aoe', aoeId: 'aoe-line', sizeM: 0, x: 0, y: 0 });
+    await expectUnchanged(c, 'aoe:resize', { locationId: 'loc-aoe', aoeId: 'aoe-line', sizeM: 301, x: 0, y: 0 });
+    await expectUnchanged(c, 'aoe:resize', { locationId: 'loc-aoe', aoeId: 'nessuna', sizeM: 3, x: 0, y: 0 });
+  });
+
+  ev('aoe:setColor', 'valido: colore della palette', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'aoe:setColor', { locationId: 'loc-aoe', aoeId: 'aoe-cone', color: 'yellow' }, (st) => aoeById(st, 'aoe-cone').color === 'yellow');
+    assert.equal(aoeById(s, 'aoe-cone').color, 'yellow');
+  });
+
+  ev('aoe:setColor', 'colore fuori palette o area sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'aoe:setColor', { locationId: 'loc-aoe', aoeId: 'aoe-cone', color: 'blue' });
+    await expectUnchanged(c, 'aoe:setColor', { locationId: 'loc-aoe', aoeId: 'nessuna', color: 'green' });
+  });
+
+  ev('aoe:setShapeVisible', 'valido: convertito a booleano', async () => {
+    const c = await open();
+    let s = await emitAndWait(c, 'aoe:setShapeVisible', { locationId: 'loc-aoe', aoeId: 'aoe-cone', visible: 0 }, (st) => aoeById(st, 'aoe-cone').shapeVisible === false);
+    assert.equal(aoeById(s, 'aoe-cone').shapeVisible, false);
+    s = await emitAndWait(c, 'aoe:setShapeVisible', { locationId: 'loc-aoe', aoeId: 'aoe-cone', visible: 'sì' }, (st) => aoeById(st, 'aoe-cone').shapeVisible === true);
+    assert.equal(aoeById(s, 'aoe-cone').shapeVisible, true);
+  });
+
+  ev('aoe:setShapeVisible', 'area sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'aoe:setShapeVisible', { locationId: 'loc-aoe', aoeId: 'nessuna', visible: false });
+  });
+
+  ev('aoe:setShaderOverride', 'valido: id della lista; fuori lista torna null', async () => {
+    const c = await open();
+    let s = await emitAndWait(c, 'aoe:setShaderOverride', { locationId: 'loc-aoe', aoeId: 'aoe-cone', shaderOverride: 'circular_smoke' }, (st) => aoeById(st, 'aoe-cone').shaderOverride === 'circular_smoke');
+    assert.equal(aoeById(s, 'aoe-cone').shaderOverride, 'circular_smoke');
+    s = await emitAndWait(c, 'aoe:setShaderOverride', { locationId: 'loc-aoe', aoeId: 'aoe-cone', shaderOverride: 'gold_divine_light' }, (st) => aoeById(st, 'aoe-cone').shaderOverride === null);
+    assert.equal(aoeById(s, 'aoe-cone').shaderOverride, null);
+  });
+
+  ev('aoe:setShaderOverride', 'area sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'aoe:setShaderOverride', { locationId: 'loc-aoe', aoeId: 'nessuna', shaderOverride: 'web_area' });
+  });
+
+  ev('aoe:setCast', 'valido: convertito a booleano', async () => {
+    const c = await open();
+    let s = await emitAndWait(c, 'aoe:setCast', { locationId: 'loc-aoe', aoeId: 'aoe-cube', cast: 1 }, (st) => aoeById(st, 'aoe-cube').cast === true);
+    assert.equal(aoeById(s, 'aoe-cube').cast, true);
+    s = await emitAndWait(c, 'aoe:setCast', { locationId: 'loc-aoe', aoeId: 'aoe-cube' }, (st) => aoeById(st, 'aoe-cube').cast === false);
+    assert.equal(aoeById(s, 'aoe-cube').cast, false);
+  });
+
+  ev('aoe:setCast', 'area sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'aoe:setCast', { locationId: 'loc-aoe', aoeId: 'nessuna', cast: true });
+  });
+
+  ev('aoe:remove', 'valido: area tolta', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'aoe:remove', { locationId: 'loc-aoe', aoeId: 'aoe-del' }, (st) => !aoeById(st, 'aoe-del'));
+    assert.equal(aoeById(s, 'aoe-del'), undefined);
+  });
+
+  ev('aoe:remove', 'location o area sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'aoe:remove', { locationId: 'nessuna', aoeId: 'aoe-cube' });
+    await expectUnchanged(c, 'aoe:remove', { locationId: 'loc-aoe', aoeId: 'nessuna' });
+  });
+
+  // --- decorazioni shader -----------------------------------------------------------------
+
+  const shaders = (s) => loc(s, 'loc-shader').map.shaders;
+  const shaderById = (s, id) => shaders(s).find((d) => d.id === id);
+
+  ev('shader:place', 'valido: nuova decorazione', async () => {
+    const c = await open();
+    const n = shaders(await barrier(c)).length;
+    const s = await emitAndWait(c, 'shader:place', { locationId: 'loc-shader', shaderId: 'portal_red', x: 1, y: 2, widthM: 0.5, heightM: 300 }, (st) => shaders(st).length === n + 1);
+    assert.deepStrictEqual({ ...shaders(s)[n], id: 'X' }, { id: 'X', shaderId: 'portal_red', x: 1, y: 2, widthM: 0.5, heightM: 300 });
+    await emitAndWait(c, 'shader:remove', { locationId: 'loc-shader', id: shaders(s)[n].id }, (st) => shaders(st).length === n);
+  });
+
+  ev('shader:place', 'tipo sconosciuto, misura fuori limite, x non numerico: stato invariato', async () => {
+    const c = await open();
+    const base = { locationId: 'loc-shader', shaderId: 'portal', x: 0, y: 0, widthM: 2, heightM: 2 };
+    await expectUnchanged(c, 'shader:place', { ...base, shaderId: 'web_area' });
+    await expectUnchanged(c, 'shader:place', { ...base, widthM: 0.4 });
+    await expectUnchanged(c, 'shader:place', { ...base, heightM: 301 });
+    await expectUnchanged(c, 'shader:place', { ...base, x: '0' });
+    await expectUnchanged(c, 'shader:place', { ...base, locationId: 'nessuna' });
+  });
+
+  ev('shader:move', 'valido: nuova posizione', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'shader:move', { locationId: 'loc-shader', id: 's1', x: 21, y: 22 }, (st) => shaderById(st, 's1').x === 21);
+    assert.deepStrictEqual([shaderById(s, 's1').x, shaderById(s, 's1').y], [21, 22]);
+  });
+
+  ev('shader:move', 'decorazione sconosciuta o x non numerico: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'shader:move', { locationId: 'loc-shader', id: 'nessuna', x: 1, y: 1 });
+    await expectUnchanged(c, 'shader:move', { locationId: 'loc-shader', id: 's1', x: 1, y: '1' });
+  });
+
+  ev('shader:resize', 'valido: nuove misure', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'shader:resize', { locationId: 'loc-shader', id: 's1', widthM: 4, heightM: 5 }, (st) => shaderById(st, 's1').widthM === 4);
+    assert.deepStrictEqual([shaderById(s, 's1').widthM, shaderById(s, 's1').heightM], [4, 5]);
+  });
+
+  ev('shader:resize', 'misura fuori limite o decorazione sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'shader:resize', { locationId: 'loc-shader', id: 's1', widthM: 301, heightM: 5 });
+    await expectUnchanged(c, 'shader:resize', { locationId: 'loc-shader', id: 's1', widthM: 4, heightM: 0.1 });
+    await expectUnchanged(c, 'shader:resize', { locationId: 'loc-shader', id: 'nessuna', widthM: 4, heightM: 5 });
+  });
+
+  ev('shader:remove', 'valido: decorazione tolta', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'shader:remove', { locationId: 'loc-shader', id: 'sdel' }, (st) => !shaderById(st, 'sdel'));
+    assert.equal(shaderById(s, 'sdel'), undefined);
+  });
+
+  ev('shader:remove', 'location o decorazione sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'shader:remove', { locationId: 'nessuna', id: 's1' });
+    await expectUnchanged(c, 'shader:remove', { locationId: 'loc-shader', id: 'nessuna' });
+  });
+
+  ev('shader:restore', 'valido: reinserita all\'indice con gli stessi campi', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    const original = shaderById(before, 's2');
+    const idx = shaders(before).indexOf(original);
+    await emitAndWait(c, 'shader:remove', { locationId: 'loc-shader', id: 's2' }, (st) => !shaderById(st, 's2'));
+    const s = await emitAndWait(c, 'shader:restore', { locationId: 'loc-shader', shader: { ...original, extra: 1 }, index: idx }, (st) => !!shaderById(st, 's2'));
+    assert.deepStrictEqual(shaders(s), shaders(before));
+  });
+
+  ev('shader:restore', 'id già presente o tipo sconosciuto: stato invariato; misure non validate', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'shader:restore', { locationId: 'loc-shader', shader: deco('s1'), index: 0 });
+    await expectUnchanged(c, 'shader:restore', { locationId: 'loc-shader', shader: deco('nuova', 'web_area'), index: 0 });
+    await expectUnchanged(c, 'shader:restore', { locationId: 'nessuna', shader: deco('nuova'), index: 0 });
+    // BUG noto: shader:restore non controlla posizione e misure (shader:place sì).
+    const s = await emitAndWait(c, 'shader:restore', { locationId: 'loc-shader', shader: { id: 'sbug', shaderId: 'portal', x: 'a', widthM: 9999 } }, (st) => !!shaderById(st, 'sbug'));
+    assert.deepStrictEqual(shaderById(s, 'sbug'), { id: 'sbug', shaderId: 'portal', x: 'a', widthM: 9999 });
+    await emitAndWait(c, 'shader:remove', { locationId: 'loc-shader', id: 'sbug' }, (st) => !shaderById(st, 'sbug'));
+  });
+
+  // --- ping ---------------------------------------------------------------------------------
+
+  ev('ping:show', 'valido: rilanciato a tutti, stato invariato', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-a' }, (s) => s.activeLocationId === 'loc-a');
+    const toObserver = waitFor(observer, 'ping:show', (p) => p.strokeId === 'tratto-1');
+    const toSender = waitFor(c, 'ping:show', (p) => p.strokeId === 'tratto-1');
+    const before = await barrier(c);
+    c.emit('ping:show', { locationId: 'loc-a', x: 0.25, y: 0.75, strokeId: 'tratto-1', extra: 'scartato' });
+    assert.deepStrictEqual(await toObserver, { x: 0.25, y: 0.75, strokeId: 'tratto-1' });
+    await toSender;
+    const after = await barrier(c);
+    assert.deepStrictEqual(persisted(after), persisted(before));
+  });
+
+  ev('ping:show', 'location non attiva o x non numero: nessun ping', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-a' }, (s) => s.activeLocationId === 'loc-a');
+    await expectNoEvent(c, 'ping:show', () => {
+      c.emit('ping:show', { locationId: 'loc-b', x: 1, y: 1, strokeId: 'x' });
+      c.emit('ping:show', { locationId: 'loc-a', x: '1', y: 1, strokeId: 'x' });
+    });
+  });
+
   // GRUPPI SUCCESSIVI
 });
