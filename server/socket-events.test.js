@@ -308,5 +308,175 @@ describe('eventi socket (server condiviso)', () => {
     assert.ok('os1' in s.audioOneshots);
   });
 
+  // --- location ----------------------------------------------------------------------
+
+  ev('location:set', 'valido: cambia la location attiva e toglie il media mostrato', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-img' }, (s) => s.activeLocationId === 'loc-img');
+    await emitAndWait(c, 'image:show', { imageId: 'img1' }, (s) => s.activeImageId === 'img1');
+    const s = await emitAndWait(c, 'location:set', { locationId: 'loc-b' }, (st) => st.activeLocationId === 'loc-b');
+    assert.equal(s.activeImageId, null);
+    const onDisk = JSON.parse(fs.readFileSync(path.join(server.dataDir, 'state.json'), 'utf-8'));
+    assert.equal(onDisk.activeLocationId, 'loc-b');
+  });
+
+  ev('location:set', 'id sconosciuto: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'location:set', { locationId: 'nessuna' });
+  });
+
+  ev('location:create', 'valido: nuova location vuota, diventa attiva', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    const s = await emitAndWait(c, 'location:create', undefined, (st) => st.locations.length === before.locations.length + 1);
+    const created = s.locations[s.locations.length - 1];
+    assert.equal(s.activeLocationId, created.id);
+    assert.equal(s.activeImageId, null);
+    assert.equal(typeof created.id, 'string');
+    assert.deepStrictEqual({ ...created, id: 'X' }, {
+      id: 'X',
+      name: 'Nuova location',
+      map: {
+        file: null, type: 'image', scale: 1, flip180: false, rotate90: false,
+        liveView: { scale: 1, offsetX: 0, offsetY: 0 },
+        grid: { enabled: false, cellSize: 100, baseCellSize: 100, divisions: 1, offsetX: 0, offsetY: 0, color: '#ffffff', lineWidth: 0.3, opacity: 1 },
+        compass: { visible: false, x: 88, y: 85, rotation: 0 },
+        audio: { background: [], oneshot: [] },
+        polygons: [],
+        aoes: []
+      },
+      images: [],
+      archived: false,
+      isDefault: false
+    });
+    // Nota: a differenza delle location migrate, una location creata qui non ha
+    // map.shaders né handoutDefaultId finché il server non riparte.
+  });
+
+  ev('location:create', 'il payload è ignorato; due create danno due location distinte', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    c.emit('location:create', { name: 'Ignorato' });
+    c.emit('location:create');
+    const s = await waitState(c, (st) => st.locations.length === before.locations.length + 2);
+    const [a, b] = s.locations.slice(-2);
+    assert.notEqual(a.id, b.id);
+    assert.equal(a.name, 'Nuova location');
+    assert.equal(s.activeLocationId, b.id);
+  });
+
+  ev('location:rename', 'valido: nome nuovo, tagliato a 120 caratteri', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'location:rename', { locationId: 'loc-c', name: 'x'.repeat(200) }, (st) => loc(st, 'loc-c').name.length === 120);
+    assert.equal(loc(s, 'loc-c').name, 'x'.repeat(120));
+    const s2 = await emitAndWait(c, 'location:rename', { locationId: 'loc-c', name: undefined }, (st) => loc(st, 'loc-c').name === '');
+    assert.equal(loc(s2, 'loc-c').name, '');
+  });
+
+  ev('location:rename', 'id sconosciuto: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'location:rename', { locationId: 'nessuna', name: 'X' });
+  });
+
+  ev('location:archive', 'valido: archiviata, la location attiva non cambia', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-a' }, (s) => s.activeLocationId === 'loc-a');
+    const s = await emitAndWait(c, 'location:archive', { locationId: 'loc-arch-me' }, (st) => loc(st, 'loc-arch-me').archived);
+    assert.equal(s.activeLocationId, 'loc-a');
+  });
+
+  ev('location:archive', 'archiviare la location attiva la toglie (activeLocationId null)', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-arch-active' }, (s) => s.activeLocationId === 'loc-arch-active');
+    const s = await emitAndWait(c, 'location:archive', { locationId: 'loc-arch-active' }, (st) => loc(st, 'loc-arch-active').archived);
+    assert.equal(s.activeLocationId, null);
+  });
+
+  ev('location:archive', 'id sconosciuto: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'location:archive', { locationId: 'nessuna' });
+  });
+
+  ev('location:restore', 'valido: non più archiviata', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    assert.equal(loc(before, 'loc-arch-res').archived, true);
+    const s = await emitAndWait(c, 'location:restore', { locationId: 'loc-arch-res' }, (st) => !loc(st, 'loc-arch-res').archived);
+    assert.equal(loc(s, 'loc-arch-res').archived, false);
+  });
+
+  ev('location:restore', 'id sconosciuto: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'location:restore', { locationId: 'nessuna' });
+  });
+
+  ev('location:delete', 'valido: una location archiviata viene tolta', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'location:delete', { locationId: 'loc-arch-del' }, (st) => !loc(st, 'loc-arch-del'));
+    assert.equal(loc(s, 'loc-arch-del'), undefined);
+  });
+
+  ev('location:delete', 'location non archiviata: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'location:delete', { locationId: 'loc-b' });
+    await expectUnchanged(c, 'location:delete', { locationId: 'nessuna' });
+  });
+
+  ev('location:setDefault', 'valido: solo quella è predefinita', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'location:setDefault', { locationId: 'loc-b' }, (st) => loc(st, 'loc-b').isDefault);
+    assert.deepStrictEqual(s.locations.filter((l) => l.isDefault).map((l) => l.id), ['loc-b']);
+    // Rimette la predefinita del fixture.
+    await emitAndWait(c, 'location:setDefault', { locationId: 'loc-a' }, (st) => loc(st, 'loc-a').isDefault);
+  });
+
+  ev('location:setDefault', 'id sconosciuto: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'location:setDefault', { locationId: 'nessuna' });
+  });
+
+  ev('location:reorder', 'valido: nuovo ordine delle non archiviate, archiviate in coda', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:archive', { locationId: 'loc-arch-me' }, (s) => loc(s, 'loc-arch-me').archived);
+    const before = await barrier(c);
+    const active = before.locations.filter((l) => !l.archived).map((l) => l.id);
+    const archived = before.locations.filter((l) => l.archived).map((l) => l.id);
+    const reversed = [...active].reverse();
+    const s = await emitAndWait(c, 'location:reorder', { orderedIds: reversed }, (st) => st.locations[0].id === reversed[0]);
+    assert.deepStrictEqual(s.locations.map((l) => l.id), [...reversed, ...archived]);
+    // Rimette l'ordine di prima per i test che seguono.
+    await emitAndWait(c, 'location:reorder', { orderedIds: active }, (st) => st.locations[0].id === active[0]);
+  });
+
+  ev('location:reorder', 'non permutazione o non array: invariato, state:update solo al mittente', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    const active = before.locations.filter((l) => !l.archived).map((l) => l.id);
+    for (const orderedIds of [active.slice(1), [...active.slice(0, -1), 'nessuna'], [...active.slice(0, -1), active[0]], null]) {
+      const b1 = await barrier(c);
+      c.emit('location:reorder', { orderedIds });
+      const b2 = await barrier(c);
+      assert.deepStrictEqual(persisted(b2), persisted(b1));
+      await barrier(observer);
+      // Gli state:update che portano ancora il segno della prima barriera: la
+      // barriera stessa più, solo per il mittente, la risposta al reorder.
+      const mark = b1.displayViewport.width;
+      const count = (cl) => cl.received.filter((r) => r.event === 'state:update' && r.payload.displayViewport?.width === mark).length;
+      assert.equal(count(c), 2);
+      assert.equal(count(observer), 1);
+    }
+  });
+
+  ev('location:reorder', 'id doppi o in più (sconosciuti, archiviati) vengono scartati: ordine accettato', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    const active = before.locations.filter((l) => !l.archived).map((l) => l.id);
+    const archived = before.locations.filter((l) => l.archived).map((l) => l.id);
+    const order = [active[1], active[0], ...active.slice(2)];
+    const s = await emitAndWait(c, 'location:reorder', { orderedIds: [...order, order[0], 'nessuna', ...archived] }, (st) => st.locations[0].id === order[0]);
+    assert.deepStrictEqual(s.locations.map((l) => l.id), [...order, ...archived]);
+    await emitAndWait(c, 'location:reorder', { orderedIds: active }, (st) => st.locations[0].id === active[0]);
+  });
+
   // GRUPPI SUCCESSIVI
 });
