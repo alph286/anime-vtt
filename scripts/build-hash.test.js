@@ -67,7 +67,7 @@ test('solo file tracciati da git: un file ignorato non cambia l\'impronta, una m
   const git = (...a) => execFileSync('git', a, { cwd: d, stdio: 'pipe' });
   git('init', '-q');
   git('add', '-A');
-  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'x');
+  git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', '-c', 'user.name=test', '-c', 'user.email=test@example.invalid', 'commit', '-q', '-m', 'x');
   const before = computeHash(d, listTrackedFiles(d));
   put(d, 'cache.json', 'locale');
   assert.equal(computeHash(d, listTrackedFiles(d)), before);
@@ -75,4 +75,16 @@ test('solo file tracciati da git: un file ignorato non cambia l\'impronta, una m
   assert.equal(computeHash(d, listTrackedFiles(d)), before);
   put(d, 'src/a.ts', 'modificato');
   assert.notEqual(computeHash(d, listTrackedFiles(d)), before);
+});
+
+test('cartella non repo git: errore chiaro, senza ripiegare sul disco', () => {
+  const d = mk(base());
+  // GIT_CEILING_DIRECTORIES evita che git risalga fino a un repo che contiene la cartella temporanea.
+  const prev = process.env.GIT_CEILING_DIRECTORIES;
+  process.env.GIT_CEILING_DIRECTORIES = path.dirname(d);
+  try {
+    assert.throws(() => listTrackedFiles(d), (e) => e.gitUnavailable === true && /Serve un repository git/.test(e.message) && e.message.includes(d));
+  } finally {
+    if (prev === undefined) delete process.env.GIT_CEILING_DIRECTORIES; else process.env.GIT_CEILING_DIRECTORIES = prev;
+  }
 });

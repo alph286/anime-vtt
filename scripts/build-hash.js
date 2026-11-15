@@ -28,7 +28,18 @@ function excluded(rel) {
 // legge dal disco, quindi le modifiche non committate contano; i file ignorati
 // da git (cache locali) e quelli non ancora aggiunti no.
 function listTrackedFiles(dir) {
-  const out = execFileSync('git', ['ls-files', '-z', '--', '.'], { cwd: dir, maxBuffer: 64 * 1024 * 1024 });
+  let out;
+  try {
+    out = execFileSync('git', ['ls-files', '-z', '--', '.'], { cwd: dir, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    const err = new Error(e.code === 'ENOENT'
+      ? 'Serve git per verificare la build: comando git non trovato.'
+      : e.status === 128
+        ? `Serve un repository git per verificare la build: ${dir} non lo è.`
+        : `git ls-files non è riuscito in ${dir}: ${String(e.stderr || e.message).trim()}`);
+    err.gitUnavailable = true;
+    throw err;
+  }
   return out.toString('utf8').split('\0').filter((r) => r && !excluded(r) && fs.existsSync(path.join(dir, r)));
 }
 
@@ -48,7 +59,14 @@ if (require.main === module) {
   const root = path.join(__dirname, '..');
   const hashFile = path.join(root, 'public', 'editor-app.build-hash');
   const appDir = path.join(root, 'editor-app');
-  const current = computeHash(appDir, listTrackedFiles(appDir));
+  let current;
+  try {
+    current = computeHash(appDir, listTrackedFiles(appDir));
+  } catch (e) {
+    if (!e.gitUnavailable) throw e;
+    console.error(e.message);
+    process.exit(2);
+  }
   const cmd = process.argv[2];
   if (cmd === 'write') {
     fs.writeFileSync(hashFile, current + '\n');
