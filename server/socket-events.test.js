@@ -697,5 +697,259 @@ describe('eventi socket (server condiviso)', () => {
     await expectUnchanged(c, 'handoutLibrary:delete', undefined);
   });
 
+  // --- vista live ----------------------------------------------------------------------------
+
+  const liveView = (s, id = 'loc-view') => loc(s, id).map.liveView;
+
+  ev('view:pan', 'valido: gli spostamenti si sommano all\'offset', async () => {
+    const c = await open();
+    const before = liveView(await barrier(c));
+    const s = await emitAndWait(c, 'view:pan', { locationId: 'loc-view', dx: 10, dy: -5 }, (st) => liveView(st).offsetX === before.offsetX + 10);
+    assert.deepStrictEqual(liveView(s), { ...before, offsetX: before.offsetX + 10, offsetY: before.offsetY - 5 });
+  });
+
+  ev('view:pan', 'location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'view:pan', { locationId: 'nessuna', dx: 10, dy: 10 });
+  });
+
+  ev('view:pan', 'dx non numerico: l\'offset diventa una stringa', async () => {
+    const c = await open();
+    // BUG noto: view:pan non controlla dx/dy; una stringa viene concatenata e
+    // offsetX diventa '05' invece di un numero.
+    const s = await emitAndWait(c, 'view:pan', { locationId: 'loc-view-bug', dx: '5', dy: 0 }, (st) => typeof liveView(st, 'loc-view-bug').offsetX === 'string');
+    assert.equal(liveView(s, 'loc-view-bug').offsetX, '05');
+    await emitAndWait(c, 'view:reset', { locationId: 'loc-view-bug' }, (st) => liveView(st, 'loc-view-bug').offsetX === 0);
+  });
+
+  ev('view:zoom', 'valido: scale impostato', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'view:zoom', { locationId: 'loc-view', scale: 2.5 }, (st) => liveView(st).scale === 2.5);
+    assert.equal(liveView(s).scale, 2.5);
+  });
+
+  ev('view:zoom', 'location sconosciuta: stato invariato; scale non validato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'view:zoom', { locationId: 'nessuna', scale: 3 });
+    // BUG noto: view:zoom accetta qualunque valore (negativo, stringa).
+    const s = await emitAndWait(c, 'view:zoom', { locationId: 'loc-view-bug', scale: -3 }, (st) => liveView(st, 'loc-view-bug').scale === -3);
+    assert.equal(liveView(s, 'loc-view-bug').scale, -3);
+  });
+
+  ev('view:reset', 'valido: vista di default', async () => {
+    const c = await open();
+    await emitAndWait(c, 'view:zoom', { locationId: 'loc-view', scale: 4 }, (s) => liveView(s).scale === 4);
+    const s = await emitAndWait(c, 'view:reset', { locationId: 'loc-view' }, (st) => liveView(st).scale === 1);
+    assert.deepStrictEqual(liveView(s), { scale: 1, offsetX: 0, offsetY: 0 });
+  });
+
+  ev('view:reset', 'location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'view:reset', { locationId: 'nessuna' });
+  });
+
+  // --- zone del fog (poligoni) ---------------------------------------------------------------
+
+  const polys = (s, id = 'loc-poly') => loc(s, id).map.polygons;
+
+  ev('polygon:create', 'valido: nuova zona non rivelata; nome di default', async () => {
+    const c = await open();
+    const n = polys(await barrier(c)).length;
+    const pts = [[1, 1], [5, 1], [5, 5]];
+    let s = await emitAndWait(c, 'polygon:create', { locationId: 'loc-poly', name: 'Cripta', points: pts }, (st) => polys(st).length === n + 1);
+    const created = polys(s)[n];
+    assert.deepStrictEqual({ ...created, id: 'X' }, { id: 'X', name: 'Cripta', points: pts, revealed: false });
+    s = await emitAndWait(c, 'polygon:create', { locationId: 'loc-poly', points: pts }, (st) => polys(st).length === n + 2);
+    assert.equal(polys(s)[n + 1].name, 'nuova area');
+    // Rimette le zone del fixture.
+    c.emit('polygon:delete', { locationId: 'loc-poly', polygonId: polys(s)[n].id });
+    await emitAndWait(c, 'polygon:delete', { locationId: 'loc-poly', polygonId: polys(s)[n + 1].id }, (st) => polys(st).length === n);
+  });
+
+  ev('polygon:create', 'meno di 3 punti, punti non array o location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'polygon:create', { locationId: 'loc-poly', points: [[0, 0], [1, 1]] });
+    await expectUnchanged(c, 'polygon:create', { locationId: 'loc-poly', points: 'abc' });
+    await expectUnchanged(c, 'polygon:create', { locationId: 'nessuna', points: [[0, 0], [1, 1], [2, 0]] });
+  });
+
+  ev('polygon:update', 'valido: punti e nome', async () => {
+    const c = await open();
+    const pts = [[2, 2], [8, 2], [8, 8], [2, 8]];
+    const s = await emitAndWait(c, 'polygon:update', { locationId: 'loc-poly', polygonId: 'q1', points: pts, name: 'Sala' }, (st) => polys(st).find((p) => p.id === 'q1').name === 'Sala');
+    const q1 = polys(s).find((p) => p.id === 'q1');
+    assert.deepStrictEqual(q1.points, pts);
+    assert.equal(q1.name, 'Sala');
+  });
+
+  ev('polygon:update', 'zona sconosciuta: stato invariato; punti non validati', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'polygon:update', { locationId: 'loc-poly', polygonId: 'nessuna', name: 'X' });
+    // BUG noto: polygon:update non controlla i punti (una stringa sostituisce l'elenco).
+    const s = await emitAndWait(c, 'polygon:update', { locationId: 'loc-poly-bug', polygonId: 'qb', points: 'abc' }, (st) => polys(st, 'loc-poly-bug')[0].points === 'abc');
+    assert.equal(polys(s, 'loc-poly-bug')[0].points, 'abc');
+  });
+
+  ev('polygon:delete', 'valido: zona tolta', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'polygon:delete', { locationId: 'loc-poly', polygonId: 'qdel' }, (st) => !polys(st).some((p) => p.id === 'qdel'));
+    assert.ok(!polys(s).some((p) => p.id === 'qdel'));
+  });
+
+  ev('polygon:delete', 'location o zona sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'polygon:delete', { locationId: 'nessuna', polygonId: 'q2' });
+    await expectUnchanged(c, 'polygon:delete', { locationId: 'loc-poly', polygonId: 'nessuna' });
+  });
+
+  ev('polygon:restore', 'valido: zona reinserita all\'indice, stessi id e stato', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    const idx = polys(before).findIndex((p) => p.id === 'qres');
+    const original = polys(before)[idx];
+    await emitAndWait(c, 'polygon:delete', { locationId: 'loc-poly', polygonId: 'qres' }, (st) => !polys(st).some((p) => p.id === 'qres'));
+    const restored = { ...original, revealed: 'sì', extra: 'ignorato' };
+    const s = await emitAndWait(c, 'polygon:restore', { locationId: 'loc-poly', polygon: restored, index: idx }, (st) => polys(st).some((p) => p.id === 'qres'));
+    assert.deepStrictEqual(polys(s)[idx], { ...original, revealed: true });
+    assert.deepStrictEqual(polys(s).map((p) => p.id), polys(before).map((p) => p.id));
+  });
+
+  ev('polygon:restore', 'id già presente, senza punti o location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'polygon:restore', { locationId: 'loc-poly', polygon: poly('q2'), index: 0 });
+    await expectUnchanged(c, 'polygon:restore', { locationId: 'loc-poly', polygon: { id: 'nuova', name: 'X' }, index: 0 });
+    await expectUnchanged(c, 'polygon:restore', { locationId: 'nessuna', polygon: poly('zz'), index: 0 });
+  });
+
+  ev('polygon:reorder', 'valido: permutazione esatta', async () => {
+    const c = await open();
+    const ids = polys(await barrier(c)).map((p) => p.id);
+    const reversed = [...ids].reverse();
+    const s = await emitAndWait(c, 'polygon:reorder', { locationId: 'loc-poly', orderedIds: reversed }, (st) => polys(st)[0].id === reversed[0]);
+    assert.deepStrictEqual(polys(s).map((p) => p.id), reversed);
+  });
+
+  ev('polygon:reorder', 'non permutazione: invariato (il mittente riceve lo stato)', async () => {
+    const c = await open();
+    const ids = polys(await barrier(c)).map((p) => p.id);
+    await expectUnchanged(c, 'polygon:reorder', { locationId: 'loc-poly', orderedIds: ids.slice(1) });
+    await expectUnchanged(c, 'polygon:reorder', { locationId: 'loc-poly', orderedIds: null });
+    await expectUnchanged(c, 'polygon:reorder', { locationId: 'nessuna', orderedIds: ids });
+  });
+
+  // --- mappa, griglia, bussola --------------------------------------------------------------
+
+  const mapOf = (s, id = 'loc-map') => loc(s, id).map;
+
+  ev('mapScale:set', 'valido: scala impostata', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'mapScale:set', { locationId: 'loc-map', scale: 1.5 }, (st) => mapOf(st).scale === 1.5);
+    assert.equal(mapOf(s).scale, 1.5);
+  });
+
+  ev('mapScale:set', 'location sconosciuta: stato invariato; scala non validata', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'mapScale:set', { locationId: 'nessuna', scale: 2 });
+    // BUG noto: mapScale:set accetta qualunque valore.
+    const s = await emitAndWait(c, 'mapScale:set', { locationId: 'loc-map-bug', scale: 'grande' }, (st) => mapOf(st, 'loc-map-bug').scale === 'grande');
+    assert.equal(mapOf(s, 'loc-map-bug').scale, 'grande');
+  });
+
+  ev('mapFlip:toggle', 'valido: flip180 invertito', async () => {
+    const c = await open();
+    const was = mapOf(await barrier(c)).flip180;
+    const s = await emitAndWait(c, 'mapFlip:toggle', { locationId: 'loc-map' }, (st) => mapOf(st).flip180 === !was);
+    assert.equal(mapOf(s).flip180, !was);
+  });
+
+  ev('mapFlip:toggle', 'location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'mapFlip:toggle', { locationId: 'nessuna' });
+  });
+
+  ev('mapRotate90:toggle', 'valido: rotate90 invertito', async () => {
+    const c = await open();
+    const was = mapOf(await barrier(c)).rotate90;
+    const s = await emitAndWait(c, 'mapRotate90:toggle', { locationId: 'loc-map' }, (st) => mapOf(st).rotate90 === !was);
+    assert.equal(mapOf(s).rotate90, !was);
+  });
+
+  ev('mapRotate90:toggle', 'location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'mapRotate90:toggle', { locationId: 'nessuna' });
+  });
+
+  ev('grid:update', 'valido: campi semplici; base e divisioni danno la cella', async () => {
+    const c = await open();
+    let s = await emitAndWait(c, 'grid:update', { locationId: 'loc-map', enabled: true, color: '#ff0000', opacity: 0.5, lineWidth: 2, offsetX: 3, offsetY: 4 }, (st) => mapOf(st).grid.color === '#ff0000');
+    assert.deepStrictEqual(
+      (({ enabled, color, opacity, lineWidth, offsetX, offsetY }) => ({ enabled, color, opacity, lineWidth, offsetX, offsetY }))(mapOf(s).grid),
+      { enabled: true, color: '#ff0000', opacity: 0.5, lineWidth: 2, offsetX: 3, offsetY: 4 }
+    );
+    s = await emitAndWait(c, 'grid:update', { locationId: 'loc-map', baseCellSize: 150, divisions: 3.4 }, (st) => mapOf(st).grid.baseCellSize === 150);
+    assert.deepStrictEqual([mapOf(s).grid.baseCellSize, mapOf(s).grid.divisions, mapOf(s).grid.cellSize], [150, 3, 50]);
+    s = await emitAndWait(c, 'grid:update', { locationId: 'loc-map', divisions: 0 }, (st) => mapOf(st).grid.divisions === 1);
+    assert.equal(mapOf(s).grid.cellSize, 150);
+    s = await emitAndWait(c, 'grid:update', { locationId: 'loc-map', baseCellSize: 10, divisions: 5 }, (st) => mapOf(st).grid.baseCellSize === 10);
+    assert.equal(mapOf(s).grid.cellSize, 4, 'cella minima 4');
+  });
+
+  ev('grid:update', 'cellSize diretto: diventa la base e azzera le divisioni', async () => {
+    const c = await open();
+    await emitAndWait(c, 'grid:update', { locationId: 'loc-map', baseCellSize: 120, divisions: 2 }, (st) => mapOf(st).grid.divisions === 2);
+    const s = await emitAndWait(c, 'grid:update', { locationId: 'loc-map', cellSize: 70 }, (st) => mapOf(st).grid.cellSize === 70);
+    assert.deepStrictEqual([mapOf(s).grid.baseCellSize, mapOf(s).grid.divisions, mapOf(s).grid.cellSize], [70, 1, 70]);
+  });
+
+  ev('grid:update', 'location sconosciuta: stato invariato; divisioni non numeriche', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'grid:update', { locationId: 'nessuna', enabled: true });
+    // BUG noto: divisions non numerico diventa NaN, e cellSize con lui (null nel JSON).
+    const s = await emitAndWait(c, 'grid:update', { locationId: 'loc-map-bug', divisions: 'tre' }, (st) => mapOf(st, 'loc-map-bug').grid.divisions === null);
+    assert.equal(mapOf(s, 'loc-map-bug').grid.cellSize, null);
+  });
+
+  ev('compass:update', 'valido: x/y limitati a 0-100, rotazione modulo 360', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'compass:update', { locationId: 'loc-map', visible: 1, x: 150, y: -10, rotation: -90.4 }, (st) => mapOf(st).compass.visible === true);
+    assert.deepStrictEqual(mapOf(s).compass, { visible: true, x: 100, y: 0, rotation: 270 });
+  });
+
+  ev('compass:update', 'location sconosciuta: stato invariato; x non numerico', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'compass:update', { locationId: 'nessuna', visible: true });
+    // BUG noto: x non numerico diventa NaN (null nel JSON).
+    const s = await emitAndWait(c, 'compass:update', { locationId: 'loc-map-bug', x: 'abc' }, (st) => mapOf(st, 'loc-map-bug').compass.x === null);
+    assert.equal(mapOf(s, 'loc-map-bug').compass.x, null);
+  });
+
+  ev('gridPreset:save', 'valido: la griglia della location diventa la predefinita', async () => {
+    const c = await open();
+    await emitAndWait(c, 'grid:update', { locationId: 'loc-map', cellSize: 64, offsetX: 7, offsetY: 8, color: '#00ff00', lineWidth: 1, opacity: 0.4 }, (st) => mapOf(st).grid.cellSize === 64);
+    const s = await emitAndWait(c, 'gridPreset:save', { locationId: 'loc-map' }, (st) => st.gridPreset.cellSize === 64);
+    assert.deepStrictEqual(s.gridPreset, { cellSize: 64, offsetX: 7, offsetY: 8, color: '#00ff00', lineWidth: 1, opacity: 0.4 });
+  });
+
+  ev('gridPreset:save', 'location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'gridPreset:save', { locationId: 'nessuna' });
+  });
+
+  ev('gridPreset:apply', 'valido: griglia dalla predefinita, divisioni azzerate', async () => {
+    const c = await open();
+    await emitAndWait(c, 'grid:update', { locationId: 'loc-map', cellSize: 80, offsetX: 1, offsetY: 2, color: '#0000ff', lineWidth: 0.5, opacity: 0.9 }, (st) => mapOf(st).grid.cellSize === 80);
+    await emitAndWait(c, 'gridPreset:save', { locationId: 'loc-map' }, (st) => st.gridPreset.cellSize === 80);
+    await emitAndWait(c, 'grid:update', { locationId: 'loc-map2', enabled: true, baseCellSize: 200, divisions: 4 }, (st) => mapOf(st, 'loc-map2').grid.divisions === 4);
+    const s = await emitAndWait(c, 'gridPreset:apply', { locationId: 'loc-map2' }, (st) => mapOf(st, 'loc-map2').grid.cellSize === 80);
+    assert.deepStrictEqual(mapOf(s, 'loc-map2').grid, {
+      enabled: true, cellSize: 80, baseCellSize: 80, divisions: 1, offsetX: 1, offsetY: 2, color: '#0000ff', lineWidth: 0.5, opacity: 0.9
+    });
+  });
+
+  ev('gridPreset:apply', 'location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'gridPreset:apply', { locationId: 'nessuna' });
+  });
+
   // GRUPPI SUCCESSIVI
 });
