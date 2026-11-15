@@ -1575,58 +1575,83 @@ describe('stato dopo il ripristino di un backup', () => {
   });
 });
 
-// --- eccezione non gestita in un listener (server a parte: il processo muore) -----------------
+// --- payload mancante o di tipo sbagliato (server a parte: si controlla che resti vivo) -----
 
-describe('eccezione in un handler', () => {
+describe('payload non oggetto', () => {
   let srv;
+  let c;
+
+  // Senza payload, null, numero, stringa, array, booleano: il server li
+  // normalizza a `{}` (protectSocketHandlers in server/index.js).
+  const payloads = [
+    ['senza payload', undefined],
+    ['null', null],
+    ['numero', 42],
+    ['stringa', 'testo'],
+    ['array', [1, 2]],
+    ['booleano', true]
+  ];
 
   before(async () => {
     srv = await startServer();
+    c = await connect(srv);
   });
 
   after(async () => {
+    if (c) c.disconnect();
     if (srv) await srv.stop();
   });
 
-  test('extra | hello senza payload fa terminare il server', async () => {
-    const c = await connect(srv);
-    try {
-      // BUG noto: gli handler che destrutturano il payload senza default
-      // (`({ role }) =>`, `({ locationId }) =>`, ...) lanciano TypeError se
-      // l'evento arriva senza argomenti; socket.io 4 chiama i listener in
-      // process.nextTick, quindi l'eccezione non è gestita e il processo
-      // termina. `hello` passa anche con il PIN acceso: basta un client qualunque.
-      c.emit('hello');
-      let timer;
-      const { code } = await Promise.race([
-        srv.exited,
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('il server è ancora vivo')), 3000); })
-      ]).finally(() => clearTimeout(timer));
-      assert.notEqual(code, 0);
-      assert.match(srv.output(), /TypeError/);
-    } finally {
-      c.disconnect();
+  async function alive() {
+    const state = await barrier(c);
+    const code = await Promise.race([srv.exited.then((e) => e.code), new Promise((r) => setTimeout(() => r('vivo'), 100))]);
+    assert.equal(code, 'vivo', `il server è terminato:\n${srv.output()}`);
+    return state;
+  }
+
+  // handler che destruttura senza default, con `= {}`, un aoe:* pubblico e uno che
+  // cambia stato se riceve dati validi
+  for (const event of ['hello', 'location:set', 'audio:toggle', 'handoutLibrary:delete', 'aoe:place', 'aoe:remove', 'ping:show', 'location:rename']) {
+    for (const [label, payload] of payloads) {
+      test(`${event} | ${label}: il server resta vivo e lo stato non cambia`, async () => {
+        const before = await alive();
+        if (payload === undefined) c.emit(event);
+        else c.emit(event, payload);
+        const after = await alive();
+        assert.deepStrictEqual(persisted(after), persisted(before));
+      });
+    }
+  }
+
+  test('image:sendTelegram | senza payload e con null: nessuna caduta, errore al mittente senza rete', async () => {
+    for (const payload of [undefined, null, 7, 'x']) {
+      const result = waitFor(c, 'telegram:sendResult', () => true);
+      if (payload === undefined) c.emit('image:sendTelegram');
+      else c.emit('image:sendTelegram', payload);
+      // con `{}` il media non esiste: errore immediato, prima di ogni chiamata di rete (e senza bot configurato)
+      const r = await result;
+      assert.equal(r.ok, false);
+      assert.equal(r.error, 'Immagine non trovata');
+      await alive();
     }
   });
 
-  test('extra | audio:toggle con payload null fa terminare il server (anche con default = {})', async () => {
-    const own = await startServer();
-    const c = await connect(own);
-    try {
-      // BUG noto: il default `= {}` vale solo per undefined; con `null` anche gli
-      // handler che lo hanno (audio:toggle, handoutLibrary:delete, ...) lanciano
-      // TypeError sul destrutturamento e il processo termina.
-      c.emit('audio:toggle', null);
-      let timer;
-      const { code } = await Promise.race([
-        own.exited,
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('il server è ancora vivo')), 3000); })
-      ]).finally(() => clearTimeout(timer));
-      assert.notEqual(code, 0);
-      assert.match(own.output(), /TypeError/);
-    } finally {
-      c.disconnect();
-      await own.stop();
-    }
+  test('dopo i payload sbagliati un evento valido funziona ancora', async () => {
+    const wait = waitState(c, (s) => s.displayViewport && s.displayViewport.width === 1234);
+    c.emit('display:viewport', { width: 1234, height: 10 });
+    const s = await wait;
+    assert.equal(s.displayViewport.height, 10);
+    await alive();
+  });
+
+  test('disconnect riceve ancora la stringa reason (non è normalizzato)', async () => {
+    const d = await connect(srv);
+    const ready = waitFor(c, 'display:status', (s) => s.connected);
+    d.emit('hello', { role: 'display' });
+    await ready;
+    const gone = waitFor(c, 'display:status', (s) => !s.connected);
+    d.disconnect();
+    await gone;
+    await alive();
   });
 });
