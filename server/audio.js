@@ -223,6 +223,18 @@ function addLibraryItem(state, { name, file }) {
   return item;
 }
 
+// Come addLibraryItem, ma se l'archivio ha gia una voce con lo stesso contenuto
+// (`audioKey(file)` uguale, null = non confrontabile) la riusa. `reused` dice
+// al chiamante che il file appena caricato e un doppione da cancellare.
+function addLibraryItemDeduped(state, { name, file }, audioKey) {
+  const key = typeof audioKey === 'function' ? audioKey(file) : null;
+  if (key) {
+    const same = (state.audioLibrary || []).find((it) => it.file !== file && audioKey(it.file) === key);
+    if (same) return { item: same, reused: true };
+  }
+  return { item: addLibraryItem(state, { name, file }), reused: false };
+}
+
 function updateLibraryItem(state, audioId, fields) {
   const item = findLibraryItem(state, audioId);
   if (!item || !fields) return false;
@@ -285,5 +297,5 @@ function libraryFiles(state) {
 module.exports = {
   AUDIO_KINDS, DEFAULT_TRACK_VOLUME, emptyAudio, migrateLocationAudio, findTrack, addTrack,
   toggleTrack, setTrackVolume, updateTrack, removeTrack, oneshotEnded, clearOneshots, audioFilesOf,
-  syncAudioLibrary, addLibraryItem, updateLibraryItem, removeLibraryItem, addTrackFromLibrary, copyTracks, libraryFiles
+  syncAudioLibrary, addLibraryItem, addLibraryItemDeduped, updateLibraryItem, removeLibraryItem, addTrackFromLibrary, copyTracks, libraryFiles
 };

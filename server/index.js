@@ -314,10 +314,12 @@ app.post('/api/upload/audio', uploadAudio.single('file'), (req, res) => {
     if (req.file) deleteUploadedFile(AUDIO_DIR, req.file.filename);
     return res.status(400).json({ error: 'file, location o kind mancante/non valido' });
   }
-  const item = audioModel.addLibraryItem(state, {
+  // Stesso contenuto di una voce gia presente: la riusa e scarta il file appena caricato.
+  const { item, reused } = audioModel.addLibraryItemDeduped(state, {
     name: req.body.name || req.file.originalname,
     file: req.file.filename
-  });
+  }, audioContentKey);
+  if (reused) deleteUploadedFile(AUDIO_DIR, req.file.filename);
   const track = wantsRow ? audioModel.addTrackFromLibrary(state, location, kind, item.id) : undefined;
   saveState(state);
   broadcastState();
