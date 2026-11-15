@@ -1193,5 +1193,171 @@ describe('eventi socket (server condiviso)', () => {
     });
   });
 
+  // --- audio ------------------------------------------------------------------------------------
+
+  const audioOf = (s, id = 'loc-audio') => loc(s, id).map.audio;
+  const track = (s, kind, id, locId = 'loc-audio') => audioOf(s, locId)[kind].find((t) => t.id === id);
+  const setActive = (c, id) => emitAndWait(c, 'location:set', { locationId: id }, (s) => s.activeLocationId === id);
+
+  ev('audio:toggle', 'background della location attiva: on/off, anche senza display', async () => {
+    const c = await open();
+    await setActive(c, 'loc-audio');
+    const was = track(await barrier(c), 'background', 'bg1').on;
+    let s = await emitAndWait(c, 'audio:toggle', { trackId: 'bg1' }, (st) => track(st, 'background', 'bg1').on === !was);
+    assert.equal(track(s, 'background', 'bg1').on, !was);
+    s = await emitAndWait(c, 'audio:toggle', { trackId: 'bg1' }, (st) => track(st, 'background', 'bg1').on === was);
+    assert.equal(track(s, 'background', 'bg1').on, was);
+  });
+
+  ev('audio:toggle', 'one-shot con display: parte con un seq nuovo, ripremuto si ferma', async () => {
+    const c = await open();
+    await openDisplay();
+    await setActive(c, 'loc-audio');
+    const seqBefore = (await barrier(c)).audioOneshotSeq;
+    let s = await emitAndWait(c, 'audio:toggle', { trackId: 'os1' }, (st) => 'os1' in st.audioOneshots);
+    assert.deepStrictEqual(s.audioOneshots, { os1: seqBefore + 1 });
+    assert.equal(s.audioOneshotSeq, seqBefore + 1);
+    s = await emitAndWait(c, 'audio:toggle', { trackId: 'os1' }, (st) => !('os1' in st.audioOneshots));
+    assert.deepStrictEqual(s.audioOneshots, {});
+    assert.equal(s.audioOneshotSeq, seqBefore + 1);
+  });
+
+  ev('audio:toggle', 'one-shot senza display, traccia sconosciuta o di un\'altra location: stato invariato', async () => {
+    const c = await open();
+    await setActive(c, 'loc-audio');
+    await expectUnchanged(c, 'audio:toggle', { trackId: 'os1' });
+    await expectUnchanged(c, 'audio:toggle', { trackId: 'nessuna' });
+    await expectUnchanged(c, 'audio:toggle', { trackId: 'bg2' });
+    await expectUnchanged(c, 'audio:toggle', undefined);
+  });
+
+  ev('audio:volume', 'valido: volume limitato a 0-1', async () => {
+    const c = await open();
+    let s = await emitAndWait(c, 'audio:volume', { locationId: 'loc-audio', trackId: 'bg1', volume: 1.7 }, (st) => track(st, 'background', 'bg1').volume === 1);
+    assert.equal(track(s, 'background', 'bg1').volume, 1);
+    s = await emitAndWait(c, 'audio:volume', { locationId: 'loc-audio', trackId: 'os1', volume: 0.3 }, (st) => track(st, 'oneshot', 'os1').volume === 0.3);
+    assert.equal(track(s, 'oneshot', 'os1').volume, 0.3);
+  });
+
+  ev('audio:volume', 'volume non numerico o traccia sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'audio:volume', { locationId: 'loc-audio', trackId: 'bg1', volume: 'forte' });
+    await expectUnchanged(c, 'audio:volume', { locationId: 'loc-audio', trackId: 'nessuna', volume: 0.5 });
+    await expectUnchanged(c, 'audio:volume', { locationId: 'nessuna', trackId: 'bg1', volume: 0.5 });
+  });
+
+  ev('audio:update', 'valido: restartOnStop (solo background) e handout', async () => {
+    const c = await open();
+    let s = await emitAndWait(c, 'audio:update', { locationId: 'loc-audio', trackId: 'bg1', restartOnStop: true, handout: true }, (st) => track(st, 'background', 'bg1').handout === true);
+    assert.deepStrictEqual([track(s, 'background', 'bg1').restartOnStop, track(s, 'background', 'bg1').handout], [true, true]);
+    s = await emitAndWait(c, 'audio:update', { locationId: 'loc-audio', trackId: 'os1', restartOnStop: true, handout: true }, (st) => track(st, 'oneshot', 'os1').handout === true);
+    assert.equal(track(s, 'oneshot', 'os1').restartOnStop, undefined);
+  });
+
+  ev('audio:update', 'nessun campo booleano o traccia sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'audio:update', { locationId: 'loc-audio', trackId: 'bg1', restartOnStop: 'sì', name: 'Nuovo' });
+    await expectUnchanged(c, 'audio:update', { locationId: 'loc-audio', trackId: 'os1', restartOnStop: false });
+    await expectUnchanged(c, 'audio:update', { locationId: 'loc-audio', trackId: 'nessuna', handout: true });
+  });
+
+  ev('audio:delete', 'valido: riga tolta, la voce d\'archivio e il file restano', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'audio:delete', { locationId: 'loc-audio', trackId: 'bgx' }, (st) => !track(st, 'background', 'bgx'));
+    assert.equal(track(s, 'background', 'bgx'), undefined);
+    assert.ok(s.audioLibrary.some((i) => i.id === 'au3'));
+    assert.ok(fs.existsSync(path.join(server.storageDir, 'audio', 'au3.mp3')));
+  });
+
+  ev('audio:delete', 'traccia o location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'audio:delete', { locationId: 'loc-audio', trackId: 'nessuna' });
+    await expectUnchanged(c, 'audio:delete', { locationId: 'nessuna', trackId: 'bg1' });
+  });
+
+  ev('audio:add', 'valido: riga nuova dall\'archivio', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'audio:add', { locationId: 'loc-audio3', kind: 'oneshot', audioId: 'au1' }, (st) => audioOf(st, 'loc-audio3').oneshot.length === 1);
+    const row = audioOf(s, 'loc-audio3').oneshot[0];
+    assert.deepStrictEqual({ ...row, id: 'X' }, { id: 'X', name: 'Pioggia', file: 'au1.mp3', icon: 'music', volume: 0.7, handout: false, audioId: 'au1' });
+  });
+
+  ev('audio:add', 'voce, kind o location sconosciuti: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'audio:add', { locationId: 'loc-audio3', kind: 'oneshot', audioId: 'nessuna' });
+    await expectUnchanged(c, 'audio:add', { locationId: 'loc-audio3', kind: 'loop', audioId: 'au1' });
+    await expectUnchanged(c, 'audio:add', { locationId: 'nessuna', kind: 'background', audioId: 'au1' });
+  });
+
+  ev('audio:copyFrom', 'valido: righe copiate con id nuovi, i doppioni saltati', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    const s = await emitAndWait(c, 'audio:copyFrom', { locationId: 'loc-audio4', fromLocationId: 'loc-audio2' }, (st) => audioOf(st, 'loc-audio4').background.length === 1);
+    const from = audioOf(before, 'loc-audio2');
+    const to = audioOf(s, 'loc-audio4');
+    assert.deepStrictEqual(to.background.map((t) => t.audioId), from.background.map((t) => t.audioId));
+    assert.deepStrictEqual(to.oneshot.map((t) => t.audioId), from.oneshot.map((t) => t.audioId));
+    assert.notEqual(to.background[0].id, from.background[0].id);
+    // Seconda copia: tutto già presente, niente da aggiungere.
+    await expectUnchanged(c, 'audio:copyFrom', { locationId: 'loc-audio4', fromLocationId: 'loc-audio2' });
+  });
+
+  ev('audio:copyFrom', 'stessa location o location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'audio:copyFrom', { locationId: 'loc-audio2', fromLocationId: 'loc-audio2' });
+    await expectUnchanged(c, 'audio:copyFrom', { locationId: 'nessuna', fromLocationId: 'loc-audio2' });
+    await expectUnchanged(c, 'audio:copyFrom', { locationId: 'loc-audio4', fromLocationId: 'nessuna' });
+  });
+
+  ev('audioLibrary:update', 'valido: nome e icona propagati a tutte le righe', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'audioLibrary:update', { audioId: 'au2', name: 'Tuono forte', icon: 'cloud-lightning' }, (st) => st.audioLibrary.find((i) => i.id === 'au2').name === 'Tuono forte');
+    assert.deepStrictEqual(s.audioLibrary.find((i) => i.id === 'au2'), { id: 'au2', name: 'Tuono forte', icon: 'cloud-lightning', file: 'au2.mp3' });
+    const row = track(s, 'oneshot', 'os1');
+    assert.deepStrictEqual([row.name, row.icon], ['Tuono forte', 'cloud-lightning']);
+  });
+
+  ev('audioLibrary:update', 'icona non valida senza nome, voce sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'audioLibrary:update', { audioId: 'au2', icon: 'Non Valida!' });
+    await expectUnchanged(c, 'audioLibrary:update', { audioId: 'nessuna', name: 'X' });
+  });
+
+  ev('audioLibrary:delete', 'valido: voce e righe tolte, file cancellato', async () => {
+    const c = await open();
+    const file = path.join(server.storageDir, 'audio', 'audel.mp3');
+    assert.ok(fs.existsSync(file));
+    const s = await emitAndWait(c, 'audioLibrary:delete', { audioId: 'audel' }, (st) => !st.audioLibrary.some((i) => i.id === 'audel'));
+    assert.deepStrictEqual(audioOf(s, 'loc-audio-del').background, []);
+    assert.ok(!fs.existsSync(file));
+  });
+
+  ev('audioLibrary:delete', 'voce sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'audioLibrary:delete', { audioId: 'nessuna' });
+    await expectUnchanged(c, 'audioLibrary:delete', undefined);
+  });
+
+  ev('audio:oneshotEnded', 'dal display con il seq giusto: one-shot tolto', async () => {
+    const c = await open();
+    const d = await openDisplay();
+    await setActive(c, 'loc-audio');
+    const s = await emitAndWait(c, 'audio:toggle', { trackId: 'os1' }, (st) => 'os1' in st.audioOneshots);
+    const seq = s.audioOneshots.os1;
+    const done = await emitAndWait(d, 'audio:oneshotEnded', { trackId: 'os1', seq }, (st) => !('os1' in st.audioOneshots));
+    assert.deepStrictEqual(done.audioOneshots, {});
+  });
+
+  ev('audio:oneshotEnded', 'seq vecchio o da un client che non è display: stato invariato', async () => {
+    const c = await open();
+    const d = await openDisplay();
+    await setActive(c, 'loc-audio');
+    const s = await emitAndWait(c, 'audio:toggle', { trackId: 'os1' }, (st) => 'os1' in st.audioOneshots);
+    const seq = s.audioOneshots.os1;
+    await expectUnchanged(d, 'audio:oneshotEnded', { trackId: 'os1', seq: seq - 1 });
+    await expectUnchanged(c, 'audio:oneshotEnded', { trackId: 'os1', seq });
+    await expectUnchanged(d, 'audio:oneshotEnded', undefined);
+  });
+
   // GRUPPI SUCCESSIVI
 });
