@@ -13,8 +13,10 @@
     "build:control": "cd editor-app && npm install && npm run build:control",
     "dev:party": "cd editor-app && npm run dev:party",
     "build:party": "cd editor-app && npm install && npm run build:party",
-    "build:all": "npm run build:editor && npm run build:control && npm run build:party",
-    "test:server": "node --test server/*.test.js public/shared/media.test.js public/shared/audio-fade.test.js"
+    "build:all": "npm run build:editor && npm run build:control && npm run build:party && node scripts/build-hash.js write",
+    "check:build": "node scripts/build-hash.js check",
+    "test:server": "node --test server/*.test.js scripts/*.test.js public/shared/media.test.js public/shared/audio-fade.test.js",
+    "test": "npm run test:server && npm --prefix editor-app test && npm run check:build"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
