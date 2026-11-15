@@ -478,5 +478,224 @@ describe('eventi socket (server condiviso)', () => {
     await emitAndWait(c, 'location:reorder', { orderedIds: active }, (st) => st.locations[0].id === active[0]);
   });
 
+  // --- fog of war ----------------------------------------------------------------------
+
+  ev('fow:toggle', 'valido: inverte revealed della zona', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    const was = loc(before, 'loc-fog').map.polygons.find((p) => p.id === 'p1').revealed;
+    const s = await emitAndWait(c, 'fow:toggle', { locationId: 'loc-fog', polygonId: 'p1' }, (st) => loc(st, 'loc-fog').map.polygons.find((p) => p.id === 'p1').revealed !== was);
+    assert.equal(loc(s, 'loc-fog').map.polygons.find((p) => p.id === 'p1').revealed, !was);
+  });
+
+  ev('fow:toggle', 'zona o location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'fow:toggle', { locationId: 'loc-fog', polygonId: 'nessuna' });
+    await expectUnchanged(c, 'fow:toggle', { locationId: 'nessuna', polygonId: 'p1' });
+  });
+
+  ev('fow:setAll', 'valido: tutte le zone prendono il valore (convertito a booleano)', async () => {
+    const c = await open();
+    let s = await emitAndWait(c, 'fow:setAll', { locationId: 'loc-fog', revealed: 1 }, (st) => loc(st, 'loc-fog').map.polygons.every((p) => p.revealed === true));
+    assert.deepStrictEqual(loc(s, 'loc-fog').map.polygons.map((p) => p.revealed), [true, true, true]);
+    s = await emitAndWait(c, 'fow:setAll', { locationId: 'loc-fog', revealed: undefined }, (st) => loc(st, 'loc-fog').map.polygons.every((p) => p.revealed === false));
+    assert.deepStrictEqual(loc(s, 'loc-fog').map.polygons.map((p) => p.revealed), [false, false, false]);
+  });
+
+  ev('fow:setAll', 'location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'fow:setAll', { locationId: 'nessuna', revealed: true });
+  });
+
+  // --- media (immagini, video, pagine web) ----------------------------------------------
+
+  ev('image:show', 'valido: activeImageId, non scritto su disco', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-img' }, (s) => s.activeLocationId === 'loc-img');
+    const s = await emitAndWait(c, 'image:show', { imageId: 'img2' }, (st) => st.activeImageId === 'img2');
+    assert.equal(s.activeImageId, 'img2');
+    const onDisk = JSON.parse(fs.readFileSync(path.join(server.dataDir, 'state.json'), 'utf-8'));
+    assert.equal(onDisk.activeImageId, null);
+  });
+
+  ev('image:show', 'media di un\'altra location o sconosciuto: stato invariato', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-img' }, (s) => s.activeLocationId === 'loc-img');
+    await expectUnchanged(c, 'image:show', { imageId: 'b-img' });
+    await expectUnchanged(c, 'image:show', { imageId: 'nessuna' });
+  });
+
+  ev('image:hide', 'valido: toglie il media mostrato', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-img' }, (s) => s.activeLocationId === 'loc-img');
+    await emitAndWait(c, 'image:show', { imageId: 'img1' }, (s) => s.activeImageId === 'img1');
+    const s = await emitAndWait(c, 'image:hide', undefined, (st) => st.activeImageId === null);
+    assert.equal(s.activeImageId, null);
+  });
+
+  ev('image:hide', 'senza media mostrato: resta null e trasmette comunque', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-img' }, (s) => s.activeLocationId === 'loc-img');
+    const before = await barrier(c);
+    assert.equal(before.activeImageId, null);
+    const start = observer.received.length;
+    const s = await emitAndWait(c, 'image:hide', undefined, () => true);
+    assert.deepStrictEqual(persisted(s), persisted(before));
+    await barrier(observer);
+    assert.ok(observer.received.slice(start).some((r) => r.event === 'state:update' && r.payload.displayViewport.width === before.displayViewport.width));
+  });
+
+  ev('image:rename', 'valido: nome nuovo, tagliato a 120', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'image:rename', { locationId: 'loc-img', imageId: 'img3', name: 'n'.repeat(130) }, (st) => loc(st, 'loc-img').images.find((i) => i.id === 'img3').name.length === 120);
+    assert.equal(loc(s, 'loc-img').images.find((i) => i.id === 'img3').name, 'n'.repeat(120));
+  });
+
+  ev('image:rename', 'media o location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'image:rename', { locationId: 'loc-img', imageId: 'nessuna', name: 'X' });
+    await expectUnchanged(c, 'image:rename', { locationId: 'loc-b', imageId: 'img1', name: 'X' });
+  });
+
+  ev('image:delete', 'valido: media tolto e file cancellato', async () => {
+    const c = await open();
+    const file = path.join(server.storageDir, 'images', 'imgdel.png');
+    assert.ok(fs.existsSync(file));
+    const s = await emitAndWait(c, 'image:delete', { locationId: 'loc-img', imageId: 'imgdel' }, (st) => !loc(st, 'loc-img').images.some((i) => i.id === 'imgdel'));
+    assert.ok(!loc(s, 'loc-img').images.some((i) => i.id === 'imgdel'));
+    assert.ok(!fs.existsSync(file));
+  });
+
+  ev('image:delete', 'eliminare il media mostrato azzera activeImageId', async () => {
+    const c = await open();
+    await emitAndWait(c, 'location:set', { locationId: 'loc-img' }, (s) => s.activeLocationId === 'loc-img');
+    await emitAndWait(c, 'image:show', { imageId: 'imgsd' }, (s) => s.activeImageId === 'imgsd');
+    const s = await emitAndWait(c, 'image:delete', { locationId: 'loc-img', imageId: 'imgsd' }, (st) => !loc(st, 'loc-img').images.some((i) => i.id === 'imgsd'));
+    assert.equal(s.activeImageId, null);
+  });
+
+  ev('image:delete', 'media sconosciuto: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'image:delete', { locationId: 'loc-img', imageId: 'nessuna' });
+    await expectUnchanged(c, 'image:delete', { locationId: 'nessuna', imageId: 'img1' });
+  });
+
+  ev('image:reorder', 'valido: permutazione esatta', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    const ids = loc(before, 'loc-img').images.map((i) => i.id);
+    const reversed = [...ids].reverse();
+    const s = await emitAndWait(c, 'image:reorder', { locationId: 'loc-img', orderedIds: reversed }, (st) => loc(st, 'loc-img').images[0].id === reversed[0]);
+    assert.deepStrictEqual(loc(s, 'loc-img').images.map((i) => i.id), reversed);
+  });
+
+  ev('image:reorder', 'id mancante, doppio o non array: stato invariato', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    const ids = loc(before, 'loc-img').images.map((i) => i.id);
+    await expectUnchanged(c, 'image:reorder', { locationId: 'loc-img', orderedIds: ids.slice(1) });
+    await expectUnchanged(c, 'image:reorder', { locationId: 'loc-img', orderedIds: [...ids.slice(1), ids[1]] });
+    await expectUnchanged(c, 'image:reorder', { locationId: 'loc-img', orderedIds: 'no' });
+  });
+
+  ev('image:caption', 'valido: didascalia tagliata a 1024', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'image:caption', { locationId: 'loc-img', imageId: 'img1', caption: 'c'.repeat(1100) }, (st) => loc(st, 'loc-img').images.find((i) => i.id === 'img1').caption.length === 1024);
+    assert.equal(loc(s, 'loc-img').images.find((i) => i.id === 'img1').caption, 'c'.repeat(1024));
+  });
+
+  ev('image:caption', 'media sconosciuto: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'image:caption', { locationId: 'loc-img', imageId: 'nessuna', caption: 'X' });
+  });
+
+  ev('image:destination', 'valido: destinazione per nome; vuota diventa null', async () => {
+    const c = await open();
+    const find = (st) => loc(st, 'loc-img').images.find((i) => i.id === 'img1');
+    let s = await emitAndWait(c, 'image:destination', { locationId: 'loc-img', imageId: 'img1', destination: 'Gruppo' }, (st) => find(st).telegramDestination === 'Gruppo');
+    assert.equal(find(s).telegramDestination, 'Gruppo');
+    s = await emitAndWait(c, 'image:destination', { locationId: 'loc-img', imageId: 'img1', destination: '' }, (st) => find(st).telegramDestination === null);
+    assert.equal(find(s).telegramDestination, null);
+  });
+
+  ev('image:destination', 'media sconosciuto: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'image:destination', { locationId: 'loc-img', imageId: 'nessuna', destination: 'Gruppo' });
+  });
+
+  ev('image:sendTelegram', 'media vero senza bot configurato: risposta di errore solo al mittente', async () => {
+    const c = await open();
+    const result = waitFor(c, 'telegram:sendResult', (r) => r.imageId === 'img2');
+    const before = await barrier(c);
+    const start = observer.received.length;
+    c.emit('image:sendTelegram', { locationId: 'loc-img', imageId: 'img2' });
+    assert.deepStrictEqual(await result, { imageId: 'img2', ok: false, error: 'Telegram non configurato: imposta il bot in /opzioni' });
+    const after = await barrier(c);
+    assert.deepStrictEqual(persisted(after), persisted(before));
+    await barrier(observer);
+    assert.ok(!observer.received.slice(start).some((r) => r.event === 'telegram:sendResult'));
+  });
+
+  ev('image:sendTelegram', 'media sconosciuto o pagina web: errore', async () => {
+    const c = await open();
+    let result = waitFor(c, 'telegram:sendResult', (r) => r.imageId === 'nessuna');
+    c.emit('image:sendTelegram', { locationId: 'loc-img', imageId: 'nessuna' });
+    assert.deepStrictEqual(await result, { imageId: 'nessuna', ok: false, error: 'Immagine non trovata' });
+    result = waitFor(c, 'telegram:sendResult', (r) => r.imageId === 'web1');
+    c.emit('image:sendTelegram', { locationId: 'loc-img', imageId: 'web1' });
+    assert.deepStrictEqual(await result, { imageId: 'web1', ok: false, error: 'Le pagine web non si inviano su Telegram' });
+  });
+
+  // --- handout -----------------------------------------------------------------------------
+
+  ev('handout:setDefault', 'valido: default della location e default globale', async () => {
+    const c = await open();
+    let s = await emitAndWait(c, 'handout:setDefault', { locationId: 'loc-ho2', id: 'h1' }, (st) => loc(st, 'loc-ho2').handoutDefaultId === 'h1');
+    assert.equal(loc(s, 'loc-ho2').handoutDefaultId, 'h1');
+    s = await emitAndWait(c, 'handout:setDefault', { id: 'h2' }, (st) => st.handout.defaultId === 'h2');
+    assert.deepStrictEqual(s.handout, { defaultId: 'h2' });
+    s = await emitAndWait(c, 'handout:setDefault', { locationId: null, id: null }, (st) => st.handout.defaultId === null);
+    assert.deepStrictEqual(s.handout, { defaultId: null });
+    assert.equal(loc(s, 'loc-ho2').handoutDefaultId, 'h1');
+  });
+
+  ev('handout:setDefault', 'voce o location sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'handout:setDefault', { locationId: 'loc-ho2', id: 'nessuna' });
+    await expectUnchanged(c, 'handout:setDefault', { id: 'nessuna' });
+    await expectUnchanged(c, 'handout:setDefault', { locationId: 'nessuna', id: 'h1' });
+  });
+
+  ev('handoutLibrary:update', 'valido: rinomina, tagliato a 80', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'handoutLibrary:update', { id: 'h1', name: 'h'.repeat(90) }, (st) => st.handoutLibrary.find((i) => i.id === 'h1').name.length === 80);
+    assert.equal(s.handoutLibrary.find((i) => i.id === 'h1').name, 'h'.repeat(80));
+  });
+
+  ev('handoutLibrary:update', 'voce sconosciuta o nome non stringa: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'handoutLibrary:update', { id: 'nessuna', name: 'X' });
+    await expectUnchanged(c, 'handoutLibrary:update', { id: 'h2', name: 42 });
+    await expectUnchanged(c, 'handoutLibrary:update', undefined);
+  });
+
+  ev('handoutLibrary:delete', 'valido: voce tolta, default azzerati, file cancellato', async () => {
+    const c = await open();
+    await emitAndWait(c, 'handout:setDefault', { locationId: 'loc-ho', id: 'hdel' }, (s) => loc(s, 'loc-ho').handoutDefaultId === 'hdel');
+    await emitAndWait(c, 'handout:setDefault', { id: 'hdel' }, (s) => s.handout.defaultId === 'hdel');
+    const file = path.join(server.storageDir, 'handout', 'hdel.png');
+    assert.ok(fs.existsSync(file));
+    const s = await emitAndWait(c, 'handoutLibrary:delete', { id: 'hdel' }, (st) => !st.handoutLibrary.some((i) => i.id === 'hdel'));
+    assert.equal(loc(s, 'loc-ho').handoutDefaultId, null);
+    assert.equal(s.handout.defaultId, null);
+    assert.ok(!fs.existsSync(file));
+  });
+
+  ev('handoutLibrary:delete', 'voce sconosciuta: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'handoutLibrary:delete', { id: 'nessuna' });
+    await expectUnchanged(c, 'handoutLibrary:delete', undefined);
+  });
+
   // GRUPPI SUCCESSIVI
 });
