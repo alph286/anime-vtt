@@ -1359,5 +1359,253 @@ describe('eventi socket (server condiviso)', () => {
     await expectUnchanged(d, 'audio:oneshotEnded', undefined);
   });
 
-  // GRUPPI SUCCESSIVI
+  // --- casi extra: one-shot azzerati ----------------------------------------------------------
+
+  async function startOneshot() {
+    const c = await open();
+    await openDisplay();
+    await setActive(c, 'loc-audio');
+    await emitAndWait(c, 'audio:toggle', { trackId: 'os1' }, (s) => 'os1' in s.audioOneshots);
+    return c;
+  }
+
+  test('extra | one-shot azzerati al cambio location (location:set)', async () => {
+    const c = await startOneshot();
+    const s = await emitAndWait(c, 'location:set', { locationId: 'loc-b' }, (st) => st.activeLocationId === 'loc-b');
+    assert.deepStrictEqual(s.audioOneshots, {});
+  });
+
+  test('extra | one-shot azzerati creando una location (location:create)', async () => {
+    const c = await startOneshot();
+    const s = await emitAndWait(c, 'location:create', undefined, (st) => st.activeLocationId !== 'loc-audio');
+    assert.deepStrictEqual(s.audioOneshots, {});
+  });
+
+  test('extra | one-shot azzerati archiviando la location attiva (location:archive)', async () => {
+    const c = await startOneshot();
+    const s = await emitAndWait(c, 'location:archive', { locationId: 'loc-audio' }, (st) => loc(st, 'loc-audio').archived);
+    assert.deepStrictEqual(s.audioOneshots, {});
+    assert.equal(s.activeLocationId, null);
+    await emitAndWait(c, 'location:restore', { locationId: 'loc-audio' }, (st) => !loc(st, 'loc-audio').archived);
+  });
+
+  test('extra | one-shot azzerati quando arriva un display (hello role display)', async () => {
+    const c = await startOneshot();
+    const cleared = waitState(c, (st) => Object.keys(st.audioOneshots).length === 0);
+    await openDisplay();
+    assert.deepStrictEqual((await cleared).audioOneshots, {});
+  });
+
+  test('extra | un display che arriva senza one-shot in corso non trasmette lo stato', async () => {
+    const c = await open();
+    const before = await barrier(c);
+    assert.deepStrictEqual(before.audioOneshots, {});
+    const mark = before.displayViewport.width;
+    const d = await open();
+    d.isDisplay = true;
+    const ready = waitFor(d, 'display:status', (s) => s.connected);
+    d.emit('hello', { role: 'display' });
+    await ready;
+    await barrier(d);
+    const count = c.received.filter((r) => r.event === 'state:update' && r.payload.displayViewport?.width === mark).length;
+    assert.equal(count, 1, 'solo la barriera iniziale');
+  });
+
+  // --- casi extra: throttle dei trascinamenti -------------------------------------------------
+
+  const dragCases = [
+    {
+      event: 'view:pan',
+      payload: (i) => ({ locationId: 'loc-view', dx: 1, dy: 0 }),
+      read: (s) => liveView(s).offsetX,
+      final: (start, n) => start + n
+    },
+    {
+      event: 'aoe:move',
+      payload: (i) => ({ locationId: 'loc-aoe', aoeId: 'aoe-cube', x: 1000 + i, y: 0 }),
+      read: (s) => aoeById(s, 'aoe-cube').x,
+      final: (start, n) => 1000 + n
+    },
+    {
+      event: 'shader:move',
+      payload: (i) => ({ locationId: 'loc-shader', id: 's1', x: 2000 + i, y: 0 }),
+      read: (s) => shaderById(s, 's1').x,
+      final: (start, n) => 2000 + n
+    }
+  ];
+
+  for (const drag of dragCases) {
+    test(`extra | throttle di ${drag.event}: meno broadcast che eventi, l'ultima posizione arriva sempre`, async () => {
+      const c = await open();
+      const startValue = drag.read(await barrier(c));
+      // Fuori dalla finestra del throttle (60 ms) di un trascinamento precedente.
+      await new Promise((r) => setTimeout(r, 100));
+      const n = 30;
+      const target = drag.final(startValue, n);
+      const startIdx = c.received.length;
+      const done = waitState(c, (s) => drag.read(s) === target, 1000);
+      let sentAt = 0;
+      for (let i = 1; i <= n; i += 1) {
+        c.emit(drag.event, drag.payload(i));
+        sentAt = Date.now();
+      }
+      await done;
+      const elapsed = Date.now() - sentAt;
+      const values = c.received.slice(startIdx).filter((r) => r.event === 'state:update').map((r) => drag.read(r.payload));
+      assert.ok(values.length < n / 2, `troppi broadcast: ${values.length} per ${n} eventi`);
+      assert.equal(values[values.length - 1], target);
+      for (let i = 1; i < values.length; i += 1) assert.ok(values[i] >= values[i - 1], 'mai indietro');
+      assert.ok(elapsed < 500, `ultima posizione dopo ${elapsed} ms`);
+      // Anche su disco arriva l'ultima posizione.
+      const onDisk = JSON.parse(fs.readFileSync(path.join(server.dataDir, 'state.json'), 'utf-8'));
+      assert.equal(drag.read(onDisk), target);
+    });
+  }
+
+  // --- copertura ----------------------------------------------------------------------------
+
+  test('copertura: ogni socket.on del server ha almeno due test', () => {
+    const serverDir = __dirname;
+    const events = new Set();
+    for (const name of fs.readdirSync(serverDir)) {
+      if (!name.endsWith('.js') || name.endsWith('.test.js')) continue;
+      const src = fs.readFileSync(path.join(serverDir, name), 'utf-8');
+      for (const m of src.matchAll(/socket\.on\(\s*'([^']+)'/g)) events.add(m[1]);
+    }
+    assert.equal(events.size, 64, 'eventi trovati in server/*.js (aggiorna se ne aggiungi)');
+    const missing = [...events].filter((e) => (coverage.get(e) || 0) < 2).map((e) => `${e} (${coverage.get(e) || 0})`);
+    const unknown = [...coverage.keys()].filter((e) => !events.has(e));
+    assert.deepStrictEqual(missing, [], 'eventi con meno di due test');
+    assert.deepStrictEqual(unknown, [], 'test che citano eventi inesistenti');
+  });
+});
+
+// --- ripristino di un backup (server a parte: sostituisce tutto lo stato) ------------------------
+
+describe('stato dopo il ripristino di un backup', () => {
+  let srv;
+  const backupState = () => ({
+    campaign: { name: 'Campagna' },
+    gridPreset: { cellSize: 90, offsetX: 1, offsetY: 2, color: '#123456', lineWidth: 1, opacity: 0.5 },
+    activeLocationId: 'due',
+    activeImageId: null,
+    audioOneshots: {},
+    audioOneshotSeq: 5,
+    handout: { defaultId: null },
+    handoutLibrary: [],
+    audioLibrary: [{ id: 'au1', name: 'Pioggia', icon: 'music', file: 'au1.mp3' }],
+    locations: [
+      makeLocation('uno', 'Uno', {
+        isDefault: true,
+        images: [image('img1', 'img1.png')],
+        map: { polygons: [poly('p1', true)], audio: { background: [bg('bg1', 'au1', { on: true })], oneshot: [os('os1', 'au1')] } }
+      }),
+      makeLocation('due', 'Due')
+    ]
+  });
+
+  before(async () => {
+    srv = await startServer({ state: backupState(), files: { 'images/img1.png': 'immagine', 'audio/au1.mp3': 'audio' } });
+  });
+
+  after(async () => {
+    if (srv) await srv.stop();
+  });
+
+  test('extra | ripristino: location del backup con id nuovi, location predefinita attiva, one-shot e media mostrato azzerati', async () => {
+    const c = await connect(srv);
+    const d = await connect(srv);
+    try {
+      d.emit('hello', { role: 'display' });
+      await barrier(d);
+      const original = await barrier(c);
+      const res = await fetch(`${srv.url}/api/export/backup`);
+      assert.equal(res.status, 200);
+      const archive = Buffer.from(await res.arrayBuffer());
+
+      // Modifiche dopo il backup: una location in più, un nome cambiato,
+      // un media mostrato e un one-shot in corso.
+      await emitAndWait(c, 'location:create', undefined, (s) => s.locations.length === 3);
+      await emitAndWait(c, 'location:set', { locationId: 'uno' }, (s) => s.activeLocationId === 'uno');
+      await emitAndWait(c, 'image:show', { imageId: 'img1' }, (s) => s.activeImageId === 'img1');
+      await emitAndWait(c, 'audio:toggle', { trackId: 'os1' }, (s) => 'os1' in s.audioOneshots);
+      const changed = await emitAndWait(c, 'location:rename', { locationId: 'uno', name: 'Cambiato' }, (s) => loc(s, 'uno').name === 'Cambiato');
+
+      const form = new FormData();
+      form.append('file', new Blob([archive]), 'backup.vttbackup');
+      const inspect = await (await fetch(`${srv.url}/api/import/inspect`, { method: 'POST', body: form })).json();
+      assert.equal(inspect.kind, 'backup');
+      const restored = waitState(c, (s) => s.locations.length === 2 && s.locations[0].name === 'Uno');
+      const apply = await fetch(`${srv.url}/api/import/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: inspect.token })
+      });
+      assert.deepStrictEqual(await apply.json(), { ok: true, kind: 'backup', locationCount: 2 });
+      const s = await restored;
+
+      const [uno, due] = s.locations;
+      assert.deepStrictEqual(s.locations.map((l) => l.name), ['Uno', 'Due']);
+      assert.ok(uno.id !== 'uno' && due.id !== 'due', 'id nuovi');
+      assert.equal(s.activeLocationId, uno.id, 'la predefinita del backup');
+      assert.equal(s.activeImageId, null);
+      assert.deepStrictEqual(s.audioOneshots, {});
+      assert.equal(s.audioOneshotSeq, changed.audioOneshotSeq, 'il seq non torna indietro');
+      assert.deepStrictEqual(s.campaign, original.campaign);
+      assert.deepStrictEqual(s.gridPreset, original.gridPreset);
+      assert.deepStrictEqual(s.audioLibrary, original.audioLibrary, 'archivio audio intatto');
+      assert.deepStrictEqual(uno.map.polygons, loc(original, 'uno').map.polygons);
+      // L'audio non viaggia nei pacchetti: le righe della location tornano vuote.
+      assert.deepStrictEqual(uno.map.audio, { background: [], oneshot: [] });
+      // Il media torna con un file nuovo; quello vecchio è cancellato.
+      assert.equal(uno.images.length, 1);
+      assert.notEqual(uno.images[0].file, 'img1.png');
+      assert.ok(fs.existsSync(path.join(srv.storageDir, 'images', uno.images[0].file)));
+      assert.ok(!fs.existsSync(path.join(srv.storageDir, 'images', 'img1.png')));
+      // Su disco lo stesso stato trasmesso.
+      const onDisk = JSON.parse(fs.readFileSync(path.join(srv.dataDir, 'state.json'), 'utf-8'));
+      assert.deepStrictEqual(onDisk, persisted(s));
+      // Gli eventi continuano a lavorare sullo stato nuovo.
+      const after = await emitAndWait(c, 'location:rename', { locationId: due.id, name: 'Due bis' }, (st) => st.locations[1].name === 'Due bis');
+      assert.equal(after.locations.length, 2);
+    } finally {
+      c.disconnect();
+      d.disconnect();
+    }
+  });
+});
+
+// --- eccezione non gestita in un listener (server a parte: il processo muore) -----------------
+
+describe('eccezione in un handler', () => {
+  let srv;
+
+  before(async () => {
+    srv = await startServer();
+  });
+
+  after(async () => {
+    if (srv) await srv.stop();
+  });
+
+  test('extra | hello senza payload fa terminare il server', async () => {
+    const c = await connect(srv);
+    try {
+      // BUG noto: gli handler che destrutturano il payload senza default
+      // (`({ role }) =>`, `({ locationId }) =>`, ...) lanciano TypeError se
+      // l'evento arriva senza argomenti; socket.io 4 chiama i listener in
+      // process.nextTick, quindi l'eccezione non è gestita e il processo
+      // termina. `hello` passa anche con il PIN acceso: basta un client qualunque.
+      c.emit('hello');
+      let timer;
+      const { code } = await Promise.race([
+        srv.exited,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('il server è ancora vivo')), 3000); })
+      ]).finally(() => clearTimeout(timer));
+      assert.notEqual(code, 0);
+      assert.match(srv.output(), /TypeError/);
+    } finally {
+      c.disconnect();
+    }
+  });
 });
