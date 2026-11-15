@@ -161,7 +161,7 @@ Un commit per gruppo, con `npm run test:server` verde prima di ogni commit:
 - Nessun file del server modificato.
 
 **BUG noti fissati nei test** (cercare `BUG noto` nel file):
-1. Un evento senza payload su un handler che destruttura senza default (`({ role }) =>`, `({ locationId }) =>`, quasi tutti) lancia `TypeError` dentro `process.nextTick` di socket.io: il processo termina. Provato con `hello`, che resta pubblico anche con il PIN acceso. Fanno eccezione gli handler con `= {}` (handout, archivio handout, audio).
+1. Un evento senza payload (o con `null`) su un handler che destruttura il payload lancia `TypeError` dentro `process.nextTick` di socket.io: il processo termina. Il default `= {}` (handout, archivio handout, audio) vale solo per `undefined`: con `null` cadono anche quegli handler (provato con `audio:toggle`; stesso schema per `handoutLibrary:delete`). `image:sendTelegram` senza payload fa cadere il processo per promise rifiutata non gestita. Provato con `hello`, che resta pubblico anche con il PIN acceso, insieme a `display:viewport`, `audio:status`, `audio:oneshotEnded` e tutti gli `aoe:*`.
 2. `view:pan`: dx/dy non controllati; una stringa viene concatenata (`offsetX` diventa `'05'`).
 3. `view:zoom` e `mapScale:set`: scala non controllata (negativa, stringa).
 4. `grid:update`: `divisions` non numerico dà `NaN` in `divisions` e `cellSize` (`null` nel JSON).
@@ -169,5 +169,9 @@ Un commit per gruppo, con `npm run test:server` verde prima di ogni commit:
 6. `polygon:update`: punti non controllati (una stringa sostituisce l'elenco).
 7. `shader:restore`: posizione e misure non controllate (a differenza di `shader:place`).
 8. `display:viewport`: nessun controllo sui valori.
+9. (minori, solo testo, non coperti da test) `grid:update` non valida `enabled`, `color`, `opacity`, `lineWidth`, `offsetX`, `offsetY`, `baseCellSize` (con `baseCellSize` stringa `cellSize` diventa `NaN`).
+10. (minore) `polygon:create` non controlla i singoli punti né tipo e lunghezza del nome.
+11. (minore) `polygon:update` non limita il nome (`polygon:restore` sì, 200).
+12. (minore) `image:destination` accetta qualunque tipo.
 
 **Comportamenti notati, non segnati come bug**: `location:reorder`, `image:reorder` e `polygon:reorder` scartano in silenzio id doppi o sconosciuti e accettano l'ordine se resta una permutazione completa; una location creata con `location:create` non ha `map.shaders` né `handoutDefaultId` finché il server non riparte; `polygon:delete` con zona sconosciuta salva e trasmette lo stesso stato; dopo il ripristino di un backup le location hanno id nuovi e le righe audio vuote (l'audio non viaggia nei pacchetti).
