@@ -147,6 +147,13 @@ Se in futuro vuoi capire cosa contiene, sono tre righe:
 - `STORAGE_DIR=./storage` — dove vengono salvate le mappe e le immagini che
   carichi.
 
+Esiste anche `DM_PIN`, facoltativo: se ci scrivi un PIN (per esempio
+`DM_PIN=1234`), `/editor`, `/control`, `/opzioni` e le azioni del DM chiedono
+il PIN. `/party`, `/display` e `/handout` restano aperti, perché girano su
+schermi dove nessuno può digitarlo. Il PIN si chiede una volta ogni 30 giorni
+per dispositivo. Senza `DM_PIN` (o lasciandolo vuoto) è tutto aperto, come
+prima.
+
 ### 6. Avvia il programma
 
 ```bash

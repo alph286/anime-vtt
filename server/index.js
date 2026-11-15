@@ -15,6 +15,7 @@ const { createTelegramClient } = require('./telegram');
 const { createTelegramConfig } = require('./telegram-config');
 const { registerTelegramRoutes, sendStoredMedia } = require('./telegram-routes');
 const audioModel = require('./audio');
+const { createAuth } = require('./auth');
 const handoutModel = require('./handout');
 const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js');
 const tar = require('tar-stream');
@@ -89,6 +90,10 @@ function getActiveLocation() {
 
 const app = express();
 app.use(express.json());
+const auth = createAuth({ pin: process.env.DM_PIN });
+app.use(auth.httpGuard);
+auth.registerRoutes(app);
+app.use('/login', express.static(path.join(__dirname, '..', 'public', 'login')));
 app.use('/storage', express.static(STORAGE_DIR));
 app.use('/display', express.static(path.join(__dirname, '..', 'public', 'display')));
 app.use('/control', express.static(path.join(__dirname, '..', 'public', 'control')));
@@ -523,6 +528,7 @@ function broadcastDisplayStatus() {
 }
 
 io.on('connection', (socket) => {
+  auth.socketGuard(socket);
   socket.emit('state:update', statePayload());
   socket.emit('control:status', { connected: controlSockets.size > 0 });
   socket.emit('display:status', { connected: displaySockets.size > 0 });
@@ -1288,4 +1294,5 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log(`Anime VTT in ascolto su http://localhost:${PORT}`);
+  if (!auth.enabled) console.log('DM_PIN non impostato: le pagine del DM sono aperte a chiunque sulla rete.');
 });
