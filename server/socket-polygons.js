@@ -3,12 +3,21 @@
 // legge con getState() dentro ogni handler, mai fuori.
 const { nanoid } = require('nanoid');
 
+const MAX_NAME_LENGTH = 200;
+
+// Elenco di punti [x, y] con numeri finiti, come li disegna /editor.
+function validPoints(points, min) {
+  return Array.isArray(points) && points.length >= min &&
+    points.every((p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+}
+
 function registerPolygonEvents(socket, { getState, saveState, broadcastState, statePayload }) {
   socket.on('polygon:create', ({ locationId, name, points }) => {
     const state = getState();
     const location = state.locations.find((l) => l.id === locationId);
-    if (!location || !Array.isArray(points) || points.length < 3) return;
-    location.map.polygons.push({ id: nanoid(), name: name || 'nuova area', points, revealed: false });
+    if (!location || !validPoints(points, 3)) return;
+    if (name !== undefined && name !== null && typeof name !== 'string') return;
+    location.map.polygons.push({ id: nanoid(), name: (name || 'nuova area').slice(0, MAX_NAME_LENGTH), points, revealed: false });
     saveState(state);
     broadcastState();
   });
@@ -18,8 +27,10 @@ function registerPolygonEvents(socket, { getState, saveState, broadcastState, st
     const location = state.locations.find((l) => l.id === locationId);
     const polygon = location?.map.polygons.find((p) => p.id === polygonId);
     if (!polygon) return;
-    if (points) polygon.points = points;
-    if (name !== undefined) polygon.name = name;
+    if (points !== undefined && !validPoints(points, 3)) return;
+    if (name !== undefined && typeof name !== 'string') return;
+    if (points !== undefined) polygon.points = points;
+    if (name !== undefined) polygon.name = name.slice(0, MAX_NAME_LENGTH);
     saveState(state);
     broadcastState();
   });

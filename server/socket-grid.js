@@ -7,6 +7,7 @@ function registerGridEvents(socket, { getState, saveState, broadcastState }) {
     const state = getState();
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
+    if (!Number.isFinite(scale) || scale <= 0) return;
     location.map.scale = scale;
     saveState(state);
     broadcastState();
@@ -34,6 +35,12 @@ function registerGridEvents(socket, { getState, saveState, broadcastState }) {
     const state = getState();
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
+    // Un campo presente col tipo sbagliato rifiuta l'intero evento (niente
+    // modifiche a metà).
+    const numeric = [cellSize, baseCellSize, divisions, offsetX, offsetY, lineWidth, opacity];
+    if (numeric.some((v) => v !== undefined && !Number.isFinite(v))) return;
+    if (enabled !== undefined && typeof enabled !== 'boolean') return;
+    if (color !== undefined && typeof color !== 'string') return;
     if (enabled !== undefined) location.map.grid.enabled = enabled;
     if (offsetX !== undefined) location.map.grid.offsetX = offsetX;
     if (offsetY !== undefined) location.map.grid.offsetY = offsetY;
@@ -63,6 +70,7 @@ function registerGridEvents(socket, { getState, saveState, broadcastState }) {
     const state = getState();
     const location = state.locations.find((l) => l.id === locationId);
     if (!location || !location.map.compass) return;
+    if ([x, y, rotation].some((v) => v !== undefined && !Number.isFinite(v))) return;
     if (visible !== undefined) location.map.compass.visible = Boolean(visible);
     if (x !== undefined) location.map.compass.x = Math.min(100, Math.max(0, x));
     if (y !== undefined) location.map.compass.y = Math.min(100, Math.max(0, y));

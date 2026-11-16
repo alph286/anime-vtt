@@ -228,11 +228,21 @@ describe('eventi socket (server condiviso)', () => {
     assert.equal(onDisk.displayViewport, undefined);
   });
 
-  ev('display:viewport', 'nessuna validazione: valori non numerici passano', async () => {
+  ev('display:viewport', 'valori non numerici o non positivi: nessun broadcast con quel viewport', async () => {
     const c = await open();
-    // BUG noto: display:viewport non controlla i valori; /control e /party li usano per i conti.
-    const s = await emitAndWait(c, 'display:viewport', { width: 'abc', height: null }, (st) => st.displayViewport && st.displayViewport.width === 'abc');
-    assert.deepStrictEqual(s.displayViewport, { width: 'abc', height: null });
+    await barrier(c);
+    const start = observer.received.length;
+    // Il barrier stesso usa display:viewport con un marcatore numerico.
+    for (const payload of [{ width: 'abc', height: null }, { width: 1920 }, { width: -5, height: 10 }, { width: 100, height: 0 }, { width: 100, height: '50' }, { width: Infinity, height: 1 }]) {
+      c.emit('display:viewport', payload);
+    }
+    await barrier(c);
+    await barrier(observer);
+    const seen = observer.received.slice(start).filter((r) => r.event === 'state:update').map((r) => r.payload.displayViewport);
+    assert.ok(seen.length > 0);
+    for (const v of seen) {
+      assert.ok(Number.isFinite(v.width) && Number.isFinite(v.height) && v.width > 0 && v.height > 0, JSON.stringify(v));
+    }
   });
 
   ev('audio:status', 'dal display, payload valido: finisce in displayAudio', async () => {
@@ -623,6 +633,12 @@ describe('eventi socket (server condiviso)', () => {
     await expectUnchanged(c, 'image:destination', { locationId: 'loc-img', imageId: 'nessuna', destination: 'Gruppo' });
   });
 
+  ev('image:destination', 'destinazione non stringa: stato invariato', async () => {
+    const c = await open();
+    await expectUnchanged(c, 'image:destination', { locationId: 'loc-img', imageId: 'img1', destination: { a: 1 } });
+    await expectUnchanged(c, 'image:destination', { locationId: 'loc-img', imageId: 'img1', destination: 5 });
+  });
+
   ev('image:sendTelegram', 'media vero senza bot configurato: risposta di errore solo al mittente', async () => {
     const c = await open();
     const result = waitFor(c, 'telegram:sendResult', (r) => r.imageId === 'img2');
@@ -713,13 +729,12 @@ describe('eventi socket (server condiviso)', () => {
     await expectUnchanged(c, 'view:pan', { locationId: 'nessuna', dx: 10, dy: 10 });
   });
 
-  ev('view:pan', 'dx non numerico: l\'offset diventa una stringa', async () => {
+  ev('view:pan', 'dx o dy non numerici: stato invariato', async () => {
     const c = await open();
-    // BUG noto: view:pan non controlla dx/dy; una stringa viene concatenata e
-    // offsetX diventa '05' invece di un numero.
-    const s = await emitAndWait(c, 'view:pan', { locationId: 'loc-view-bug', dx: '5', dy: 0 }, (st) => typeof liveView(st, 'loc-view-bug').offsetX === 'string');
-    assert.equal(liveView(s, 'loc-view-bug').offsetX, '05');
-    await emitAndWait(c, 'view:reset', { locationId: 'loc-view-bug' }, (st) => liveView(st, 'loc-view-bug').offsetX === 0);
+    await expectUnchanged(c, 'view:pan', { locationId: 'loc-view-bug', dx: '5', dy: 0 });
+    await expectUnchanged(c, 'view:pan', { locationId: 'loc-view-bug', dx: 5, dy: null });
+    await expectUnchanged(c, 'view:pan', { locationId: 'loc-view-bug', dx: NaN, dy: 1 });
+    await expectUnchanged(c, 'view:pan', { locationId: 'loc-view-bug', dx: 1, dy: Infinity });
   });
 
   ev('view:zoom', 'valido: scale impostato', async () => {
@@ -728,12 +743,13 @@ describe('eventi socket (server condiviso)', () => {
     assert.equal(liveView(s).scale, 2.5);
   });
 
-  ev('view:zoom', 'location sconosciuta: stato invariato; scale non validato', async () => {
+  ev('view:zoom', 'location sconosciuta o scale non valido: stato invariato', async () => {
     const c = await open();
     await expectUnchanged(c, 'view:zoom', { locationId: 'nessuna', scale: 3 });
-    // BUG noto: view:zoom accetta qualunque valore (negativo, stringa).
-    const s = await emitAndWait(c, 'view:zoom', { locationId: 'loc-view-bug', scale: -3 }, (st) => liveView(st, 'loc-view-bug').scale === -3);
-    assert.equal(liveView(s, 'loc-view-bug').scale, -3);
+    await expectUnchanged(c, 'view:zoom', { locationId: 'loc-view-bug', scale: -3 });
+    await expectUnchanged(c, 'view:zoom', { locationId: 'loc-view-bug', scale: 0 });
+    await expectUnchanged(c, 'view:zoom', { locationId: 'loc-view-bug', scale: '2' });
+    await expectUnchanged(c, 'view:zoom', { locationId: 'loc-view-bug', scale: NaN });
   });
 
   ev('view:reset', 'valido: vista di default', async () => {
@@ -770,6 +786,9 @@ describe('eventi socket (server condiviso)', () => {
     const c = await open();
     await expectUnchanged(c, 'polygon:create', { locationId: 'loc-poly', points: [[0, 0], [1, 1]] });
     await expectUnchanged(c, 'polygon:create', { locationId: 'loc-poly', points: 'abc' });
+    await expectUnchanged(c, 'polygon:create', { locationId: 'loc-poly', points: [[0, 0], [1, 'x'], [2, 0]] });
+    await expectUnchanged(c, 'polygon:create', { locationId: 'loc-poly', points: [[0, 0], null, [2, 0]] });
+    await expectUnchanged(c, 'polygon:create', { locationId: 'loc-poly', name: { a: 1 }, points: [[0, 0], [1, 1], [2, 0]] });
     await expectUnchanged(c, 'polygon:create', { locationId: 'nessuna', points: [[0, 0], [1, 1], [2, 0]] });
   });
 
@@ -782,12 +801,20 @@ describe('eventi socket (server condiviso)', () => {
     assert.equal(q1.name, 'Sala');
   });
 
-  ev('polygon:update', 'zona sconosciuta: stato invariato; punti non validati', async () => {
+  ev('polygon:update', 'zona sconosciuta, punti o nome non validi: stato invariato', async () => {
     const c = await open();
     await expectUnchanged(c, 'polygon:update', { locationId: 'loc-poly', polygonId: 'nessuna', name: 'X' });
-    // BUG noto: polygon:update non controlla i punti (una stringa sostituisce l'elenco).
-    const s = await emitAndWait(c, 'polygon:update', { locationId: 'loc-poly-bug', polygonId: 'qb', points: 'abc' }, (st) => polys(st, 'loc-poly-bug')[0].points === 'abc');
-    assert.equal(polys(s, 'loc-poly-bug')[0].points, 'abc');
+    await expectUnchanged(c, 'polygon:update', { locationId: 'loc-poly-bug', polygonId: 'qb', points: 'abc' });
+    await expectUnchanged(c, 'polygon:update', { locationId: 'loc-poly-bug', polygonId: 'qb', points: [[0, 0], [1, 'x'], [2, 0]] });
+    await expectUnchanged(c, 'polygon:update', { locationId: 'loc-poly-bug', polygonId: 'qb', points: [[0, 0], [1, NaN], [2, 0]] });
+    await expectUnchanged(c, 'polygon:update', { locationId: 'loc-poly-bug', polygonId: 'qb', points: [[0, 0], [1, 1]] });
+    await expectUnchanged(c, 'polygon:update', { locationId: 'loc-poly-bug', polygonId: 'qb', name: { a: 1 } });
+  });
+
+  ev('polygon:update', 'nome lungo: tagliato a 200 caratteri', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'polygon:update', { locationId: 'loc-poly-bug', polygonId: 'qb', name: 'n'.repeat(500) }, (st) => polys(st, 'loc-poly-bug')[0].name.length === 200);
+    assert.equal(polys(s, 'loc-poly-bug')[0].name, 'n'.repeat(200));
   });
 
   ev('polygon:delete', 'valido: zona tolta', async () => {
@@ -847,12 +874,13 @@ describe('eventi socket (server condiviso)', () => {
     assert.equal(mapOf(s).scale, 1.5);
   });
 
-  ev('mapScale:set', 'location sconosciuta: stato invariato; scala non validata', async () => {
+  ev('mapScale:set', 'location sconosciuta o scala non valida: stato invariato', async () => {
     const c = await open();
     await expectUnchanged(c, 'mapScale:set', { locationId: 'nessuna', scale: 2 });
-    // BUG noto: mapScale:set accetta qualunque valore.
-    const s = await emitAndWait(c, 'mapScale:set', { locationId: 'loc-map-bug', scale: 'grande' }, (st) => mapOf(st, 'loc-map-bug').scale === 'grande');
-    assert.equal(mapOf(s, 'loc-map-bug').scale, 'grande');
+    await expectUnchanged(c, 'mapScale:set', { locationId: 'loc-map-bug', scale: 'grande' });
+    await expectUnchanged(c, 'mapScale:set', { locationId: 'loc-map-bug', scale: -1 });
+    await expectUnchanged(c, 'mapScale:set', { locationId: 'loc-map-bug', scale: 0 });
+    await expectUnchanged(c, 'mapScale:set', { locationId: 'loc-map-bug', scale: NaN });
   });
 
   ev('mapFlip:toggle', 'valido: flip180 invertito', async () => {
@@ -901,12 +929,17 @@ describe('eventi socket (server condiviso)', () => {
     assert.deepStrictEqual([mapOf(s).grid.baseCellSize, mapOf(s).grid.divisions, mapOf(s).grid.cellSize], [70, 1, 70]);
   });
 
-  ev('grid:update', 'location sconosciuta: stato invariato; divisioni non numeriche', async () => {
+  ev('grid:update', 'location sconosciuta o valori non validi: stato invariato', async () => {
     const c = await open();
     await expectUnchanged(c, 'grid:update', { locationId: 'nessuna', enabled: true });
-    // BUG noto: divisions non numerico diventa NaN, e cellSize con lui (null nel JSON).
-    const s = await emitAndWait(c, 'grid:update', { locationId: 'loc-map-bug', divisions: 'tre' }, (st) => mapOf(st, 'loc-map-bug').grid.divisions === null);
-    assert.equal(mapOf(s, 'loc-map-bug').grid.cellSize, null);
+    const bad = [
+      { divisions: 'tre' }, { divisions: {} }, { divisions: NaN }, { cellSize: {} }, { cellSize: 'x' }, { cellSize: Infinity },
+      { baseCellSize: 'x' }, { baseCellSize: null }, { enabled: 'si' }, { color: 5 }, { opacity: 'x' }, { lineWidth: NaN },
+      { offsetX: '3' }, { offsetY: null },
+      // un campo buono insieme a uno cattivo: l'evento intero è rifiutato
+      { opacity: 0.3, color: 7 }
+    ];
+    for (const patch of bad) await expectUnchanged(c, 'grid:update', { locationId: 'loc-map-bug', ...patch });
   });
 
   ev('compass:update', 'valido: x/y limitati a 0-100, rotazione modulo 360', async () => {
@@ -915,12 +948,12 @@ describe('eventi socket (server condiviso)', () => {
     assert.deepStrictEqual(mapOf(s).compass, { visible: true, x: 100, y: 0, rotation: 270 });
   });
 
-  ev('compass:update', 'location sconosciuta: stato invariato; x non numerico', async () => {
+  ev('compass:update', 'location sconosciuta o valori non numerici: stato invariato', async () => {
     const c = await open();
     await expectUnchanged(c, 'compass:update', { locationId: 'nessuna', visible: true });
-    // BUG noto: x non numerico diventa NaN (null nel JSON).
-    const s = await emitAndWait(c, 'compass:update', { locationId: 'loc-map-bug', x: 'abc' }, (st) => mapOf(st, 'loc-map-bug').compass.x === null);
-    assert.equal(mapOf(s, 'loc-map-bug').compass.x, null);
+    for (const patch of [{ x: 'abc' }, { y: null }, { x: NaN }, { y: Infinity }, { rotation: 'a' }, { rotation: NaN }, { x: 10, y: {} }]) {
+      await expectUnchanged(c, 'compass:update', { locationId: 'loc-map-bug', ...patch });
+    }
   });
 
   ev('gridPreset:save', 'valido: la griglia della location diventa la predefinita', async () => {
@@ -1158,15 +1191,15 @@ describe('eventi socket (server condiviso)', () => {
     assert.deepStrictEqual(shaders(s), shaders(before));
   });
 
-  ev('shader:restore', 'id già presente o tipo sconosciuto: stato invariato; misure non validate', async () => {
+  ev('shader:restore', 'id già presente, tipo sconosciuto, posizione o misure non valide: stato invariato', async () => {
     const c = await open();
     await expectUnchanged(c, 'shader:restore', { locationId: 'loc-shader', shader: deco('s1'), index: 0 });
     await expectUnchanged(c, 'shader:restore', { locationId: 'loc-shader', shader: deco('nuova', 'web_area'), index: 0 });
     await expectUnchanged(c, 'shader:restore', { locationId: 'nessuna', shader: deco('nuova'), index: 0 });
-    // BUG noto: shader:restore non controlla posizione e misure (shader:place sì).
-    const s = await emitAndWait(c, 'shader:restore', { locationId: 'loc-shader', shader: { id: 'sbug', shaderId: 'portal', x: 'a', widthM: 9999 } }, (st) => !!shaderById(st, 'sbug'));
-    assert.deepStrictEqual(shaderById(s, 'sbug'), { id: 'sbug', shaderId: 'portal', x: 'a', widthM: 9999 });
-    await emitAndWait(c, 'shader:remove', { locationId: 'loc-shader', id: 'sbug' }, (st) => !shaderById(st, 'sbug'));
+    const ok = { id: 'sbug', shaderId: 'portal', x: 1, y: 1, widthM: 2, heightM: 2 };
+    for (const patch of [{ x: 'a' }, { y: null }, { widthM: 9999 }, { heightM: 0 }, { widthM: undefined }]) {
+      await expectUnchanged(c, 'shader:restore', { locationId: 'loc-shader', shader: { ...ok, ...patch }, index: 0 });
+    }
   });
 
   // --- ping ---------------------------------------------------------------------------------

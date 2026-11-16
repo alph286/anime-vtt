@@ -7,6 +7,7 @@ function registerViewEvents(socket, { getState, saveState, broadcastState, sched
     const state = getState();
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
     location.map.liveView.offsetX += dx;
     location.map.liveView.offsetY += dy;
     scheduleSaveAndBroadcast();
@@ -16,6 +17,7 @@ function registerViewEvents(socket, { getState, saveState, broadcastState, sched
     const state = getState();
     const location = state.locations.find((l) => l.id === locationId);
     if (!location) return;
+    if (!Number.isFinite(scale) || scale <= 0) return;
     location.map.liveView.scale = scale;
     scheduleSaveAndBroadcast();
   });

@@ -19,6 +19,8 @@ function registerPresenceEvents(socket, { getState, broadcastState, controlSocke
   });
 
   socket.on('display:viewport', ({ width, height }) => {
+    // /control e /party lo usano per i conti: solo misure finite e positive.
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
     setDisplayViewport({ width, height });
     broadcastState();
   });

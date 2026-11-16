@@ -105,6 +105,7 @@ function registerImageEvents(socket, { getState, saveState, broadcastState, getA
     const location = state.locations.find((l) => l.id === locationId);
     const image = location?.images.find((i) => i.id === imageId);
     if (!image) return;
+    if (destination !== undefined && destination !== null && typeof destination !== 'string') return;
     image.telegramDestination = destination || null;
     saveState(state);
     broadcastState();

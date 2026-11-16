@@ -68,6 +68,9 @@ function registerShaderEvents(socket, { getState, saveState, broadcastState, sch
     const state = getState();
     const location = state.locations.find((l) => l.id === locationId);
     if (!location || !shader || !shader.id || !SHADER_IDS.includes(shader.shaderId)) return;
+    if (!Number.isFinite(shader.x) || !Number.isFinite(shader.y)) return;
+    if (!Number.isFinite(shader.widthM) || shader.widthM < SHADER_MIN_SIZE_M || shader.widthM > MAX_AOE_SIZE_M) return;
+    if (!Number.isFinite(shader.heightM) || shader.heightM < SHADER_MIN_SIZE_M || shader.heightM > MAX_AOE_SIZE_M) return;
     if (!Array.isArray(location.map.shaders)) location.map.shaders = [];
     if (location.map.shaders.some((s) => s.id === shader.id)) return;
     const insertAt = Number.isInteger(index) ? Math.min(Math.max(0, index), location.map.shaders.length) : location.map.shaders.length;
