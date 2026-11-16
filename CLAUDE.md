@@ -68,6 +68,7 @@ e non vanno importati.
 - I trascinamenti (pan, AOE, shader) passano da `scheduleSaveAndBroadcast`
   (un salvataggio ogni 60 ms al massimo); il resto salva subito.
 - `displayViewport` e `displayAudio` vivono solo in memoria, fuori da `state`.
+- Eventi socket in `server/socket-<gruppo>.js` (`register<Gruppo>Events(socket, ctx)`), rotte di upload e backup in `server/routes-*.js`; i moduli leggono lo stato solo con `ctx.getState()` dentro ogni handler. I moduli stanno in `server/` e non in sottocartelle: il test «copertura» legge solo `server/*.js`.
 - Logica audio in `server/audio.js`, Telegram in `server/telegram*.js`,
   export/import in `server/exportImport.js`, migrazioni in `server/state.js`.
 
