@@ -1058,6 +1058,12 @@ describe('eventi socket (server condiviso)', () => {
     assert.equal(aoeById(s, 'aoe-cone').shaderOverride, null);
   });
 
+  ev('aoe:setShaderOverride', 'accetta il cerchio d\'evocazione con scia (multi-pass)', async () => {
+    const c = await open();
+    const s = await emitAndWait(c, 'aoe:setShaderOverride', { locationId: 'loc-aoe', aoeId: 'aoe-cone', shaderOverride: 'summoning_circle_trail' }, (st) => aoeById(st, 'aoe-cone').shaderOverride === 'summoning_circle_trail');
+    assert.equal(aoeById(s, 'aoe-cone').shaderOverride, 'summoning_circle_trail');
+  });
+
   ev('aoe:setShaderOverride', 'area sconosciuta: stato invariato', async () => {
     const c = await open();
     await expectUnchanged(c, 'aoe:setShaderOverride', { locationId: 'loc-aoe', aoeId: 'nessuna', shaderOverride: 'web_area' });
