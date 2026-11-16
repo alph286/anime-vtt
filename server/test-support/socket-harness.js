@@ -142,9 +142,10 @@ let barrierSeq = 0;
 // tutto ciò che è stato emesso prima.
 async function barrier(client) {
   barrierSeq += 1;
-  const mark = `barrier-${barrierSeq}`;
+  // Numero finito e positivo: display:viewport rifiuta tutto il resto.
+  const mark = 1000000 + barrierSeq;
   const wait = waitState(client, (s) => s.displayViewport && s.displayViewport.width === mark);
-  client.emit('display:viewport', { width: mark, height: 0 });
+  client.emit('display:viewport', { width: mark, height: 1 });
   return wait;
 }
 
