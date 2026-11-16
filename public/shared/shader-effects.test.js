@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
+  SubCanvas,
   snapRectPx,
   pingGroupsBoundsPx,
   unionRectsPx,
@@ -172,4 +173,53 @@ test('cerchio d\'evocazione con scia: multi-pass, composizione con u_dye, tre pa
   // Nessun altro shader AOE è multi-pass.
   const multi = Object.entries(AOE_SHADER_EFFECTS).filter(([, d]) => d.multipass).map(([id]) => id);
   assert.deepStrictEqual(multi, ['summoning_circle_trail']);
+});
+
+// Canvas finto: SubCanvas usa solo width/height, style e (in fullSize) il genitore.
+function fakeCanvas() {
+  const c = { style: {}, resizes: 0 };
+  let w = 300; let h = 150;
+  Object.defineProperty(c, 'width', { get: () => w, set: (v) => { if (v !== w) c.resizes++; w = v; } });
+  Object.defineProperty(c, 'height', { get: () => h, set: (v) => { if (v !== h) c.resizes++; h = v; } });
+  return c;
+}
+const FULL = { w: 1280, h: 720 };
+
+test('SubCanvas senza growOnly: il buffer segue il riquadro', () => {
+  const c = fakeCanvas();
+  const sub = new SubCanvas(c);
+  assert.deepStrictEqual(sub.place({ x: 64, y: 64, w: 128, h: 96 }, FULL), { x: 64, y: 64, w: 128, h: 96 });
+  assert.deepStrictEqual(sub.place({ x: 96, y: 64, w: 64, h: 64 }, FULL), { x: 96, y: 64, w: 64, h: 64 });
+  assert.deepStrictEqual([c.width, c.height], [64, 64]);
+});
+
+test('SubCanvas growOnly: il buffer cresce, non si restringe, e contiene sempre il riquadro', () => {
+  const c = fakeCanvas();
+  const sub = new SubCanvas(c, { growOnly: true });
+  assert.deepStrictEqual(sub.place({ x: 64, y: 64, w: 128, h: 96 }, FULL), { x: 64, y: 64, w: 128, h: 96 });
+  const before = c.resizes;
+  // Più piccolo e dentro il precedente: stesso riquadro, nessun resize.
+  assert.deepStrictEqual(sub.place({ x: 96, y: 96, w: 64, h: 32 }, FULL), { x: 64, y: 64, w: 128, h: 96 });
+  // Si sposta a destra: stessa misura, spostato il minimo per contenerlo.
+  assert.deepStrictEqual(sub.place({ x: 224, y: 64, w: 32, h: 32 }, FULL), { x: 128, y: 64, w: 128, h: 96 });
+  assert.strictEqual(c.resizes, before);
+  // Più largo: cresce solo in larghezza.
+  assert.deepStrictEqual(sub.place({ x: 0, y: 64, w: 256, h: 32 }, FULL), { x: 0, y: 64, w: 256, h: 96 });
+  assert.strictEqual(c.resizes, before + 1);
+});
+
+test('SubCanvas growOnly: resta dentro il canvas pieno vicino al bordo', () => {
+  const c = fakeCanvas();
+  const sub = new SubCanvas(c, { growOnly: true });
+  sub.place({ x: 0, y: 0, w: 320, h: 320 }, FULL);
+  assert.deepStrictEqual(sub.place({ x: 1248, y: 704, w: 32, h: 16 }, FULL), { x: 960, y: 400, w: 320, h: 320 });
+});
+
+test('SubCanvas growOnly: dopo hide() o con un canvas pieno diverso la misura riparte', () => {
+  const c = fakeCanvas();
+  const sub = new SubCanvas(c, { growOnly: true });
+  sub.place({ x: 0, y: 0, w: 320, h: 320 }, FULL);
+  sub.hide();
+  assert.deepStrictEqual(sub.place({ x: 32, y: 32, w: 64, h: 64 }, FULL), { x: 32, y: 32, w: 64, h: 64 });
+  assert.deepStrictEqual(sub.place({ x: 32, y: 32, w: 32, h: 32 }, { w: 640, h: 360 }), { x: 32, y: 32, w: 32, h: 32 });
 });

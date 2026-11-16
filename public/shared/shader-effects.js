@@ -1930,9 +1930,20 @@ function frameDue(nowMs, lastMs, maxFps) {
 // sempre): dimensione del genitore x devicePixelRatio. `rect` null =
 // niente da disegnare: canvas nascosto (display:none), non ripulito né
 // ripresentato.
+//
+// `growOnly` (ping): finché il canvas resta visibile il buffer cresce ma non
+// si restringe, e il riquadro usato è allargato alla misura del buffer.
+// Cambiare canvas.width/height rialloca il buffer WebGL, e costa: misurato in
+// locale 7-11 ms di CPU per resize contro 0,03 ms di un render() senza, e una
+// scia in movimento ne provocava ~13 al secondo (passi di 32 px). Fuori dal
+// riquadro vero lo shader del ping dà alpha 0, quindi i pixel non cambiano.
+// Quando il canvas si nasconde (niente ping vivi) la misura riparte da zero.
 class SubCanvas {
-  constructor(canvas) {
+  constructor(canvas, { growOnly = false } = {}) {
     this.canvas = canvas;
+    this.growOnly = growOnly;
+    // Ultimo riquadro usato (solo growOnly): da qui si sposta il meno possibile.
+    this.lastRect = null;
     this.styleKey = '';
     // Nascosto finché non c'è qualcosa da disegnare: un canvas WebGL mai
     // disegnato resta comunque un layer (trasparente) da comporre.
@@ -1949,12 +1960,34 @@ class SubCanvas {
   }
 
   hide() {
+    this.lastRect = null;
     if (!this.shown) return;
     this.shown = false;
     this.canvas.style.display = 'none';
   }
 
-  place(rect, full) {
+  // Riquadro davvero usato per `rect` (vedi growOnly): uguale a `rect`, oppure
+  // grande quanto il buffer attuale se più grande, posizionato in modo da
+  // contenere `rect` e restare dentro il canvas pieno, spostandosi il meno
+  // possibile dall'ultimo.
+  grownRect(rect, full) {
+    const last = this.lastRect;
+    if (!this.growOnly || !last || last.fullW !== full.w || last.fullH !== full.h) return rect;
+    const w = Math.min(full.w, Math.max(rect.w, last.w));
+    const h = Math.min(full.h, Math.max(rect.h, last.h));
+    const fit = (prev, r0, rLen, len, fullLen) => {
+      const p = Math.min(Math.max(prev, r0 + rLen - len), r0);
+      return Math.min(Math.max(p, 0), fullLen - len);
+    };
+    return { x: fit(last.x, rect.x, rect.w, w, full.w), y: fit(last.y, rect.y, rect.h, h, full.h), w, h };
+  }
+
+  // Posiziona il canvas su `rect` (o sul riquadro allargato, con growOnly) e
+  // ritorna il riquadro usato: viewport e offset dello shader vanno presi da
+  // qui, non da `rect`.
+  place(rectIn, full) {
+    const rect = this.grownRect(rectIn, full);
+    if (this.growOnly) this.lastRect = { ...rect, fullW: full.w, fullH: full.h };
     if (this.canvas.width !== rect.w) this.canvas.width = rect.w;
     if (this.canvas.height !== rect.h) this.canvas.height = rect.h;
     const key = `${rect.x},${rect.y},${rect.w},${rect.h},${full.w},${full.h}`;
@@ -1971,6 +2004,7 @@ class SubCanvas {
       this.shown = true;
       this.canvas.style.display = '';
     }
+    return rect;
   }
 }
 
@@ -2142,7 +2176,7 @@ class PingLayer {
     this.gl = canvasEl.getContext('webgl2');
     this.program = null;
     this.noiseTexture = null;
-    this.sub = new SubCanvas(canvasEl);
+    this.sub = new SubCanvas(canvasEl, { growOnly: true });
   }
 
   get available() {
@@ -2281,12 +2315,14 @@ class PingLayer {
 
     // Solo il riquadro dove almeno un gruppo può disegnare qualcosa: fuori
     // lo shader darebbe comunque alpha 0 (vedi SONAR_REACH/TRAIL_REACH).
-    const rect = pingGroupsBoundsPx(groupsPx, fadeDistance, lineWidth, full.w, full.h);
-    if (!rect) {
+    const bounds = pingGroupsBoundsPx(groupsPx, fadeDistance, lineWidth, full.w, full.h);
+    if (!bounds) {
       this.sub.hide();
       return;
     }
-    this.sub.place(rect, full);
+    // Il buffer non si restringe finché ci sono ping vivi (SubCanvas growOnly):
+    // il riquadro usato può essere più grande di `bounds`.
+    const rect = this.sub.place(bounds, full);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, rect.w, rect.h);
@@ -2782,6 +2818,7 @@ function aoeShapeWarpParams(shape, maskPointsPx, scaleX, scaleY, hPx) {
 // uno script classico con globali.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    SubCanvas,
     snapRectPx,
     pingGroupsBoundsPx,
     unionRectsPx,

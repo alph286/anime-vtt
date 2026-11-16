@@ -204,8 +204,20 @@ const INSTRUMENT = `(() => {
   if (window.__perf) return 'già';
   const P = window.__perf = { rec: false, deltas: [], long: [], r: { ping: [], shader: [], aoe: [] }, g: { ping: [], shader: [], aoe: [] },
     c: { ping: { clear: 0, draw: 0, uni: 0, loc: 0 }, shader: { clear: 0, draw: 0, uni: 0, loc: 0 }, aoe: { clear: 0, draw: 0, uni: 0, loc: 0 } }, last: 0, q: [],
-    px: 0, presented: 0, dirty: new Set(), canvasPx: 0 };
+    px: 0, presented: 0, dirty: new Set(), canvasPx: 0,
+    rz: { ping: 0, shader: 0, aoe: 0 }, rzT: { ping: [], shader: [], aoe: [] }, nrT: { ping: [], shader: [], aoe: [] }, rzFlag: false };
   const finish = ${FINISH};
+  // Riallocazioni del buffer: canvas.width/height assegnati a un valore
+  // diverso da quello attuale. Ogni render() finisce tra quelli "con resize"
+  // (rzT) o "senza" (nrT).
+  function trackResize(canvas, key) {
+    for (const prop of ['width', 'height']) {
+      const d = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, prop);
+      Object.defineProperty(canvas, prop, { configurable: true,
+        get() { return d.get.call(this); },
+        set(v) { if (d.get.call(this) !== v) { P.rzFlag = true; if (P.rec) P.rz[key]++; } d.set.call(this, v); } });
+    }
+  }
   // Contatori economici sulle chiamate GL di ogni contesto + tempo GPU con
   // EXT_disjoint_timer_query_webgl2 (se il driver lo espone).
   function count(gl, key) {
@@ -230,16 +242,19 @@ const INSTRUMENT = `(() => {
     const orig = obj.render.bind(obj);
     const gl = obj.gl;
     if (gl) count(gl, key);
+    if (obj.canvas) trackResize(obj.canvas, key);
     const ext = gl && gl.getExtension('EXT_disjoint_timer_query_webgl2');
     P.timer = P.timer || Boolean(ext);
     obj.render = function (...a) {
       const t0 = performance.now();
       let q = null;
       if (ext && P.rec) { q = gl.createQuery(); gl.beginQuery(ext.TIME_ELAPSED_EXT, q); }
+      P.rzFlag = false;
       orig(...a);
+      const resized = P.rzFlag;
       if (q) { gl.endQuery(ext.TIME_ELAPSED_EXT); P.q.push([gl, ext, q, key]); }
       if (finish && gl) gl.finish();
-      if (P.rec) P.r[key].push(performance.now() - t0);
+      if (P.rec) { const dt = performance.now() - t0; P.r[key].push(dt); (resized ? P.rzT : P.nrT)[key].push(dt); }
     };
   }
   function pollQueries() {
@@ -337,14 +352,14 @@ for (const name of scenarioNames) {
   for (const thr of THROTTLES) {
     await cdp('Emulation.setCPUThrottlingRate', { rate: thr });
     await sleep(800);
-    await evaluate(`(() => { const P = __perf; P.deltas = []; P.long = []; P.r = { ping: [], shader: [], aoe: [] }; P.g = { ping: [], shader: [], aoe: [] }; for (const k in P.c) P.c[k] = { clear: 0, draw: 0, uni: 0, loc: 0 }; P.px = 0; P.presented = 0; P.canvasPx = 0; P.dirty.clear(); P.last = 0; P.rec = true; })()`);
+    await evaluate(`(() => { const P = __perf; P.deltas = []; P.long = []; P.r = { ping: [], shader: [], aoe: [] }; P.g = { ping: [], shader: [], aoe: [] }; for (const k in P.c) P.c[k] = { clear: 0, draw: 0, uni: 0, loc: 0 }; P.px = 0; P.presented = 0; P.canvasPx = 0; P.rz = { ping: 0, shader: 0, aoe: 0 }; P.rzT = { ping: [], shader: [], aoe: [] }; P.nrT = { ping: [], shader: [], aoe: [] }; P.dirty.clear(); P.last = 0; P.rec = true; })()`);
     if (!NOPING) startPings(name);
     await sleep(SECS * 1000 - 500);
     await cdp('LayerTree.enable');
     await sleep(500);
     stopPings();
     await cdp('LayerTree.disable');
-    const raw = await evaluate(`(() => { const P = __perf; P.rec = false; return { deltas: P.deltas, long: P.long, r: P.r, c: P.c, px: P.px, presented: P.presented, canvasPx: P.canvasPx }; })()`);
+    const raw = await evaluate(`(() => { const P = __perf; P.rec = false; return { deltas: P.deltas, long: P.long, r: P.r, c: P.c, px: P.px, presented: P.presented, canvasPx: P.canvasPx, rz: P.rz, rzT: P.rzT, nrT: P.nrT }; })()`);
     await sleep(300);
     raw.g = await evaluate(`__perf.g`);
     // Layer compositi che disegnano contenuto (preso a fine run, ping ancora vivi):
@@ -381,7 +396,12 @@ for (const name of scenarioNames) {
       'p50 ms': +d.p50.toFixed(1), 'p95 ms': +d.p95.toFixed(1), 'max ms': +d.max.toFixed(0),
       '>33ms/s': +(raw.deltas.filter((x) => x > 33.4).length / total).toFixed(2),
       'long/s': +(raw.long.length / total).toFixed(2),
-      'ping cpu': +ms('ping').mean.toFixed(2), 'shader cpu': +ms('shader').mean.toFixed(2), 'aoe cpu': +ms('aoe').mean.toFixed(2),
+      'ping cpu': +ms('ping').mean.toFixed(2),
+      // Resize del buffer del ping: quanti al secondo, in quale frazione dei
+      // render() del ping, e tempo CPU medio di render() con e senza resize.
+      'ping rz/s': +(raw.rz.ping / total).toFixed(1),
+      'ping rz %': +((100 * raw.rzT.ping.length) / Math.max(1, raw.r.ping.length)).toFixed(0),
+      'ping cpu rz': +stats(raw.rzT.ping).mean.toFixed(2), 'ping cpu no-rz': +stats(raw.nrT.ping).mean.toFixed(2), 'shader cpu': +ms('shader').mean.toFixed(2), 'aoe cpu': +ms('aoe').mean.toFixed(2),
       'ping gpu': +stats(raw.g.ping).mean.toFixed(3), 'ping gpu p95': +stats(raw.g.ping).p95.toFixed(3),
       'shader gpu': +stats(raw.g.shader).mean.toFixed(3), 'aoe gpu': +stats(raw.g.aoe).mean.toFixed(3),
       'clear/fr': +((raw.c.ping.clear + raw.c.shader.clear + raw.c.aoe.clear) / Math.max(1, d.n)).toFixed(2),
