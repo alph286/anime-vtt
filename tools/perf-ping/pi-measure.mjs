@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// NON FUNZIONANTE: restituisce «pingLayer non definito». Non corretto (falliti
+// tre tentativi). Cause sospette, non verificate: manca Runtime.enable prima di
+// Runtime.evaluate, oppure la pagina agganciata non è quella giusta.
 // Misura dei frame di /display su un Chromium GIÀ APERTO (il kiosk del
 // Raspberry), via CDP: niente server di prova, niente browser lanciato da qui.
 //

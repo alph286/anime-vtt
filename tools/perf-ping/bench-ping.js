@@ -2,11 +2,17 @@
 // da measure.mjs --bench). Rende N volte la stessa scena di ping, ognuna
 // seguita da una readPixels di 1 pixel per sincronizzare, e misura il tempo
 // per render: costo GPU più un overhead fisso (la riga "clear").
-// Ritorna righe { caso, risoluzione, ms/render }.
+// Ritorna righe { caso, res, ms/render }.
+// LIMITE: da quando PingLayer.render() riduce canvas.width al riquadro dei
+// ping, il buffer non ha più la dimensione impostata qui sotto. `res` riporta
+// quindi la dimensione del CONTENITORE (canvas pieno), non del buffer ridotto;
+// il ciclo su `sizes` non fissa più la risoluzione del buffer, e il tempo
+// misurato è quello del riquadro effettivo.
 (async () => {
   const N = 60;
   const gl = pingLayer.gl;
   const canvas = pingLayer.canvas;
+  const container = canvas.parentElement || canvas;
   const saved = [canvas.width, canvas.height];
   const tap = (x, y, age, id) => [{ x, y, age, strokeId: id }];
   const trail = (n, id) => Array.from({ length: n }, (_, i) => {
@@ -37,7 +43,7 @@
       const t0 = performance.now();
       for (let i = 0; i < N; i++) { pingLayer.render(groups, 1.2, 1); sync(); }
       const ms = (performance.now() - t0) / N;
-      rows.push({ caso: name, res: `${w}x${h}`, 'ms/render': +ms.toFixed(3) });
+      rows.push({ caso: name, res: `${container.clientWidth}x${container.clientHeight}`, 'ms/render': +ms.toFixed(3) });
       await sleep(100); // pausa: niente GPU al 100% di fila
     }
   }
