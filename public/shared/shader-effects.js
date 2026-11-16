@@ -542,10 +542,221 @@ void main() {
 // aoe.cast in control.js) -- 4 abbinati 1:1 a un colore della palette
 // esistente (AOE_COLOR_TO_SHADER in media.js: rosso/verde/bianco/giallo)
 // più 3 extra nel menu "···" (AOE_SHADER_OVERRIDE_IDS: zona ragnatela,
-// fumo circolare, Viola Cornelia). Le 3 varianti "cerchio d'evocazione"
-// del repo sorgente sono multi-pass (fluid sim: uFluid/uRune/uDye su più
-// framebuffer) e non rientrano nella pipeline a singolo pass qui sotto --
-// restano un lavoro futuro, vedi Piano di lavoro in CLAUDE.md.
+// fumo circolare, Viola Cornelia, e i 3 cerchi d'evocazione). Dei cerchi
+// d'evocazione due sono a un pass; quello con la scia ha `multipass` e
+// passa dalla simulazione di AoeShaderLayer (vedi EvocationSim).
+// Anello di rune del «cerchio d'evocazione», portato da
+// github.com/alph286/shaders (summoning-circle*.html, a sua volta da
+// "Summoning Circle" di Sam Gates, Shadertoy wllfR4): Buffer A
+// dell'originale, funzione pura di posizione e tempo. Il chiamante dichiara
+// `u_time` e `u_resolution`. `spinGlsl` è quanto ruota l'anello al secondo
+// ('2.0' nell'originale, '0.0' nella variante statica, dove le rune
+// cambiano solo per il termine MORPH di rand). Unica modifica: iDate.w
+// (secondi dalla mezzanotte) diventa u_time, come negli altri shader.
+// Espone `vec3 summoningRing(vec2 p)`, p = (2*fragCoord - res)/res.y,
+// vignettatura compresa (anello tra ~0.6 e ~0.95, spento oltre 1.15). Le
+// macro dell'originale sono tolte alla fine (#undef) per non toccare il
+// codice che segue.
+function summoningRuneGlsl(spinGlsl) {
+  return `
+#define R u_resolution.xy
+#define PI 3.1415927
+#define m vec2(5. + 2. * 4., 10.)
+#define PX (40. / R.y)
+#define SS(U) smoothstep(PX, 0., U)
+#define MORPH
+
+float rand(vec2 p) {
+    float d = u_time;
+#ifdef MORPH
+    vec2 pp = p / 20.0;
+    d = floor(d * pp.x * pp.y) / 30.;
+#endif
+    return fract(sin(dot(p.xy, vec2(12389.1283, 8941.1283))) * (12893.128933) + cos(floor(d)));
+}
+
+mat2 rot(float a) { return mat2(cos(a), -sin(a), sin(a), cos(a)); }
+
+// https://www.shadertoy.com/view/4llXD7
+float B(vec2 p, vec2 b, vec4 r) {
+    r.xy = p.x > 0.0 ? r.xy : r.zw;
+    r.x = p.y > 0.0 ? r.x : r.y;
+    vec2 q = abs(p) - b + r.x;
+    return SS(min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r.x);
+}
+
+bool removedTile(float h, vec2 p) {
+    vec2 lp = mod(p, m);
+    float h2 = rand(vec2(20. + h * (floor(p.y)) + 10.84));
+    if (lp.x >= 4. && lp.x < 11. || lp.y >= 6.) return true;
+    return h * dot(h, h2) * 5. <= .5;
+}
+
+float C(vec2 p) { return SS(length(p - .5) - .4); }
+
+float CL(vec2 p, float a) {
+    vec2 bp = (p - .5);
+    bp *= rot(PI / 4. * a);
+    bp.x += .5;
+    return B(bp, vec2(.6, .345), vec4(.3));
+}
+
+float CE(vec2 p, vec2 o) {
+    return B((p + o) * rot(PI / 4.), vec2(.5), vec4(0));
+}
+
+float EL(vec2 p, float t) {
+    vec2 b = vec2(.5, .4 - PX);
+    p -= vec2(.5, .5);
+    p *= rot(PI / 2. * t);
+    p.x += PX;
+    vec4 r = vec4(b.x - b.x / 2., b.x - b.x / 2., 0, 0);
+    return B(p, b, r);
+}
+
+float D(vec2 p, float r) {
+    p -= .5;
+    p *= rot(PI / 2. * r);
+    p += .13;
+    float b1 = B(p, vec2(.5), vec4(.5, 0, 0, 0));
+    p += .77;
+    float b2 = B(p, vec2(.5), vec4(0, 0, 0, .025));
+    return b1 - b2;
+}
+
+float T(vec2 p, float r) {
+    p -= .5;
+    p *= rot(PI / 2. * r);
+    return B(p, vec2(.4 - PX, .6), vec4(0));
+}
+
+float render(vec2 p, float h) {
+    bool neighbors[9];
+    int ul = 6, u = 7, ur = 8, l = 3, me = 4, r = 5, dl = 0, d = 1, dr = 2;
+    int n = 0;
+
+    for (float y = -1.; y <= 1.; y++) {
+        for (float x = -1.; x <= 1.; x++) {
+            int i = int((x + 1.) + (y + 1.) * 3.);
+            vec2 pos = floor(p + vec2(x, y));
+            neighbors[i] = !removedTile(rand(pos), pos);
+            if (i != me && neighbors[i]) n++;
+        }
+    }
+
+    p = fract(p);
+
+    if (neighbors[me]) {
+        if (n == 0) return C(fract(p));
+
+        if (neighbors[u] && neighbors[d]) {
+            float o = T(p, 0.);
+            if (neighbors[l]) o += EL(p + vec2(.175, 0), 0.);
+            if (neighbors[r]) o += EL(p - vec2(.175, 0), 2.);
+            return o;
+        }
+        if (neighbors[l] && neighbors[r]) {
+            float o = T(p, 1.);
+            if (neighbors[u]) o += EL(p - vec2(0, .25), 1.);
+            if (neighbors[d]) o += EL(p + vec2(0, .25), 3.);
+            return o;
+        }
+        if (neighbors[u] && !neighbors[d] && !neighbors[l] && !neighbors[r]) {
+            float o = EL(p - vec2(0, .3), 1.);
+            if (neighbors[dl]) o += CL(p - vec2(.175), 7.);
+            if (neighbors[dr]) o += CL(p - vec2(-.175, .175), 5.);
+            return o;
+        }
+        if (neighbors[d] && !neighbors[u] && !neighbors[l] && !neighbors[r]) {
+            float o = EL(p + vec2(0, .3), 3.);
+            if (neighbors[ul]) o += CL(p + vec2(-.175, .175), 1.);
+            if (neighbors[ur]) o += CL(p + vec2(.175), 3.);
+            return o;
+        }
+        if (neighbors[l] && !neighbors[r] && !neighbors[d] && !neighbors[u]) {
+            float o = EL(p + vec2(.3, 0), 0.);
+            if (neighbors[ur]) o += CL(p + vec2(.175, .175), 3.);
+            if (neighbors[dr]) o += CL(p - vec2(-.175, .175), 5.);
+            return o;
+        }
+        if (neighbors[r] && !neighbors[l] && !neighbors[d] && !neighbors[u]) {
+            float o = EL(p - vec2(.3, 0), 2.);
+            if (neighbors[ul]) o += CL(p + vec2(-.175, .175), 1.);
+            if (neighbors[dl]) o += CL(p - vec2(.175), 7.);
+            return o;
+        }
+
+        float j = 0.0;
+        if (!neighbors[u] && neighbors[r] && !neighbors[l] && neighbors[d]) j += D(p, 3.);
+        if (neighbors[u] && neighbors[r] && !neighbors[l] && !neighbors[d]) j += D(p, 2.);
+        if (!neighbors[u] && !neighbors[r] && neighbors[l] && neighbors[d]) j += D(p, 0.);
+        if (neighbors[u] && !neighbors[r] && neighbors[l] && !neighbors[d]) j += D(p, 1.);
+        if (neighbors[ul] && !neighbors[l] && !neighbors[u]) j += CL(p + vec2(-.175, .175), 1.);
+        if (neighbors[dl] && !neighbors[l] && !neighbors[d]) j += CL(p - vec2(.175), 7.);
+        if (neighbors[ur] && !neighbors[r] && !neighbors[u]) j += CL(p + vec2(.175, .175), 3.);
+        if (neighbors[dr] && !neighbors[r] && !neighbors[d]) j += CL(p - vec2(-.175, .175), 5.);
+        return j;
+    } else {
+        float o = 0.0;
+        if (!neighbors[ul] && neighbors[u] && neighbors[l]) o += CE(p, vec2(.07, -1.15));
+        if (!neighbors[ur] && neighbors[u] && neighbors[r]) o += CE(p, vec2(-1.11));
+        if (!neighbors[dl] && neighbors[d] && neighbors[l]) o += CE(p, vec2(.11));
+        if (!neighbors[dr] && neighbors[d] && neighbors[r]) o += CE(p, vec2(-1.11, .11));
+        return o;
+    }
+}
+
+vec3 summoningCircleRaw(vec2 u) {
+    vec2 p = vec2(log(length(u.xy)), atan(u.y, u.x));
+    p *= (6.0 / PI) * 10.85;
+    p += vec2(5., 3.);
+    p.y += u_time * ${spinGlsl};
+    p.y = mod(p.y, 10.015 * 13.0) - .2;
+    vec2 lp = p;
+    p = floor(p);
+    float hash = rand(p);
+
+    vec3 col = vec3(0.0);
+    if (p.x >= -5. && p.x <= 4.)
+        col = vec3(clamp(render(lp, hash), 0., 1.)) * min(length(u) * 4., 1.);
+    return col;
+}
+
+vec3 summoningRing(vec2 p) {
+    float vign = 1.0 - smoothstep(0.85, 1.15, length(p));
+    return summoningCircleRaw(p) * vign;
+}
+
+#undef R
+#undef PI
+#undef m
+#undef PX
+#undef SS
+#undef MORPH
+`;
+}
+
+// Dissolvenza d'entrata dell'originale (FADE_START 0.3 s, FADE_LEN 2 s),
+// contata da quando l'area è stata vista lanciata (u_age, vedi
+// AoeShaderLayer.render) invece che dal caricamento della pagina.
+const SUMMONING_FADE_GLSL = `
+uniform float u_age;
+float summoningFade() { return clamp((u_age - 0.3) / 2.0, 0.0, 1.0); }
+`;
+
+// Le due varianti a un pass: rune bianche, alpha = luminosità (colore già
+// premoltiplicato, come gli altri shader AOE).
+function summoningSinglePassSrc(spinGlsl) {
+  return aoeEffectFragmentSrc(summoningRuneGlsl(spinGlsl) + SUMMONING_FADE_GLSL + `
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    vec3 col = summoningRing(p) * summoningFade();
+    float alpha = clamp(max(col.r, max(col.g, col.b)), 0.0, 1.0);
+    fragColor = vec4(col, alpha);
+}
+`);
+}
+
 const AOE_SHADER_EFFECTS = {
   red_fire: {
     label: 'Cerchio di fuoco (rosso)',
@@ -1133,6 +1344,19 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     fragColor = vec4(col * alpha, alpha);
 }
 `)
+  },
+  // Cerchio d'evocazione (vedi summoningRuneGlsl). fillScale:false come
+  // web_area: l'anello sta tra 0.6 e 0.95 in unità p, il riscalo lo
+  // porterebbe fuori dalla sagoma.
+  summoning_circle: {
+    label: "Cerchio d'evocazione",
+    fillScale: false,
+    fragmentSrc: summoningSinglePassSrc('2.0')
+  },
+  summoning_circle_static: {
+    label: "Cerchio d'evocazione (fermo)",
+    fillScale: false,
+    fragmentSrc: summoningSinglePassSrc('0.0')
   }
 };
 
@@ -1536,6 +1760,13 @@ function unionRectsPx(rects, fullW, fullH, snap = SUBCANVAS_SNAP_PX) {
     y1 = Math.max(y1, r.y + r.h);
   }
   return snapRectPx(x0, y0, x1, y1, fullW, fullH, snap);
+}
+
+// Chiavi di `keys` (iterabile) che non compaiono in `presentIds`: lo stato
+// per area da buttare quando l'area non c'è più.
+function idsNotIn(keys, presentIds) {
+  const present = new Set(presentIds);
+  return [...keys].filter((k) => !present.has(k));
 }
 
 // true se è ora di ridisegnare un layer limitato a `maxFps`. Tolleranza del
@@ -1971,6 +2202,9 @@ class AoeShaderLayer {
     this.sub = new SubCanvas(canvasEl);
     this.lastDrawMs = null;
     this.lastKey = '';
+    // aoe.id -> performance.now() della prima volta che l'area è stata
+    // vista lanciata (dissolvenza d'entrata dei cerchi d'evocazione).
+    this.firstSeenMs = new Map();
   }
 
   get available() {
@@ -2002,6 +2236,7 @@ class AoeShaderLayer {
     if (!aoes || !aoes.length) {
       this.sub.hide();
       this.lastKey = '';
+      this.firstSeenMs.clear();
       return;
     }
     if (!naturalW || !naturalH) return;
@@ -2040,8 +2275,11 @@ class AoeShaderLayer {
       // stesso motivo di ShaderLayer.render().
       const yPx = Math.round(full.h - topPx - hPx);
       const originXPx = Math.round(xPx);
-      items.push({ aoe, program, maskPointsPx, x: originXPx, y: yPx, w: wPx, h: hPx });
+      if (!this.firstSeenMs.has(aoe.id)) this.firstSeenMs.set(aoe.id, nowMs);
+      const age = (nowMs - this.firstSeenMs.get(aoe.id)) / 1000;
+      items.push({ aoe, program, maskPointsPx, age, x: originXPx, y: yPx, w: wPx, h: hPx });
     });
+    for (const id of idsNotIn(this.firstSeenMs.keys(), aoes.map((a) => a.id))) this.firstSeenMs.delete(id);
     this.lastKey = key;
     const rect = unionRectsPx(items, full.w, full.h);
     if (!rect) {
@@ -2055,7 +2293,7 @@ class AoeShaderLayer {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    items.forEach(({ aoe, program, maskPointsPx, x, y, w: wPx, h: hPx }) => {
+    items.forEach(({ aoe, program, maskPointsPx, age, x, y, w: wPx, h: hPx }) => {
       // Stesso rettangolo del canvas pieno, spostato nel canvas ridotto:
       // dentro il rettangolo (fragCoord = gl_FragCoord - u_viewportOrigin)
       // i pixel restano identici.
@@ -2066,6 +2304,9 @@ class AoeShaderLayer {
       gl.uniform1f(gl.getUniformLocation(program, 'u_time'), time);
       gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), wPx, hPx);
       gl.uniform2f(gl.getUniformLocation(program, 'u_viewportOrigin'), originXPx, yPx);
+      // Solo i cerchi d'evocazione dichiarano u_age: per gli altri la
+      // location è null e la chiamata non fa niente.
+      gl.uniform1f(gl.getUniformLocation(program, 'u_age'), age);
 
       const maxPts = Math.min(maskPointsPx.length, 32);
       const flat = new Float32Array(32 * 2);
@@ -2179,6 +2420,8 @@ if (typeof module !== 'undefined' && module.exports) {
     pingGroupsBoundsPx,
     unionRectsPx,
     frameDue,
+    idsNotIn,
+    AOE_SHADER_EFFECTS,
     PING_SONAR_REACH,
     PING_TRAIL_REACH,
     SUBCANVAS_SNAP_PX,

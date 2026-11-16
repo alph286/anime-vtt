@@ -5,6 +5,8 @@ const {
   pingGroupsBoundsPx,
   unionRectsPx,
   frameDue,
+  idsNotIn,
+  AOE_SHADER_EFFECTS,
   PING_SONAR_REACH,
   PING_TRAIL_REACH,
   AOE_SHADER_MAX_FPS,
@@ -89,4 +91,23 @@ test('frameDue: sotto il limite disegna sempre; primo frame sempre', () => {
   assert.strictEqual(frameDue(0, null, 30), true);
   assert.strictEqual(frameDue(1000, 960, 30), true);
   assert.strictEqual(frameDue(1000, 990, 30), false);
+});
+
+test('idsNotIn: le chiavi senza area corrispondente', () => {
+  const m = new Map([['a', 1], ['b', 2], ['c', 3]]);
+  assert.deepStrictEqual(idsNotIn(m.keys(), ['b', 'x']), ['a', 'c']);
+  assert.deepStrictEqual(idsNotIn([], ['a']), []);
+});
+
+test('cerchi d\'evocazione a un pass: registrati, fillScale spento, u_age, niente macro né nomi Shadertoy', () => {
+  for (const id of ['summoning_circle', 'summoning_circle_static']) {
+    const def = AOE_SHADER_EFFECTS[id];
+    assert.ok(def, id);
+    assert.strictEqual(def.fillScale, false);
+    assert.match(def.fragmentSrc, /uniform float u_age;/);
+    assert.match(def.fragmentSrc, /#undef PX/);
+    assert.doesNotMatch(def.fragmentSrc, /iDate|iTime|iResolution/);
+  }
+  assert.match(AOE_SHADER_EFFECTS.summoning_circle.fragmentSrc, /u_time \* 2\.0/);
+  assert.match(AOE_SHADER_EFFECTS.summoning_circle_static.fragmentSrc, /u_time \* 0\.0/);
 });
