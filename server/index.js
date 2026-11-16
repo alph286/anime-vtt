@@ -21,6 +21,7 @@ const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js'
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
 const packageJson = require('../package.json');
+const { registerAudioEvents } = require('./socket-audio');
 const { registerShaderEvents } = require('./socket-shader');
 const { registerAoeEvents } = require('./socket-aoe');
 const { registerGridEvents } = require('./socket-grid');
@@ -607,16 +608,7 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  // Stato reale dell'audio, solo dal display (ha fatto `hello` con role display).
-  // Si ritrasmette solo quando cambia, mai su disco.
-  socket.on('audio:status', (payload) => {
-    if (!displaySockets.has(socket.id)) return;
-    const next = normalizeDisplayAudioStatus(payload);
-    if (!next) return;
-    if (displayAudio && JSON.stringify(displayAudio) === JSON.stringify(next)) return;
-    displayAudio = next;
-    broadcastState();
-  });
+  registerAudioEvents(socket, socketCtx);
 
   registerLocationEvents(socket, socketCtx);
 
@@ -633,80 +625,6 @@ io.on('connection', (socket) => {
   registerAoeEvents(socket, socketCtx);
 
   registerShaderEvents(socket, socketCtx);
-
-  // Audio a righe. `audio:toggle` agisce sempre sulla location attiva (non
-  // esiste un'anteprima silenziosa: suonerebbe subito ai giocatori); volume,
-  // aggiornamento ed eliminazione indicano la location per id.
-  socket.on('audio:toggle', ({ trackId } = {}) => {
-    const location = getActiveLocation();
-    if (!location) return;
-    if (!audioModel.toggleTrack(state, location, trackId, { displayConnected: displaySockets.size > 0 })) return;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('audio:volume', ({ locationId, trackId, volume } = {}) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location || !audioModel.setTrackVolume(location, trackId, volume)) return;
-    saveState(state);
-    broadcastState();
-  });
-
-  // Nome e icona si cambiano dall'archivio (`audioLibrary:update`), non dalla riga.
-  socket.on('audio:update', ({ locationId, trackId, restartOnStop, handout } = {}) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location || !audioModel.updateTrack(location, trackId, { restartOnStop, handout })) return;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('audio:delete', ({ locationId, trackId } = {}) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location) return;
-    // Il file resta nell'archivio: si cancella solo con `audioLibrary:delete`.
-    if (!audioModel.removeTrack(state, location, trackId)) return;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('audio:add', ({ locationId, kind, audioId } = {}) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location || !audioModel.addTrackFromLibrary(state, location, kind, audioId)) return;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('audio:copyFrom', ({ locationId, fromLocationId } = {}) => {
-    if (locationId === fromLocationId) return;
-    const to = state.locations.find((l) => l.id === locationId);
-    const from = state.locations.find((l) => l.id === fromLocationId);
-    if (!to || !from || !audioModel.copyTracks(state, from, to)) return;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('audioLibrary:update', ({ audioId, name, icon } = {}) => {
-    if (!audioModel.updateLibraryItem(state, audioId, { name, icon })) return;
-    saveState(state);
-    broadcastState();
-  });
-
-  // L'avviso "usato in..." lo mostra /editor prima di emettere.
-  socket.on('audioLibrary:delete', ({ audioId } = {}) => {
-    const file = audioModel.removeLibraryItem(state, audioId);
-    if (!file) return;
-    deleteUploadedFile(AUDIO_DIR, file);
-    saveState(state);
-    broadcastState();
-  });
-
-  // /display lo emette quando un one-shot finisce da solo. Solo dal display;
-  // il seq scarta un "finito" in ritardo che riguarda una partenza superata.
-  socket.on('audio:oneshotEnded', ({ trackId, seq } = {}) => {
-    if (!displaySockets.has(socket.id)) return;
-    if (!audioModel.oneshotEnded(state, trackId, seq)) return;
-    broadcastState();
-  });
 
   socket.on('disconnect', () => {
     controlSockets.delete(socket.id);
