@@ -223,3 +223,10 @@ test('SubCanvas growOnly: dopo hide() o con un canvas pieno diverso la misura ri
   assert.deepStrictEqual(sub.place({ x: 32, y: 32, w: 64, h: 64 }, FULL), { x: 32, y: 32, w: 64, h: 64 });
   assert.deepStrictEqual(sub.place({ x: 32, y: 32, w: 32, h: 32 }, { w: 640, h: 360 }), { x: 32, y: 32, w: 32, h: 32 });
 });
+
+test('SubCanvas resolution 0,5: buffer a metà, riquadro in px del canvas pieno', () => {
+  const c = fakeCanvas();
+  const sub = new SubCanvas(c, { growOnly: true, resolution: 0.5 });
+  assert.deepStrictEqual(sub.place({ x: 64, y: 64, w: 128, h: 96 }, FULL), { x: 64, y: 64, w: 128, h: 96 });
+  assert.deepStrictEqual([c.width, c.height], [64, 48]);
+});
