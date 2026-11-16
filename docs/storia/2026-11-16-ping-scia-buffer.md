@@ -157,3 +157,125 @@ violazioni, `npm test` verde. Punti aperti, non corretti:
 - Nessun test unitario controlla che `PingLayer` usi il riquadro restituito
   da `place()` per viewport e `u_offset` (lo copre solo `compare-visual`,
   che non gira in `npm test`).
+
+## Indagine sul Pi (16 nov 2026, pomeriggio)
+
+Solo indagine, codice di produzione non toccato. Kiosk vero (Pi 4, V3D 4.2,
+Chromium 149, TV 1920x1080 a dpr 1), Tarrasque 5, sul Pi lo
+`shader-effects.js` del branch e il `display.js` di `main` come nella misura
+del mattino. Temperatura 59-71 °C, `throttled=0x0` in tutte le prove. Il Pi
+è poi tornato com'era (`b836bf9`, `git status` senza modifiche sotto
+`public/`, Copertina attiva, niente porta di debug, tunnel chiuso).
+
+Strumenti nuovi in `tools/perf-ping/`: `pi-probe.mjs` (prove A/B: una
+variante cambia una cosa nella pagina via `Runtime.evaluate`, misura fps,
+tempo CPU del ping e CPU per thread letta da `/proc` sul Pi), `pi-trace.mjs`
+(trace CDP con riassunto per thread, fasi dei frame e finestre attorno ai
+resize), `pi-resize.mjs` (micro-prova del resize di un canvas WebGL2 nuovo),
+`cdp-lib.mjs` (pezzi comuni). Il contesto del ping risulta
+`antialias: true` (4 campioni), `depth: true`, `preserveDrawingBuffer: false`.
+La mappa è un `webm` 1650x1254.
+
+### Prove A/B (scia in cerchio, 8 s ciascuna)
+
+| variante | cosa cambia | fps | p95 ms | Mpx ping/frame |
+|---|---|---|---|---|
+| nessun ping | | 34,7-36,3 | 85-101 | 0 |
+| base | scia vera | 11,5-12,3 | 250-370 | 0,47 |
+| flat | shader del ping a colore costante | 22,4-22,5 | 150-164 | 0,48 |
+| hidden | canvas disegnato ma `visibility: hidden` | 12,8 | 434 | 0,50 |
+| full | buffer sempre a tutta mappa, zero resize | 6,3 | 466 | 1,57 |
+| full-flat | come full, shader a colore costante | 18,6 | 183 | 1,50 |
+| full-clear | come full, solo `clear` | 18,5 | 188 | 1,51 |
+| full-seg4 | come full, gruppi tagliati a 4 punti | 11,6 | 383 | 1,53 |
+| small | scia di raggio 5% invece di 25% | 21,9 | 167 | 0,10 |
+| cull | shader vero + test sul riquadro del segmento prima di `distToSegmentT` | 12,5 | 333 | 0,46 |
+| half | buffer del ping a mezza risoluzione | 19,1-19,6 | 171-199 | 0,13 |
+| noaa | contesto del ping con `antialias: false` | 12,9 | 233 | 0,49 |
+| noaa-half | entrambe | 19,0-20,0 | 194-196 | 0,13 |
+| base-novideo | scia, video in pausa | 13,1 | 193 | 0,46 |
+| novideo | niente ping, video in pausa | 56,0 | 24 | 0 |
+| extra-aa | niente ping, un canvas WebGL in più a tutto schermo ridisegnato a ogni frame | 18,0 | 183 | |
+| extra-noaa | come sopra con `antialias: false` | 23,5 | 136 | |
+
+CPU per thread durante la scia (da `/proc`, % di un core): main del renderer
+6-11, processo GPU 12-20 in tutto, decodifica del video (CodecWorker +
+ThreadPool) ~105 con o senza ping. Nessun thread è saturo.
+
+### Trace (4 s ciascuno)
+
+- `CrGpuMain` (main del processo GPU) occupato 84-94% del tempo in tutte le
+  prove, anche senza ping (85%), ma con 12-20% di CPU: è fermo ad aspettare la
+  GPU (V3D). Il tempo finisce nella chiamata che incontra l'attesa: con il
+  video `RasterDecoderImpl::DoWritePixelsYUVINTERNAL` (caricamento dei frame
+  del video, 680-716 ms/s, fino a 312 ms per chiamata), senza video `WebGL`
+  (623 ms/s).
+- `CrRendererMain` 12-19%; i frame lunghi (fino a 404 ms) sono callback di
+  rAF che contengono `CommandBufferHelper::Finish` (vedi sotto).
+
+### Cosa dice
+
+1. **Il resto del frame è tempo GPU, non CPU.** La V3D è già quasi satura
+   senza ping (video + shader della mappa) e la scia aggiunge: (a) lo shader
+   della scia, ~40 ms per frame a 0,47 Mpx (base 11,8 contro flat 22,5 fps),
+   cioè ~70-85 ns per pixel, quasi tutto nel ciclo sui segmenti (a tutta mappa
+   4 punti invece di ~25 portano da 6,3 a 11,6 fps; il test sul riquadro del
+   segmento invece quasi niente, 11,5 → 12,5: costa l'iterazione, non il
+   calcolo della distanza); (b) un layer WebGL in più ripresentato a ogni
+   frame, ~16 ms a 0,47 Mpx e ~26 ms a tutta mappa (full-clear, extra-aa),
+   di cui con `antialias: false` si risparmiano ~13 ms solo quando il canvas
+   è grande (extra-noaa 23,5 contro 18,0; sul ping a 0,47 Mpx 12,9 contro
+   11,9, dentro il rumore). Non è la composizione del canvas del ping
+   (`hidden` 12,8, non cambia) né il video (13,1 senza, non cambia per la
+   scia; costa invece 35 → 56 fps senza ping) né la CPU o il GC.
+2. **I p95 da 300-400 ms sono i frame con resize.** A ~12 fps con 1,4-2
+   resize al secondo un frame su 6-8 ne contiene uno.
+3. **Il resize costa perché è sincrono con una GPU in ritardo.** Nelle
+   finestre `performance.measure` attorno al setter di `width`/`height` il
+   main del renderer passa il 99% del tempo in `CommandBufferHelper::Finish`
+   → `WaitForGetOffset`, chiamato da `GLES2::GetGLError` e
+   `CheckFramebufferStatus` (controlli sincroni di Blink sul nuovo drawing
+   buffer): aspetta che il processo GPU esegua tutto quello che ha in coda, e
+   il processo GPU è a sua volta fermo dietro la V3D (`DoWritePixelsYUV` del
+   video 48 ms per finestra, `WebGL` 13-35 ms). L'allocazione vera
+   (`SharedImageStub::OnCreateSharedImage`) pesa 2-4 ms per finestra. Niente
+   programmi o texture ricreati. Finestre da 6 a 296 ms (media 85 con il
+   video, 65 senza): il costo è l'attesa della coda, non la dimensione. Sulla
+   RTX la stessa attesa è breve perché la coda si svuota subito (non misurato
+   oggi, è la spiegazione coerente con i 7-11 ms).
+
+### Non verificato o incerto
+
+- La micro-prova di `pi-resize.mjs` (12 resize per configurazione) è
+  rumorosa: media molto sopra la mediana. Indica `antialias: false` più
+  economico (setter 27 contro 86 ms senza ping, 75 contro 130 con la scia) e
+  poca dipendenza dalla dimensione (300x200 53 ms, 1900x1060 106 ms senza
+  ping), ma con questi campioni non lo do per misurato.
+- Che il costo del ciclo sui segmenti venga dalla lettura di `u_points[]` con
+  indice dinamico (sulla V3D passa dalla TMU) è un'ipotesi: non misurata.
+- Le combinazioni di rimedi (buffer fisso a mezza risoluzione, meno punti,
+  `antialias: false` su tutti i layer) non sono state provate insieme, e la
+  resa visiva della mezza risoluzione va giudicata da Alph dal vivo.
+
+### Rimedi possibili (non applicati), per guadagno atteso
+
+1. Buffer del ping a mezza risoluzione: 11,9 → 19,6-20 fps misurati, p95
+   ~190 ms. Rischio: resa più morbida della scia, da vedere sulla TV.
+2. Niente resize mentre i ping sono vivi: buffer allocato una volta (meglio
+   se a mezza risoluzione, ~0,4 Mpx a tutta mappa) e disegno limitato al
+   riquadro con `gl.scissor`/`viewport`. Toglie i frame da 100-300 ms (il p95)
+   ma il layer grande costa ~26 ms a frame a piena risoluzione (full-clear):
+   solo insieme al punto 1. In alternativa passi di crescita molto più
+   larghi (meno resize). Rischio basso-medio.
+3. Meno iterazioni per pixel: meno punti per gesto su /display
+   (semplificare la polilinea a 8-12 punti) o geometria per segmento invece
+   del triangolo a tutto schermo. Guadagno forte a tutta mappa (6,3 → 11,6
+   con 4 punti); la seconda è una riscrittura, rischio più alto.
+4. `antialias: false` (e `depth: false`) nei contesti di ping, shader e aree
+   d'effetto: per un triangolo a tutto schermo l'MSAA non cambia i pixel.
+   Guadagno ~13 ms a frame per un layer a tutto schermo, quasi nullo per il
+   ping piccolo. Rischio basso.
+5. Fuori dal ping: il video della mappa decodificato in software (~1 core) e
+   caricato a ogni frame toglie da solo 35 → 56 fps. Una mappa video più
+   piccola o in un formato decodificato in hardware aiuterebbe tutto; non
+   provato.
