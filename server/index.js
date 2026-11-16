@@ -21,6 +21,7 @@ const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js'
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
 const packageJson = require('../package.json');
+const { registerFogEvents } = require('./socket-fog');
 const { registerLocationEvents } = require('./socket-location');
 
 const PORT = process.env.PORT || 3000;
@@ -623,22 +624,7 @@ io.on('connection', (socket) => {
 
   registerLocationEvents(socket, socketCtx);
 
-  socket.on('fow:toggle', ({ locationId, polygonId }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    const polygon = location?.map.polygons.find((p) => p.id === polygonId);
-    if (!polygon) return;
-    polygon.revealed = !polygon.revealed;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('fow:setAll', ({ locationId, revealed }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location) return;
-    (location.map.polygons || []).forEach((p) => { p.revealed = Boolean(revealed); });
-    saveState(state);
-    broadcastState();
-  });
+  registerFogEvents(socket, socketCtx);
 
   socket.on('image:show', ({ imageId }) => {
     const location = getActiveLocation();
