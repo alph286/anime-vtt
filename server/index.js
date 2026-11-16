@@ -21,6 +21,7 @@ const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js'
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
 const packageJson = require('../package.json');
+const { registerPresenceEvents } = require('./socket-presence');
 const { registerAudioEvents } = require('./socket-audio');
 const { registerShaderEvents } = require('./socket-shader');
 const { registerAoeEvents } = require('./socket-aoe');
@@ -591,54 +592,16 @@ io.on('connection', (socket) => {
   socket.emit('control:status', { connected: controlSockets.size > 0 });
   socket.emit('display:status', { connected: displaySockets.size > 0 });
 
-  socket.on('hello', ({ role }) => {
-    if (role === 'control') {
-      controlSockets.add(socket.id);
-      broadcastControlStatus();
-    } else if (role === 'display') {
-      displaySockets.add(socket.id);
-      broadcastDisplayStatus();
-      // Un display nuovo o ricaricato non deve far ripartire one-shot "in corso".
-      if (audioModel.clearOneshots(state)) broadcastState();
-    }
-  });
-
-  socket.on('display:viewport', ({ width, height }) => {
-    displayViewport = { width, height };
-    broadcastState();
-  });
-
+  registerPresenceEvents(socket, socketCtx);
   registerAudioEvents(socket, socketCtx);
-
   registerLocationEvents(socket, socketCtx);
-
   registerFogEvents(socket, socketCtx);
-
   registerImageEvents(socket, socketCtx);
-
   registerViewEvents(socket, socketCtx);
-
   registerPolygonEvents(socket, socketCtx);
-
   registerGridEvents(socket, socketCtx);
-
   registerAoeEvents(socket, socketCtx);
-
   registerShaderEvents(socket, socketCtx);
-
-  socket.on('disconnect', () => {
-    controlSockets.delete(socket.id);
-    broadcastControlStatus();
-    const wasDisplay = displaySockets.delete(socket.id);
-    broadcastDisplayStatus();
-    if (wasDisplay && displaySockets.size === 0) {
-      const cleared = audioModel.clearOneshots(state);
-      if (displayAudio || cleared) {
-        displayAudio = null;
-        broadcastState();
-      }
-    }
-  });
 });
 
 server.listen(PORT, () => {
