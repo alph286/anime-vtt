@@ -52,6 +52,8 @@ Cubo. Su Cono e Linea il ritaglio della sagoma taglia l'anello.
 - La spinta del fluido è riportata alla risoluzione della simulazione
   (`u_force = altezza/1080`). Così la scia si muove sullo schermo alla stessa
   velocità relativa dell'originale a tutto schermo.
+- Nella variante con scia anche la scia ha la dissolvenza d'entrata
+  (nell'originale no).
 - Le rune nitide si calcolano nella composizione, a piena risoluzione.
   Quelle a 128 px servono solo a spingere il fluido e a dare il colore.
 
@@ -72,19 +74,31 @@ Cubo. Su Cono e Linea il ritaglio della sagoma taglia l'anello.
 - La lista vuota butta le simulazioni (0 rimaste) e nasconde il canvas.
   Un'area che passa da scia a fuoco butta la sua.
 - Gli shader esistenti non cambiano:
-  - `tools/perf-ping/compare-visual.mjs --ref=main`: «nessuna differenza» su
-    /display e /control (ping e 4 aree);
+  - `tools/perf-ping/compare-visual.mjs --ref=b836bf9` (main prima di
+    perf-ping): «nessuna differenza» su /display e /control (ping e 4 aree).
+    Con `--ref=main` ora si hanno falsi positivi, perché main contiene già i
+    canvas ridotti;
   - confronto diretto con `AoeShaderLayer` di `perf-ping-display` per tutti e
     7 gli shader AOE di prima × 4 forme: 0 byte diversi, stesso riquadro.
   - Nota: `compare-visual.mjs --ref=perf-ping-display` dà falsi «DIFFERENZE».
     Lo strumento suppone che il riferimento usi il canvas pieno, quindi va
-    usato solo contro `main`.
+    usato solo contro `b836bf9`.
 - /display su un server di prova (porta 3102, dati finti): un'area con scia e
   un fuoco lanciati, il layer disegna a 28,6 fps (limite 30), 1 simulazione
   attiva, nessun errore GL.
 - Il server accetta `summoning_circle_trail` in `aoe:setShaderOverride`
   (test nuovo). Le tre voci sono nelle build di /control e /party.
 - `npm test` verde.
+
+## Correzioni dopo la revisione
+
+- a. `EvocationSim`: `gl.clear` solo se il framebuffer è completo (prima dava
+  INVALID_FRAMEBUFFER_OPERATION).
+- b. Se manca `EXT_color_buffer_float` si prova `EXT_color_buffer_half_float`;
+  resta il controllo con `checkFramebufferStatus`.
+- c. Le `getUniformLocation` sono in cache per programma
+  (`cachedUniformLocation`, WeakMap). Vale anche per gli altri punti del file
+  che prima le chiamavano a ogni frame; cosa si disegna non cambia.
 
 ## NON verificato
 
