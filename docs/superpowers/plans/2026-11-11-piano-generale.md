@@ -32,12 +32,15 @@ cosa è successo e dove si è fermato. Decide Alph come proseguire.
   da giudicare dal vivo; fps sul Raspberry non misurati.
 - Ping sul Raspberry misurati: 12,3 → 36,6 fps senza ping, 4,3 → 9,4 con
   tap e scia (tabella in `docs/storia/2026-11-16-ping-veloci-display.md`).
-- **Prossimo passo**: la scia del ping resta pesante sul Pi (render() del
-  ping 25-71 ms di CPU per frame). Ipotesi da verificare in locale prima di
-  correggere: il canvas ridotto cambia misura a scatti di 32 px e rialloca il
-  buffer WebGL. Opus verifica e corregge (branch `ping-scia-buffer`, confronto
-  pixel con `--ref=b836bf9`), poi nuova misura sul Pi con
-  `tools/perf-ping/pi-measure.mjs` (procedura nella cronaca dei ping).
+- Branch `ping-scia-buffer` (buffer del ping che cresce e non si restringe),
+  rivisto da una sessione nuova, misurato sul Pi, NON unito
+  (`docs/storia/2026-11-16-ping-scia-buffer.md`). L'ipotesi dei resize regge
+  (ogni resize costa 140-250 ms di CPU sul Pi) e il tempo CPU del ping scende
+  da 28,5 a 17,6 ms (scia) e da 58 a 15 ms (misto) per frame, ma gli fps quasi
+  non cambiano: 12,0 → 12,6 con la scia, 9,3 → 10,9 col misto.
+- **Prossimo passo, lo decide Alph**: unire il branch così com'è (guadagno
+  piccolo, nessuna differenza visiva) e/o cercare dove va il resto del frame
+  con la scia sul Pi, e perché un resize costi 150-250 ms.
 - Poi: fase 1 (serata di prova, giudicare anche i cerchi d'evocazione e i loro
   fps), fase 5. Fase 3 sospesa (PIN spento). `main` non è ancora su GitHub.
 

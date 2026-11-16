@@ -87,21 +87,73 @@ dei ping. I resize rimasti sono quelli di inizio gesto e della crescita.
 
 ## Non verificato
 
-- Gli fps e il tempo di `render()` sul Pi: la misura la fa Alph. File da
-  copiare sul Pi: `public/shared/shader-effects.js` (l'unico cambiato sotto
-  `public/`; `display.js` non cambia).
-- Se sul Pi il 12-18% di pixel in più da comporre costa più dei resize
-  risparmiati. In locale non si vede (60 fps in ogni caso).
+- Prove con gesti a L o rettilinei: le prove di `measure.mjs` e
+  `pi-measure.mjs` sono un cerchio fisso al centro, il caso più favorevole a
+  `growOnly` (vedi «Revisione»).
 - Perché un resize costi 7-11 ms di CPU sulla RTX: non indagato.
 - Il giudizio visivo dal vivo.
 
 ## Limiti noti
 
 - Un gesto che attraversa la mappa tiene il buffer grande fino a quando tutti
-  i ping sono sfumati.
+  i ping sono sfumati. Larghezza e altezza crescono ciascuna per conto suo
+  (`grownRect`): un gesto a L tiene un buffer più grande di qualunque
+  riquadro usato davvero, e con ping continui può arrivare al canvas pieno.
 - Il primo frame di ogni gesto rialloca comunque il buffer (canvas nascosto
   tra un gesto e l'altro).
 - /control e /party usano lo stesso `PingLayer`, quindi anche lì il buffer
   cresce senza restringersi. `use-shader-loop.ts` (non cambiato) chiama
   `render()` con zero gruppi quando i ping finiscono, e la misura riparte
   (letto nel codice, non provato sul telefono).
+
+## Misura sul Raspberry (16 nov 2026)
+
+Kiosk vero, Tarrasque 5, TV 1920x1080, 8 s per prova con il
+`pi-measure.mjs` del branch, procedura di
+`docs/storia/2026-11-16-ping-veloci-display.md`. Prima = `main` (6ec316b),
+dopo = `main` con lo `shader-effects.js` del branch. Il Pi è poi tornato com'era
+(`b836bf9`, nessuna modifica sotto `public/`, Copertina attiva, niente porta
+di debug). Temperatura 55-59 °C, `throttled=0x0`.
+
+| prova | fps | p95 ms | ping cpu ms/frame | resize/s | cpu per resize ms | Mpx shader/frame |
+|---|---|---|---|---|---|---|
+| nessun ping | 35,3 → 35,0 | 83 → 91 | 0 → 0 | 0 → 0 | | 0,09 → 0,09 |
+| solo tap | 26,4 → 26,2 | 133 → 127 | 3,5 → 1,9 | 0,5 → 0,3 | 177 → 233 | 0,20 → 0,20 |
+| solo scia | 12,0 → 12,6 | 384 → 324 | 28,5 → 17,6 | 2,6 → 1,0 | 146 → 254 | 0,51 → 0,55 |
+| misto | 9,3 → 10,9 | 441 → 412 | 58,0 → 15,1 | 5,2 → 1,1 | 140 → 181 | 0,65 → 0,69 |
+
+Cosa dice:
+
+- L'ipotesi regge anche sul Pi: il tempo CPU del ping sta quasi tutto nei
+  frame con resize (render senza resize 0,6-0,9 ms), e ogni resize costa
+  140-250 ms, non 7-11 come sulla RTX. Il branch toglie metà o più dei
+  resize e il tempo CPU del ping scende di 1,6 volte (scia) e 3,8 (misto).
+- Gli fps però quasi non cambiano: 12,0 → 12,6 con la scia, 9,3 → 10,9 col
+  misto. Il resto del costo della scia sul Pi non è il resize. Sul Pi i resize
+  sono 2,6 al secondo e non 13 come in locale, perché i frame sono pochi.
+- I pixel dello shader salgono del 6-8%, non fanno danni visibili.
+- Da capire (non indagato): perché un resize costi 150-250 ms sul Pi, e dove
+  vada il resto del frame con la scia (canvas visibili 1,3-1,5 Mpx contro
+  0,62 senza ping).
+
+## Revisione (sessione nuova, 16 nov 2026)
+
+Nessun problema bloccante: coordinate corrette, `compare-visual` rifatto con
+esito «nessuna differenza», prova a tappeto di `grownRect`/`place` senza
+violazioni, `npm test` verde. Punti aperti, non corretti:
+
+- `grownRect` (shader-effects.js:1976-1977) fa crescere larghezza e altezza
+  in modo indipendente: un gesto a L tiene un buffer più grande del
+  necessario. Rimedio possibile: isteresi (restringere quando l'area usata
+  scende sotto 1/4 del buffer).
+- La prova «scia» è un cerchio fisso al centro, il caso migliore per
+  `growOnly`: manca una prova con una scia rettilinea.
+- La scia nello shader (`trailAlphaAt`) non esce in anticipo: ogni pixel in
+  più del riquadro costa come un pixel della scia.
+- Il commento in shader-effects.js:1936-1938 dice «7-11 ms per resize», la
+  tabella locale dice 5,0-11,5 ms (sul Pi 140-250).
+- La tabella «Misure locali dopo» riporta solo i Mpx dello shader, non l'area
+  ricomposta.
+- Nessun test unitario controlla che `PingLayer` usi il riquadro restituito
+  da `place()` per viewport e `u_offset` (lo copre solo `compare-visual`,
+  che non gira in `npm test`).
