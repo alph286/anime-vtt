@@ -279,3 +279,40 @@ ThreadPool) ~105 con o senza ping. Nessun thread è saturo.
    caricato a ogni frame toglie da solo 35 → 56 fps. Una mappa video più
    piccola o in un formato decodificato in hardware aiuterebbe tutto; non
    provato.
+
+## Metà risoluzione e contesti senza MSAA (16 nov 2026, commit f11205e)
+
+Dai rimedi dell'indagine, applicati i due a rischio più basso:
+
+- `PingLayer(canvas, { resolution: 0.5 })` solo su /display: il buffer è
+  metà per lato e il CSS lo stira sullo stesso riquadro. Lo shader riceve
+  `u_bufScale` (px del canvas pieno per px del buffer) e lavora sempre in px
+  del canvas pieno. /control e /party restano a 1.
+- `antialias:false, depth:false` su tutti e tre i contesti (`GL_CONTEXT_OPTS`):
+  si disegna sempre un solo triangolo a tutto schermo, senza depth test.
+
+Verificato:
+
+- `npm test` verde (440 server, 345 editor-app, build allineata), test nuovo
+  di `SubCanvas` con `resolution`.
+- `compare-visual --ref=b836bf9` con risoluzione 1: nessuna differenza su
+  /display e /control, quindi togliere MSAA e depth non cambia i pixel.
+- Con risoluzione 0,5 (copia temporanea dello script): in tutti i casi pixel
+  accesi e somma dell'alpha esattamente 1/4 di prima, errore di posizione 0.
+  È la stessa immagine a risoluzione ridotta. Non misura la morbidezza.
+
+Misura sul Pi (stessa procedura, Pi poi ripristinato a `b836bf9`, Copertina
+attiva, niente porta di debug, tunnel chiuso; 55 °C, `throttled=0x0`):
+
+| prova | fps main → growOnly → mezza | p95 ms | ping cpu ms/frame |
+|---|---|---|---|
+| nessun ping | 35,3 → 35,0 → 36,8 | 83 → 91 → 91 | 0 |
+| solo tap | 26,4 → 26,2 → 27,1 | 133 → 127 → 116 | 3,5 → 1,9 → 1,8 |
+| solo scia | 12,0 → 12,6 → 20,6 | 384 → 324 → 150 | 28,5 → 17,6 → 4,5 |
+| misto | 9,3 → 10,9 → 19,5 | 441 → 412 → 201 | 58 → 15 → 8,3 |
+
+Il costo di un resize scende a 57-79 ms (la coda della GPU è più corta).
+
+Non verificato: la resa della scia a metà risoluzione sulla TV (più morbida),
+da giudicare dal vivo. Restano aperti gli altri rimedi dell'indagine (scissor
+su buffer fisso, meno punti per la scia, video della mappa più leggero).

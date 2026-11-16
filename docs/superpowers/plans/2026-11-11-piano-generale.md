@@ -32,15 +32,12 @@ cosa è successo e dove si è fermato. Decide Alph come proseguire.
   da giudicare dal vivo; fps sul Raspberry non misurati.
 - Ping sul Raspberry misurati: 12,3 → 36,6 fps senza ping, 4,3 → 9,4 con
   tap e scia (tabella in `docs/storia/2026-11-16-ping-veloci-display.md`).
-- Branch `ping-scia-buffer` (buffer del ping che cresce e non si restringe),
-  rivisto da una sessione nuova, misurato sul Pi, NON unito
-  (`docs/storia/2026-11-16-ping-scia-buffer.md`). L'ipotesi dei resize regge
-  (ogni resize costa 140-250 ms di CPU sul Pi) e il tempo CPU del ping scende
-  da 28,5 a 17,6 ms (scia) e da 58 a 15 ms (misto) per frame, ma gli fps quasi
-  non cambiano: 12,0 → 12,6 con la scia, 9,3 → 10,9 col misto.
-- **Prossimo passo, lo decide Alph**: unire il branch così com'è (guadagno
-  piccolo, nessuna differenza visiva) e/o cercare dove va il resto del frame
-  con la scia sul Pi, e perché un resize costi 150-250 ms.
+- Branch `ping-scia-buffer`, NON unito
+  (`docs/storia/2026-11-16-ping-scia-buffer.md`): buffer del ping che cresce
+  senza restringersi, metà risoluzione su /display, contesti senza MSAA.
+  Sul Pi la scia passa da 12,0 a 20,6 fps e il misto da 9,3 a 19,5.
+- **Prossimo passo, Alph**: giudicare la scia a metà risoluzione sulla TV,
+  poi unire. Altri rimedi possibili nella cronaca (sezione «Indagine sul Pi»).
 - Poi: fase 1 (serata di prova, giudicare anche i cerchi d'evocazione e i loro
   fps), fase 5. Fase 3 sospesa (PIN spento). `main` non è ancora su GitHub.
 
