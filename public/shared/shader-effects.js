@@ -744,6 +744,35 @@ uniform float u_age;
 float summoningFade() { return clamp((u_age - 0.3) / 2.0, 0.0, 1.0); }
 `;
 
+// Composizione della variante con scia (summoning-circle-trail.html, pass
+// "Image"): rune nitide calcolate qui a piena risoluzione, più la scia letta
+// dalla texture piccola della simulazione (EvocationSim), ingrandita col
+// filtro lineare. L'originale sfoca la scia con 25 letture (5x5); qui ne
+// bastano 4 in diagonale, l'ingrandimento sfoca già. u_hasDye 0 (niente
+// render target float, o simulazione non pronta): solo le rune.
+function summoningTrailCompositeSrc() {
+  return aoeEffectFragmentSrc(summoningRuneGlsl('2.0') + SUMMONING_FADE_GLSL + `
+uniform sampler2D u_dye;
+uniform int u_hasDye;
+uniform vec2 u_dyeTexel;
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 p = (2.0 * fragCoord - u_resolution.xy) / u_resolution.y;
+    vec3 rune = summoningRing(p);
+    vec3 dye = vec3(0.0);
+    if (u_hasDye == 1) {
+        vec2 uv = fragCoord / u_resolution.xy;
+        vec2 o = u_dyeTexel * 0.75;
+        dye = 0.25 * (texture(u_dye, uv + vec2(o.x, o.y)).rgb + texture(u_dye, uv + vec2(-o.x, o.y)).rgb
+                    + texture(u_dye, uv + vec2(o.x, -o.y)).rgb + texture(u_dye, uv - o).rgb);
+    }
+    vec3 col = clamp(rune + dye * 1.6, 0.0, 1.0) * summoningFade();
+    float alpha = clamp(max(col.r, max(col.g, col.b)), 0.0, 1.0);
+    fragColor = vec4(col, alpha);
+}
+`);
+}
+
 // Le due varianti a un pass: rune bianche, alpha = luminosità (colore già
 // premoltiplicato, come gli altri shader AOE).
 function summoningSinglePassSrc(spinGlsl) {
@@ -1357,7 +1386,121 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     label: "Cerchio d'evocazione (fermo)",
     fillScale: false,
     fragmentSrc: summoningSinglePassSrc('0.0')
+  },
+  // Multi-pass: prima della composizione AoeShaderLayer fa un passo della
+  // simulazione (EvocationSim) nei framebuffer dell'area.
+  summoning_circle_trail: {
+    label: "Cerchio d'evocazione (scia)",
+    fillScale: false,
+    multipass: 'summoningTrail',
+    fragmentSrc: summoningTrailCompositeSrc()
   }
+};
+
+// Pass della simulazione della scia (summoning-circle-trail.html), in pixel
+// della texture piccola (gl_FragCoord, nessun u_viewportOrigin: si disegna
+// sempre l'intero framebuffer). Cambia solo il passo di tempo: l'originale
+// fa un passo per frame a 60 fps, qui u_stepScale (frame da 60 fps passati,
+// vedi evocationStepParams) riscala spostamento, decadimento (u_decay) e
+// colore aggiunto (u_inject); u_force riporta la spinta, pensata in pixel di
+// uno schermo alto ~1080, alla risoluzione della simulazione. B e C
+// dell'originale restano fusi in un solo pass, come nel file sorgente.
+const EVOCATION_SIM_PROGRAMS = {
+  rune: `#version 300 es
+precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+out vec4 fragColor;
+${summoningRuneGlsl('2.0')}
+void main() {
+    vec2 p = (2.0 * gl_FragCoord.xy - u_resolution.xy) / u_resolution.y;
+    fragColor = vec4(summoningRing(p), 1.0);
+}
+`,
+  fluid: `#version 300 es
+precision highp float;
+uniform vec2 u_resolution;
+uniform sampler2D u_fluid;
+uniform sampler2D u_rune;
+uniform float u_stepScale;
+uniform float u_decay;
+uniform float u_force;
+out vec4 fragColor;
+
+#define R u_resolution.xy
+
+vec4 texFluid(vec2 p) { return texture(u_fluid, p / R); }
+
+void F(vec2 p, vec2 offset, vec4 s, inout vec2 v, inout float pr, inout float d, inout float n) {
+    vec2 neighborPos = p + offset;
+    vec2 backtraced = neighborPos - texFluid(neighborPos).xy * u_stepScale;
+    vec4 target = texFluid(backtraced);
+    vec2 o = normalize(offset);
+    v += o * (target.w - s.w);
+    pr += target.w;
+    d += dot(o, target.xy);
+    n += 1.0;
+}
+
+void main() {
+    vec2 p = gl_FragCoord.xy;
+    vec4 s = texFluid(p - texFluid(p).xy * u_stepScale);
+
+    vec2 v = vec2(0.0);
+    float d = 0.0, pr = 0.0, n = 0.0;
+    F(p, vec2(0, 1), s, v, pr, d, n);
+    F(p, vec2(0, -1), s, v, pr, d, n);
+    F(p, vec2(1, 0), s, v, pr, d, n);
+    F(p, vec2(-1, 0), s, v, pr, d, n);
+    d /= n; pr /= n; v /= n;
+
+    s.w = pr - d;
+    s.xy -= v;
+    s.z = d;
+    s.xy *= u_decay;
+
+    float mask = texture(u_rune, p / R).r;
+    vec2 centerVec = (2.0 * p - R) / R.y;
+    if (mask > 0.15) {
+        s.xy = -centerVec * 0.3 * u_force;
+    }
+
+    if (p.x < 1. || p.y < 1. || R.x - p.x < 1. || R.y - p.y < 1.) s.xy *= 0.0;
+
+    fragColor = s;
+}
+`,
+  dye: `#version 300 es
+precision highp float;
+uniform vec2 u_resolution;
+uniform sampler2D u_dye;
+uniform sampler2D u_fluid;
+uniform sampler2D u_rune;
+uniform vec3 u_trailColor;
+uniform float u_stepScale;
+uniform float u_decay;
+uniform float u_inject;
+out vec4 fragColor;
+
+#define R u_resolution.xy
+
+void main() {
+    vec2 f = gl_FragCoord.xy;
+    for (int i = 0; i < 2; i++) {
+        f -= texture(u_fluid, f / R).xy * u_stepScale;
+    }
+
+    vec4 state = texture(u_dye, f / R);
+    state *= u_decay;
+
+    float mask = texture(u_rune, gl_FragCoord.xy / R).r;
+    if (mask > 0.1) {
+        state.rgb += u_trailColor * u_inject;
+    }
+
+    fragColor = clamp(state, 0.0, 3.0);
+}
+`
 };
 
 
@@ -2194,6 +2337,143 @@ class PingLayer {
 // ruotano), e il ritaglio poligonale extra (vedi aoeEffectFragmentSrc/
 // aoeShaderMaskRect) impedisce che lo shader riempia l'intero bbox invece
 // della sola sagoma. Riusato identico da /control e /display.
+// Lato lungo massimo (px) della simulazione della scia del cerchio
+// d'evocazione: la simulazione gira su una texture piccola, mai più grande
+// del riquadro dell'area. Sul Raspberry ogni pass costa ~16k pixel.
+const EVOCATION_SIM_MAX_PX = 128;
+// Altezza (px) dello schermo per cui la spinta dell'originale (0.3 px per
+// frame) è pensata: vedi u_force.
+const EVOCATION_REF_HEIGHT_PX = 1080;
+// Un passo copre al massimo questi frame da 60 fps: sotto i 15 fps la scia
+// rallenta invece di fare salti grandi (instabili).
+const EVOCATION_MAX_STEP_SCALE = 4;
+// Colore della scia (rgb 0-1), TRAIL_COLOR dell'originale.
+const EVOCATION_TRAIL_RGB = [1.0, 0.1, 0.05];
+
+// Misure (px interi >= 1) della simulazione per un riquadro wPx x hPx:
+// stesse proporzioni, lato lungo al massimo maxSide, mai più grande.
+function evocationSimSize(wPx, hPx, maxSide = EVOCATION_SIM_MAX_PX) {
+  const w = Math.max(1, Math.round(wPx));
+  const h = Math.max(1, Math.round(hPx));
+  const k = Math.min(1, maxSide / Math.max(w, h));
+  return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)) };
+}
+
+// Parametri di un passo di simulazione dopo dtMs millisecondi (null o non
+// positivo: primo passo, vale un frame da 60 fps). stepScale = frame da 60
+// fps coperti, tra 0.25 e maxScale; decay e inject sono quelli
+// dell'originale (0.9981 e 0.07 per frame) riportati a stepScale frame.
+function evocationStepParams(dtMs, maxScale = EVOCATION_MAX_STEP_SCALE) {
+  const raw = dtMs == null || !(dtMs > 0) ? 1 : dtMs / (1000 / 60);
+  const stepScale = Math.min(maxScale, Math.max(0.25, raw));
+  return { stepScale, decay: Math.pow(0.9981, stepScale), inject: 0.07 * stepScale };
+}
+
+// Stato della simulazione della scia di UNA area (texture e framebuffer a
+// risoluzione ridotta): rune (RGBA8), fluido e colore in ping-pong (RGBA16F,
+// serve EXT_color_buffer_float). `ok` false se i framebuffer float non sono
+// completi: il chiamante butta l'oggetto e disegna senza scia.
+class EvocationSim {
+  constructor(gl, w, h) {
+    this.gl = gl;
+    this.w = w;
+    this.h = h;
+    this.lastStepMs = null;
+    this.textures = [];
+    this.framebuffers = [];
+    const tex = (internal, type) => {
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, type, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      const fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+      const complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.viewport(0, 0, w, h);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.textures.push(t);
+      this.framebuffers.push(fb);
+      return { tex: t, fb, complete };
+    };
+    this.rune = tex(gl.RGBA8, gl.UNSIGNED_BYTE);
+    this.fluid = [tex(gl.RGBA16F, gl.HALF_FLOAT), tex(gl.RGBA16F, gl.HALF_FLOAT)];
+    this.dye = [tex(gl.RGBA16F, gl.HALF_FLOAT), tex(gl.RGBA16F, gl.HALF_FLOAT)];
+    this.ok = [this.rune, ...this.fluid, ...this.dye].every((x) => x.complete);
+    // Indice della texture con lo stato più recente di fluido e colore.
+    this.fluidIndex = 0;
+    this.dyeIndex = 0;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  get dyeTexture() {
+    return this.dye[this.dyeIndex].tex;
+  }
+
+  // Un passo: rune -> fluido -> colore. Lascia legato il framebuffer del
+  // canvas (null); viewport e programma li rimette il chiamante.
+  step(programs, timeSec, nowMs) {
+    const gl = this.gl;
+    const { stepScale, decay, inject } = evocationStepParams(this.lastStepMs == null ? null : nowMs - this.lastStepMs);
+    this.lastStepMs = nowMs;
+    const u = (prog, name) => gl.getUniformLocation(prog, name);
+    const bindTex = (unit, t, prog, name) => {
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.uniform1i(u(prog, name), unit);
+    };
+    gl.viewport(0, 0, this.w, this.h);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.rune.fb);
+    gl.useProgram(programs.rune);
+    gl.uniform1f(u(programs.rune, 'u_time'), timeSec);
+    gl.uniform2f(u(programs.rune, 'u_resolution'), this.w, this.h);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    const fRead = this.fluidIndex;
+    const fWrite = 1 - fRead;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fluid[fWrite].fb);
+    gl.useProgram(programs.fluid);
+    gl.uniform2f(u(programs.fluid, 'u_resolution'), this.w, this.h);
+    gl.uniform1f(u(programs.fluid, 'u_stepScale'), stepScale);
+    gl.uniform1f(u(programs.fluid, 'u_decay'), decay);
+    gl.uniform1f(u(programs.fluid, 'u_force'), this.h / EVOCATION_REF_HEIGHT_PX);
+    bindTex(0, this.fluid[fRead].tex, programs.fluid, 'u_fluid');
+    bindTex(1, this.rune.tex, programs.fluid, 'u_rune');
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.fluidIndex = fWrite;
+
+    const dRead = this.dyeIndex;
+    const dWrite = 1 - dRead;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.dye[dWrite].fb);
+    gl.useProgram(programs.dye);
+    gl.uniform2f(u(programs.dye, 'u_resolution'), this.w, this.h);
+    gl.uniform1f(u(programs.dye, 'u_stepScale'), stepScale);
+    gl.uniform1f(u(programs.dye, 'u_decay'), decay);
+    gl.uniform1f(u(programs.dye, 'u_inject'), inject);
+    gl.uniform3f(u(programs.dye, 'u_trailColor'), EVOCATION_TRAIL_RGB[0], EVOCATION_TRAIL_RGB[1], EVOCATION_TRAIL_RGB[2]);
+    bindTex(0, this.dye[dRead].tex, programs.dye, 'u_dye');
+    bindTex(1, this.fluid[this.fluidIndex].tex, programs.dye, 'u_fluid');
+    bindTex(2, this.rune.tex, programs.dye, 'u_rune');
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.dyeIndex = dWrite;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  dispose() {
+    const gl = this.gl;
+    this.framebuffers.forEach((fb) => gl.deleteFramebuffer(fb));
+    this.textures.forEach((t) => gl.deleteTexture(t));
+    this.framebuffers = [];
+    this.textures = [];
+  }
+}
+
 class AoeShaderLayer {
   constructor(canvasEl) {
     this.canvas = canvasEl;
@@ -2205,6 +2485,59 @@ class AoeShaderLayer {
     // aoe.id -> performance.now() della prima volta che l'area è stata
     // vista lanciata (dissolvenza d'entrata dei cerchi d'evocazione).
     this.firstSeenMs = new Map();
+    // aoe.id -> EvocationSim, solo per le aree con uno shader `multipass`.
+    this.sims = new Map();
+    this.simPrograms = undefined; // undefined = non ancora provati, null = falliti
+    this.simUnavailable = false; // niente render target float: niente scia
+  }
+
+  // Programmi dei pass di simulazione, linkati alla prima area che li usa.
+  getSimPrograms() {
+    if (this.simPrograms !== undefined) return this.simPrograms;
+    try {
+      const gl = this.gl;
+      this.simPrograms = {
+        rune: linkProgram(gl, SHADER_VERTEX_SRC, EVOCATION_SIM_PROGRAMS.rune),
+        fluid: linkProgram(gl, SHADER_VERTEX_SRC, EVOCATION_SIM_PROGRAMS.fluid),
+        dye: linkProgram(gl, SHADER_VERTEX_SRC, EVOCATION_SIM_PROGRAMS.dye)
+      };
+    } catch (err) {
+      console.warn(`AoeShaderLayer: simulazione della scia non disponibile: ${err.message}`);
+      this.simPrograms = null;
+    }
+    return this.simPrograms;
+  }
+
+  // Simulazione dell'area `id` a misura per un riquadro wPx x hPx (rifatta
+  // da zero se le misure cambiano), null se la scia non si può fare.
+  simFor(id, wPx, hPx) {
+    if (this.simUnavailable || !this.getSimPrograms()) return null;
+    const size = evocationSimSize(wPx, hPx);
+    let sim = this.sims.get(id);
+    if (sim && (sim.w !== size.w || sim.h !== size.h)) {
+      sim.dispose();
+      sim = null;
+    }
+    if (!sim) {
+      const gl = this.gl;
+      sim = gl.getExtension('EXT_color_buffer_float') ? new EvocationSim(gl, size.w, size.h) : null;
+      if (!sim || !sim.ok) {
+        if (sim) sim.dispose();
+        this.simUnavailable = true;
+        console.warn('AoeShaderLayer: niente render target float (EXT_color_buffer_float): cerchio d\'evocazione senza scia');
+        return null;
+      }
+      this.sims.set(id, sim);
+    }
+    return sim;
+  }
+
+  disposeSims(ids) {
+    for (const id of ids) {
+      const sim = this.sims.get(id);
+      if (sim) sim.dispose();
+      this.sims.delete(id);
+    }
   }
 
   get available() {
@@ -2237,6 +2570,7 @@ class AoeShaderLayer {
       this.sub.hide();
       this.lastKey = '';
       this.firstSeenMs.clear();
+      this.disposeSims([...this.sims.keys()]);
       return;
     }
     if (!naturalW || !naturalH) return;
@@ -2279,7 +2613,11 @@ class AoeShaderLayer {
       const age = (nowMs - this.firstSeenMs.get(aoe.id)) / 1000;
       items.push({ aoe, program, maskPointsPx, age, x: originXPx, y: yPx, w: wPx, h: hPx });
     });
-    for (const id of idsNotIn(this.firstSeenMs.keys(), aoes.map((a) => a.id))) this.firstSeenMs.delete(id);
+    const presentIds = aoes.map((a) => a.id);
+    for (const id of idsNotIn(this.firstSeenMs.keys(), presentIds)) this.firstSeenMs.delete(id);
+    // Simulazioni di aree sparite, o che non usano più uno shader multi-pass.
+    const multipassIds = items.filter((it) => AOE_SHADER_EFFECTS[it.aoe.shaderId].multipass).map((it) => it.aoe.id);
+    this.disposeSims(idsNotIn(this.sims.keys(), multipassIds));
     this.lastKey = key;
     const rect = unionRectsPx(items, full.w, full.h);
     if (!rect) {
@@ -2299,8 +2637,22 @@ class AoeShaderLayer {
       // i pixel restano identici.
       const originXPx = x - rect.x;
       const yPx = y - rect.y;
+      const def = AOE_SHADER_EFFECTS[aoe.shaderId];
+      // Multi-pass: prima un passo di simulazione nei framebuffer dell'area
+      // (risoluzione ridotta), poi la composizione qui sotto, nel riquadro.
+      const sim = def.multipass ? this.simFor(aoe.id, wPx, hPx) : null;
+      if (sim) sim.step(this.simPrograms, time, nowMs);
       gl.viewport(originXPx, yPx, wPx, hPx);
       gl.useProgram(program);
+      if (def.multipass) {
+        gl.uniform1i(gl.getUniformLocation(program, 'u_hasDye'), sim ? 1 : 0);
+        if (sim) {
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, sim.dyeTexture);
+          gl.uniform1i(gl.getUniformLocation(program, 'u_dye'), 0);
+          gl.uniform2f(gl.getUniformLocation(program, 'u_dyeTexel'), 1 / sim.w, 1 / sim.h);
+        }
+      }
       gl.uniform1f(gl.getUniformLocation(program, 'u_time'), time);
       gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), wPx, hPx);
       gl.uniform2f(gl.getUniformLocation(program, 'u_viewportOrigin'), originXPx, yPx);
@@ -2341,7 +2693,6 @@ class AoeShaderLayer {
       // sqrt(2)), indipendentemente da quanto la forma reale sia allungata
       // o stretta. Cubo/Sfera restano nello spazio reale (già un buon
       // adattamento naturale: un cerchio dentro un quadrato/cerchio).
-      const def = AOE_SHADER_EFFECTS[aoe.shaderId];
       const allowFillScale = !def || def.fillScale !== false;
       const warp = allowFillScale ? aoeShapeWarpParams(aoe.shape, maskPointsPx, scaleX, scaleY, hPx) : null;
       const maxReachForScale = warp ? Math.SQRT2 : maxReachP;
@@ -2421,6 +2772,11 @@ if (typeof module !== 'undefined' && module.exports) {
     unionRectsPx,
     frameDue,
     idsNotIn,
+    evocationSimSize,
+    evocationStepParams,
+    EVOCATION_SIM_MAX_PX,
+    EVOCATION_MAX_STEP_SCALE,
+    EVOCATION_SIM_PROGRAMS,
     AOE_SHADER_EFFECTS,
     PING_SONAR_REACH,
     PING_TRAIL_REACH,

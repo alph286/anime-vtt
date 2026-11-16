@@ -6,6 +6,11 @@ const {
   unionRectsPx,
   frameDue,
   idsNotIn,
+  evocationSimSize,
+  evocationStepParams,
+  EVOCATION_SIM_MAX_PX,
+  EVOCATION_MAX_STEP_SCALE,
+  EVOCATION_SIM_PROGRAMS,
   AOE_SHADER_EFFECTS,
   PING_SONAR_REACH,
   PING_TRAIL_REACH,
@@ -110,4 +115,52 @@ test('cerchi d\'evocazione a un pass: registrati, fillScale spento, u_age, nient
   }
   assert.match(AOE_SHADER_EFFECTS.summoning_circle.fragmentSrc, /u_time \* 2\.0/);
   assert.match(AOE_SHADER_EFFECTS.summoning_circle_static.fragmentSrc, /u_time \* 0\.0/);
+});
+
+test('evocationSimSize: lato lungo al massimo EVOCATION_SIM_MAX_PX, stesse proporzioni', () => {
+  assert.deepStrictEqual(evocationSimSize(700, 300), { w: EVOCATION_SIM_MAX_PX, h: 55 });
+  assert.deepStrictEqual(evocationSimSize(300, 700), { w: 55, h: EVOCATION_SIM_MAX_PX });
+  assert.deepStrictEqual(evocationSimSize(512, 512, 128), { w: 128, h: 128 });
+});
+
+test('evocationSimSize: mai più grande del riquadro, mai sotto 1 px', () => {
+  assert.deepStrictEqual(evocationSimSize(90, 40), { w: 90, h: 40 });
+  assert.deepStrictEqual(evocationSimSize(0, 0), { w: 1, h: 1 });
+  assert.deepStrictEqual(evocationSimSize(10000, 3), { w: 128, h: 1 });
+});
+
+test('evocationStepParams: un frame a 60 fps è il passo dell\'originale', () => {
+  const p = evocationStepParams(1000 / 60);
+  assert.ok(Math.abs(p.stepScale - 1) < 1e-9);
+  assert.ok(Math.abs(p.decay - 0.9981) < 1e-9);
+  assert.ok(Math.abs(p.inject - 0.07) < 1e-9);
+  assert.deepStrictEqual(evocationStepParams(null), evocationStepParams(1000 / 60));
+  assert.deepStrictEqual(evocationStepParams(-5), evocationStepParams(1000 / 60));
+});
+
+test('evocationStepParams: a 30 fps due frame per passo, stesso decadimento al secondo', () => {
+  const p = evocationStepParams(1000 / 30);
+  assert.ok(Math.abs(p.stepScale - 2) < 1e-9);
+  assert.ok(Math.abs(Math.pow(p.decay, 30) - Math.pow(0.9981, 60)) < 1e-9);
+});
+
+test('evocationStepParams: passo limitato sopra e sotto', () => {
+  assert.strictEqual(evocationStepParams(1000).stepScale, EVOCATION_MAX_STEP_SCALE);
+  assert.strictEqual(evocationStepParams(1).stepScale, 0.25);
+});
+
+test('cerchio d\'evocazione con scia: multi-pass, composizione con u_dye, tre pass di simulazione', () => {
+  const def = AOE_SHADER_EFFECTS.summoning_circle_trail;
+  assert.strictEqual(def.multipass, 'summoningTrail');
+  assert.strictEqual(def.fillScale, false);
+  assert.match(def.fragmentSrc, /uniform sampler2D u_dye;/);
+  assert.match(def.fragmentSrc, /uniform int u_hasDye;/);
+  assert.deepStrictEqual(Object.keys(EVOCATION_SIM_PROGRAMS), ['rune', 'fluid', 'dye']);
+  for (const src of Object.values(EVOCATION_SIM_PROGRAMS)) {
+    assert.match(src, /^#version 300 es/);
+    assert.doesNotMatch(src, /iDate|iTime|iResolution|uFluid|uRune|uDye/);
+  }
+  // Nessun altro shader AOE è multi-pass.
+  const multi = Object.entries(AOE_SHADER_EFFECTS).filter(([, d]) => d.multipass).map(([id]) => id);
+  assert.deepStrictEqual(multi, ['summoning_circle_trail']);
 });
