@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// NON FUNZIONANTE: restituisce «pingLayer non definito». Non corretto (falliti
-// tre tentativi). Cause sospette, non verificate: manca Runtime.enable prima di
-// Runtime.evaluate, oppure la pagina agganciata non è quella giusta.
+// Usato sul kiosk del Pi il 16 nov 2026 (docs/storia/2026-11-16-ping-veloci-display.md).
+// In locale funziona se /display è caricata con Page.navigate via CDP. Con
+// Chrome headless aperto direttamente su /display (riga di comando o
+// /json/new) il target dice /display ma il documento è about:blank, da qui il
+// vecchio «pingLayer non definito» (Runtime.enable non c'entra, provato).
 // Misura dei frame di /display su un Chromium GIÀ APERTO (il kiosk del
 // Raspberry), via CDP: niente server di prova, niente browser lanciato da qui.
 //
@@ -91,7 +93,15 @@ async function evaluate(expr) {
 const INSTRUMENT = `(() => {
   if (window.__piPerf) return 'già';
   const P = window.__piPerf = { rec: false, deltas: [], last: 0, r: { ping: [], shader: [], aoe: [] },
-    px: 0, presented: 0, canvasPx: 0, dirty: new Set() };
+    px: 0, presented: 0, canvasPx: 0, dirty: new Set(), rz: 0, rzT: [], nrT: [], rzFlag: false };
+  // Riallocazioni del buffer del ping (canvas.width/height cambiati) e tempo
+  // di render() del ping con e senza resize.
+  for (const prop of ['width', 'height']) {
+    const d = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, prop);
+    Object.defineProperty(pingLayer.canvas, prop, { configurable: true,
+      get() { return d.get.call(this); },
+      set(v) { if (d.get.call(this) !== v) { P.rzFlag = true; if (P.rec) P.rz++; } d.set.call(this, v); } });
+  }
   const layers = { ping: pingLayer, shader: shaderLayer, aoe: aoeShaderLayer };
   for (const [key, L] of Object.entries(layers)) {
     const gl = L.gl;
@@ -103,7 +113,12 @@ const INSTRUMENT = `(() => {
       gl.clear = (...a) => { if (P.rec) P.dirty.add(gl); return oc(...a); };
     }
     const orig = L.render.bind(L);
-    L.render = (...a) => { const t0 = performance.now(); orig(...a); if (P.rec) P.r[key].push(performance.now() - t0); };
+    L.render = (...a) => {
+      const t0 = performance.now(); P.rzFlag = false; orig(...a);
+      if (!P.rec) return;
+      const dt = performance.now() - t0; P.r[key].push(dt);
+      if (key === 'ping') (P.rzFlag ? P.rzT : P.nrT).push(dt);
+    };
   }
   { const gl = pingLayer.gl; const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
     P.renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : (gl ? gl.getParameter(gl.RENDERER) : 'nessun webgl2'); }
@@ -189,12 +204,12 @@ function stats(arr) {
 const LABEL = { noping: 'nessun ping', tap: 'solo tap', trail: 'solo scia', mix: 'misto' };
 const rows = [];
 for (const test of TESTS) {
-  await evaluate(`(() => { const P = __piPerf; P.deltas = []; P.r = { ping: [], shader: [], aoe: [] }; P.px = 0; P.presented = 0; P.canvasPx = 0; P.dirty.clear(); P.last = 0; P.rec = true; })()`);
+  await evaluate(`(() => { const P = __piPerf; P.deltas = []; P.r = { ping: [], shader: [], aoe: [] }; P.px = 0; P.presented = 0; P.canvasPx = 0; P.rz = 0; P.rzT = []; P.nrT = []; P.dirty.clear(); P.last = 0; P.rec = true; })()`);
   if (test !== 'noping') startPings(test);
   await sleep(SECS * 1000);
   const snap = await evaluate(SNAPSHOT); // ping ancora vivi
   stopPings();
-  const raw = await evaluate(`(() => { const P = __piPerf; P.rec = false; return { deltas: P.deltas, r: P.r, px: P.px, presented: P.presented, canvasPx: P.canvasPx }; })()`);
+  const raw = await evaluate(`(() => { const P = __piPerf; P.rec = false; return { deltas: P.deltas, r: P.r, px: P.px, presented: P.presented, canvasPx: P.canvasPx, rz: P.rz, rzT: P.rzT, nrT: P.nrT }; })()`);
   const d = stats(raw.deltas);
   const total = raw.deltas.reduce((a, b) => a + b, 0) / 1000 || SECS;
   const frames = Math.max(1, d.n);
@@ -203,7 +218,10 @@ for (const test of TESTS) {
     video: snap.video, 'aoe lanciate': snap.castAoes,
     fps: +(d.n / total).toFixed(1),
     'p50 ms': +d.p50.toFixed(0), 'p95 ms': +d.p95.toFixed(0), 'max ms': +d.max.toFixed(0),
-    'ping cpu ms': +stats(raw.r.ping).mean.toFixed(2), 'aoe cpu ms': +stats(raw.r.aoe).mean.toFixed(2),
+    'ping cpu ms': +stats(raw.r.ping).mean.toFixed(2),
+    'ping rz/s': +(raw.rz / total).toFixed(1),
+    'ping cpu rz': +stats(raw.rzT).mean.toFixed(2), 'ping cpu no-rz': +stats(raw.nrT).mean.toFixed(2),
+    'aoe cpu ms': +stats(raw.r.aoe).mean.toFixed(2),
     'shade Mpx/fr': +(raw.px / 1e6 / frames).toFixed(3),
     'canv/fr': +(raw.presented / frames).toFixed(2),
     'canv Mpx/fr': +(raw.canvasPx / 1e6 / frames).toFixed(3),

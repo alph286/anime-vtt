@@ -1554,6 +1554,8 @@ uniform sampler2D u_noise;
 // gruppi vivi (vedi pingGroupsBoundsPx), ma tutte le coordinate (punti,
 // rumore campionato sulla posizione) restano quelle del canvas pieno.
 uniform vec2 u_offset;
+// px del canvas pieno per px del buffer (2 con resolution 0,5).
+uniform vec2 u_bufScale;
 
 out vec4 fragColor;
 
@@ -1756,7 +1758,7 @@ float trailAlphaAt(vec2 p, int start, int count, out vec3 outColor) {
 }
 
 void main() {
-  vec2 p = gl_FragCoord.xy + u_offset;
+  vec2 p = gl_FragCoord.xy * u_bufScale + u_offset;
   float alpha = 0.0;
   vec3 color = vec3(0.0);
 
@@ -1930,9 +1932,28 @@ function frameDue(nowMs, lastMs, maxFps) {
 // sempre): dimensione del genitore x devicePixelRatio. `rect` null =
 // niente da disegnare: canvas nascosto (display:none), non ripulito né
 // ripresentato.
+//
+// `growOnly` (ping): finché il canvas resta visibile il buffer cresce ma non
+// si restringe, e il riquadro usato è allargato alla misura del buffer.
+// Cambiare canvas.width/height rialloca il buffer WebGL, e costa: misurato in
+// locale 7-11 ms di CPU per resize contro 0,03 ms di un render() senza, e una
+// scia in movimento ne provocava ~13 al secondo (passi di 32 px). Fuori dal
+// riquadro vero lo shader del ping dà alpha 0, quindi i pixel non cambiano.
+// Quando il canvas si nasconde (niente ping vivi) la misura riparte da zero.
+// Tutti i layer disegnano un solo triangolo a tutto schermo e non usano il
+// depth buffer: MSAA e depth non cambiano i pixel e sul Pi l'MSAA costa
+// (~13 ms per frame su un layer a tutta mappa, misurato il 16 nov 2026).
+const GL_CONTEXT_OPTS = { antialias: false, depth: false };
+
 class SubCanvas {
-  constructor(canvas) {
+  constructor(canvas, { growOnly = false, resolution = 1 } = {}) {
     this.canvas = canvas;
+    this.growOnly = growOnly;
+    // Frazione della risoluzione piena per il buffer (il CSS non cambia): il
+    // ping su /display usa 0,5, sul Pi lo shader della scia costa per pixel.
+    this.resolution = resolution;
+    // Ultimo riquadro usato (solo growOnly): da qui si sposta il meno possibile.
+    this.lastRect = null;
     this.styleKey = '';
     // Nascosto finché non c'è qualcosa da disegnare: un canvas WebGL mai
     // disegnato resta comunque un layer (trasparente) da comporre.
@@ -1949,14 +1970,38 @@ class SubCanvas {
   }
 
   hide() {
+    this.lastRect = null;
     if (!this.shown) return;
     this.shown = false;
     this.canvas.style.display = 'none';
   }
 
-  place(rect, full) {
-    if (this.canvas.width !== rect.w) this.canvas.width = rect.w;
-    if (this.canvas.height !== rect.h) this.canvas.height = rect.h;
+  // Riquadro davvero usato per `rect` (vedi growOnly): uguale a `rect`, oppure
+  // grande quanto il buffer attuale se più grande, posizionato in modo da
+  // contenere `rect` e restare dentro il canvas pieno, spostandosi il meno
+  // possibile dall'ultimo.
+  grownRect(rect, full) {
+    const last = this.lastRect;
+    if (!this.growOnly || !last || last.fullW !== full.w || last.fullH !== full.h) return rect;
+    const w = Math.min(full.w, Math.max(rect.w, last.w));
+    const h = Math.min(full.h, Math.max(rect.h, last.h));
+    const fit = (prev, r0, rLen, len, fullLen) => {
+      const p = Math.min(Math.max(prev, r0 + rLen - len), r0);
+      return Math.min(Math.max(p, 0), fullLen - len);
+    };
+    return { x: fit(last.x, rect.x, rect.w, w, full.w), y: fit(last.y, rect.y, rect.h, h, full.h), w, h };
+  }
+
+  // Posiziona il canvas su `rect` (o sul riquadro allargato, con growOnly) e
+  // ritorna il riquadro usato: viewport e offset dello shader vanno presi da
+  // qui, non da `rect`.
+  place(rectIn, full) {
+    const rect = this.grownRect(rectIn, full);
+    if (this.growOnly) this.lastRect = { ...rect, fullW: full.w, fullH: full.h };
+    const bw = Math.max(1, Math.round(rect.w * this.resolution));
+    const bh = Math.max(1, Math.round(rect.h * this.resolution));
+    if (this.canvas.width !== bw) this.canvas.width = bw;
+    if (this.canvas.height !== bh) this.canvas.height = bh;
     const key = `${rect.x},${rect.y},${rect.w},${rect.h},${full.w},${full.h}`;
     if (key !== this.styleKey) {
       this.styleKey = key;
@@ -1971,6 +2016,7 @@ class SubCanvas {
       this.shown = true;
       this.canvas.style.display = '';
     }
+    return rect;
   }
 }
 
@@ -2010,7 +2056,7 @@ function linkProgram(gl, vertexSrc, fragmentSrc) {
 class ShaderLayer {
   constructor(canvasEl) {
     this.canvas = canvasEl;
-    this.gl = canvasEl.getContext('webgl2');
+    this.gl = canvasEl.getContext('webgl2', GL_CONTEXT_OPTS);
     this.programs = new Map(); // shaderId -> WebGLProgram
     this.noiseTexture = null;
     this.lastCssW = 0;
@@ -2137,12 +2183,13 @@ class ShaderLayer {
 // un solo pass a schermo intero per frame. Riusato identico da /control e
 // /display -- stesso canvas, stesso shader, stessa chiamata.
 class PingLayer {
-  constructor(canvasEl) {
+  // `resolution` < 1: buffer ridotto e stirato dal CSS (vedi SubCanvas).
+  constructor(canvasEl, { resolution = 1 } = {}) {
     this.canvas = canvasEl;
-    this.gl = canvasEl.getContext('webgl2');
+    this.gl = canvasEl.getContext('webgl2', GL_CONTEXT_OPTS);
     this.program = null;
     this.noiseTexture = null;
-    this.sub = new SubCanvas(canvasEl);
+    this.sub = new SubCanvas(canvasEl, { growOnly: true, resolution });
   }
 
   get available() {
@@ -2281,15 +2328,19 @@ class PingLayer {
 
     // Solo il riquadro dove almeno un gruppo può disegnare qualcosa: fuori
     // lo shader darebbe comunque alpha 0 (vedi SONAR_REACH/TRAIL_REACH).
-    const rect = pingGroupsBoundsPx(groupsPx, fadeDistance, lineWidth, full.w, full.h);
-    if (!rect) {
+    const bounds = pingGroupsBoundsPx(groupsPx, fadeDistance, lineWidth, full.w, full.h);
+    if (!bounds) {
       this.sub.hide();
       return;
     }
-    this.sub.place(rect, full);
+    // Il buffer non si restringe finché ci sono ping vivi (SubCanvas growOnly):
+    // il riquadro usato può essere più grande di `bounds`.
+    const rect = this.sub.place(bounds, full);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, rect.w, rect.h);
+    const bufW = this.canvas.width;
+    const bufH = this.canvas.height;
+    gl.viewport(0, 0, bufW, bufH);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(program);
@@ -2307,7 +2358,8 @@ class PingLayer {
         lineWidth: loc('u_lineWidth'),
         fadeDistance: loc('u_fadeDistance'),
         noise: loc('u_noise'),
-        offset: loc('u_offset')
+        offset: loc('u_offset'),
+        bufScale: loc('u_bufScale')
       };
     }
     const u = this.uniforms;
@@ -2322,6 +2374,7 @@ class PingLayer {
     gl.uniform1f(u.lineWidth, lineWidth);
     gl.uniform1f(u.fadeDistance, fadeDistance);
     gl.uniform2f(u.offset, rect.x, rect.y);
+    gl.uniform2f(u.bufScale, rect.w / bufW, rect.h / bufH);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.ensureNoiseTexture());
     gl.uniform1i(u.noise, 0);
@@ -2492,7 +2545,7 @@ class EvocationSim {
 class AoeShaderLayer {
   constructor(canvasEl) {
     this.canvas = canvasEl;
-    this.gl = canvasEl.getContext('webgl2');
+    this.gl = canvasEl.getContext('webgl2', GL_CONTEXT_OPTS);
     this.programs = new Map(); // shaderId -> WebGLProgram
     this.sub = new SubCanvas(canvasEl);
     this.lastDrawMs = null;
@@ -2782,6 +2835,7 @@ function aoeShapeWarpParams(shape, maskPointsPx, scaleX, scaleY, hPx) {
 // uno script classico con globali.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    SubCanvas,
     snapRectPx,
     pingGroupsBoundsPx,
     unionRectsPx,

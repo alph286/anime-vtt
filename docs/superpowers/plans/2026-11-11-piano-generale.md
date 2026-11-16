@@ -32,12 +32,12 @@ cosa è successo e dove si è fermato. Decide Alph come proseguire.
   da giudicare dal vivo; fps sul Raspberry non misurati.
 - Ping sul Raspberry misurati: 12,3 → 36,6 fps senza ping, 4,3 → 9,4 con
   tap e scia (tabella in `docs/storia/2026-11-16-ping-veloci-display.md`).
-- **Prossimo passo**: la scia del ping resta pesante sul Pi (render() del
-  ping 25-71 ms di CPU per frame). Ipotesi da verificare in locale prima di
-  correggere: il canvas ridotto cambia misura a scatti di 32 px e rialloca il
-  buffer WebGL. Opus verifica e corregge (branch `ping-scia-buffer`, confronto
-  pixel con `--ref=b836bf9`), poi nuova misura sul Pi con
-  `tools/perf-ping/pi-measure.mjs` (procedura nella cronaca dei ping).
+- Branch `ping-scia-buffer`, NON unito
+  (`docs/storia/2026-11-16-ping-scia-buffer.md`): buffer del ping che cresce
+  senza restringersi, metà risoluzione su /display, contesti senza MSAA.
+  Sul Pi la scia passa da 12,0 a 20,6 fps e il misto da 9,3 a 19,5.
+- **Prossimo passo, Alph**: giudicare la scia a metà risoluzione sulla TV,
+  poi unire. Altri rimedi possibili nella cronaca (sezione «Indagine sul Pi»).
 - Poi: fase 1 (serata di prova, giudicare anche i cerchi d'evocazione e i loro
   fps), fase 5. Fase 3 sospesa (PIN spento). `main` non è ancora su GitHub.
 
