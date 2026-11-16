@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { PING_LIFESPAN_SEC, pingBuffer } from '../lib/ping';
 import { mapRefs } from '../map/map-refs';
 import { selectPreviewLocation, selectShowingImage, useControlStore } from '../store/control-store';
+import type { Grid } from '../../types';
 
 // Loop di rendering condiviso dei tre canvas WebGL dell'anteprima: Portale
 // (ShaderLayer), shader AOE lanciati (AoeShaderLayer) e ping (PingLayer).
@@ -51,13 +52,8 @@ function makeLayer<T extends { available?: boolean }>(make: () => T): T | null {
   }
 }
 
-// render() esce senza pulire se non c'e una mappa con dimensioni valide:
-// senza questo il canvas terrebbe i pixel dell'ultima location (stesso bug
-// dei "pixel fantasma" gia risolto nel loop dell'editor).
-function clearCanvas(canvas: HTMLCanvasElement | null) {
-  const gl = canvas?.getContext('webgl2');
-  if (gl) { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); }
-}
+// Con lista vuota render() non legge la griglia: basta il tipo.
+const emptyGrid = undefined as unknown as Grid;
 
 type ControlStoreState = ReturnType<typeof useControlStore.getState>;
 
@@ -92,14 +88,15 @@ export function useShaderLoop(): void {
       const { naturalW: nw, naturalH: nh } = s.geometry;
 
       if (mine.shader) {
+        // Lista vuota: il layer nasconde da solo il canvas (la griglia non serve).
         if (shaders.length && loc) mine.shader.render(shaders, loc.map.grid, nw, nh);
-        else clearCanvas(shaderCanvas);
+        else mine.shader.render([], emptyGrid, nw, nh);
       }
       if (mine.aoe) {
         if (castAoes.length && loc) {
           mine.aoe.render(castAoes.map((a) => ({ ...a, shaderId: resolveAoeShaderId(a) })), loc.map.grid, nw, nh);
         } else {
-          clearCanvas(aoeCanvas);
+          mine.aoe.render([], emptyGrid, nw, nh);
         }
       }
       // localZoom.scale: stesso transform CSS che avvolge il canvas del
