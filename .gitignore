@@ -13,3 +13,4 @@ storage/audio/*
 data/imports/
 data/backups/
 editor-app/node_modules/
+.playwright-mcp/

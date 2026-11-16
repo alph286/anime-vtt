@@ -15,6 +15,7 @@ const { createTelegramClient } = require('./telegram');
 const { createTelegramConfig } = require('./telegram-config');
 const { registerTelegramRoutes, sendStoredMedia } = require('./telegram-routes');
 const audioModel = require('./audio');
+const { createAuth } = require('./auth');
 const handoutModel = require('./handout');
 const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js');
 const tar = require('tar-stream');
@@ -89,6 +90,10 @@ function getActiveLocation() {
 
 const app = express();
 app.use(express.json());
+const auth = createAuth({ pin: process.env.DM_PIN });
+app.use(auth.httpGuard);
+auth.registerRoutes(app);
+app.use('/login', express.static(path.join(__dirname, '..', 'public', 'login')));
 app.use('/storage', express.static(STORAGE_DIR));
 app.use('/display', express.static(path.join(__dirname, '..', 'public', 'display')));
 app.use('/control', express.static(path.join(__dirname, '..', 'public', 'control')));
@@ -524,7 +529,39 @@ function broadcastDisplayStatus() {
   io.emit('display:status', { connected: displaySockets.size > 0 });
 }
 
+// Eventi di sistema di socket.io: il primo argomento non è un payload
+// (`disconnect` riceve la stringa `reason`), quindi non si normalizza.
+const RESERVED_SOCKET_EVENTS = new Set([
+  'connect', 'connect_error', 'disconnect', 'disconnecting', 'newListener', 'removeListener'
+]);
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+// Un client qualunque può mandare un evento senza payload o con un payload di
+// tipo sbagliato: gli handler destrutturano il primo argomento e il TypeError,
+// lanciato da socket.io in process.nextTick, farebbe terminare il processo.
+// Qui il primo argomento non oggetto diventa `{}` (gli altri, per esempio
+// l'ack, restano) e le eccezioni, anche i rifiuti di promise, si registrano.
+function protectSocketHandlers(socket) {
+  const originalOn = socket.on.bind(socket);
+  socket.on = (event, handler) => originalOn(event, function (...args) {
+    if (!RESERVED_SOCKET_EVENTS.has(event) && !isPlainObject(args[0])) args[0] = {};
+    const fail = (err) => console.error(`[socket] errore in "${event}": ${err && err.message ? err.message : err}`);
+    try {
+      const result = handler.apply(this, args);
+      if (result && typeof result.then === 'function') result.then(undefined, fail);
+    } catch (err) {
+      fail(err);
+    }
+  });
+  return socket;
+}
+
 io.on('connection', (socket) => {
+  auth.socketGuard(socket);
+  protectSocketHandlers(socket);
   socket.emit('state:update', statePayload());
   socket.emit('control:status', { connected: controlSockets.size > 0 });
   socket.emit('display:status', { connected: displaySockets.size > 0 });
@@ -1290,4 +1327,5 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log(`Anime VTT in ascolto su http://localhost:${PORT}`);
+  if (!auth.enabled) console.log('DM_PIN non impostato: le pagine del DM sono aperte a chiunque sulla rete.');
 });
