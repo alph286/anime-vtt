@@ -160,6 +160,15 @@ test('cerchio d\'evocazione con scia: multi-pass, composizione con u_dye, tre pa
     assert.match(src, /^#version 300 es/);
     assert.doesNotMatch(src, /iDate|iTime|iResolution|uFluid|uRune|uDye/);
   }
+  // Ogni voce del menu «···» ha uno shader e un colore di default.
+  const { AOE_SHADER_OVERRIDE_IDS, AOE_SHADER_OVERRIDE_DEFAULT_COLOR } = require('./media.js');
+  for (const id of ['summoning_circle', 'summoning_circle_static', 'summoning_circle_trail']) {
+    assert.ok(AOE_SHADER_OVERRIDE_IDS.includes(id), id);
+  }
+  for (const id of AOE_SHADER_OVERRIDE_IDS) {
+    assert.ok(AOE_SHADER_EFFECTS[id], id);
+    assert.ok(AOE_SHADER_OVERRIDE_DEFAULT_COLOR[id], id);
+  }
   // Nessun altro shader AOE è multi-pass.
   const multi = Object.entries(AOE_SHADER_EFFECTS).filter(([, d]) => d.multipass).map(([id]) => id);
   assert.deepStrictEqual(multi, ['summoning_circle_trail']);

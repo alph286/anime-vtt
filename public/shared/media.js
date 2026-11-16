@@ -362,11 +362,12 @@ const AOE_COLOR_TO_SHADER = {
 // (rietichettato "Viola Cornelia" in AOE_SHADER_EFFECTS, ricolorato più
 // viola e meno rosa) è passato qui dalla color bar su richiesta
 // dell'utente. Le 3 varianti "cerchio d'evocazione" del repo
-// alph286/shaders sono multi-pass (fluid sim su più framebuffer:
-// uFluid/uRune/uDye) e non ancora portate nella pipeline a singolo pass
-// di AoeShaderLayer -- restano fuori da questa lista finché non arriva
-// una pipeline multi-pass dedicata, vedi Piano di lavoro in CLAUDE.md.
-const AOE_SHADER_OVERRIDE_IDS = ['web_area', 'circular_smoke', 'purple_fire'];
+// alph286/shaders: rotante e fermo a un pass, con scia multi-pass
+// (simulazione in AoeShaderLayer, vedi EvocationSim in shader-effects.js).
+const AOE_SHADER_OVERRIDE_IDS = [
+  'web_area', 'circular_smoke', 'purple_fire',
+  'summoning_circle', 'summoning_circle_static', 'summoning_circle_trail'
+];
 
 // Colore di anteprima/evidenziazione celle assegnato automaticamente a
 // un'AoE quando si sceglie uno shader dal menu "···" (richiesta esplicita
@@ -377,7 +378,10 @@ const AOE_SHADER_OVERRIDE_IDS = ['web_area', 'circular_smoke', 'purple_fire'];
 const AOE_SHADER_OVERRIDE_DEFAULT_COLOR = {
   web_area: 'white',
   circular_smoke: 'white',
-  purple_fire: 'purple'
+  purple_fire: 'purple',
+  summoning_circle: 'white',
+  summoning_circle_static: 'white',
+  summoning_circle_trail: 'white'
 };
 
 // Shader effettivo da renderizzare per un'AoE "lanciata" (aoe.cast===true):

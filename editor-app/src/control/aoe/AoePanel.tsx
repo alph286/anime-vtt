@@ -7,7 +7,7 @@ import { selectPreviewLocation, selectSelectedAoe, useControlStore } from '../st
 import { AoeChipList } from './AoeChipList';
 import { AOE_COLOR_BUTTONS, AOE_COLOR_LABELS, AOE_SHADER_MENU, AOE_SHAPES } from './constants';
 import {
-  MoreIcon, ShapeConeIcon, ShapeCubeIcon, ShapeLineIcon, ShapeSphereIcon, SmokeIcon, WebIcon, WizardHatIcon,
+  MoreIcon, ShapeConeIcon, ShapeCubeIcon, ShapeLineIcon, ShapeSphereIcon, SmokeIcon, SummoningIcon, WebIcon, WizardHatIcon,
 } from './icons';
 
 const SHAPE_ICONS = {
@@ -15,6 +15,7 @@ const SHAPE_ICONS = {
 } as const;
 const SHADER_ICONS: Record<string, () => React.JSX.Element> = {
   web_area: WebIcon, circular_smoke: SmokeIcon, purple_fire: WizardHatIcon,
+  summoning_circle: SummoningIcon, summoning_circle_static: SummoningIcon, summoning_circle_trail: SummoningIcon,
 };
 
 // Riga `etichetta con valore` + [−] [+] (il valore sta nell'etichetta).

@@ -26,4 +26,7 @@ export const AOE_SHADER_MENU = [
   { slug: 'web_area', label: 'Zona ragnatela' },
   { slug: 'circular_smoke', label: 'Fumo circolare' },
   { slug: 'purple_fire', label: 'Viola Cornelia' },
+  { slug: 'summoning_circle', label: "Cerchio d'evocazione" },
+  { slug: 'summoning_circle_static', label: "Cerchio d'evocazione (fermo)" },
+  { slug: 'summoning_circle_trail', label: "Cerchio d'evocazione (scia)" },
 ] as const;
