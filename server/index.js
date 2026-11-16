@@ -21,6 +21,7 @@ const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js'
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
 const packageJson = require('../package.json');
+const { registerLocationEvents } = require('./socket-location');
 
 const PORT = process.env.PORT || 3000;
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'storage');
@@ -559,6 +560,32 @@ function protectSocketHandlers(socket) {
   return socket;
 }
 
+// Dipendenze dei moduli server/socket-*.js. `state`, `displayViewport` e
+// `displayAudio` vengono riassegnati (ripristino di un backup, display che
+// riporta il suo stato): i moduli li leggono solo tramite questi getter.
+const socketCtx = {
+  getState: () => state,
+  saveState,
+  broadcastState,
+  scheduleSaveAndBroadcast,
+  statePayload,
+  getActiveLocation,
+  io,
+  controlSockets,
+  displaySockets,
+  broadcastControlStatus,
+  broadcastDisplayStatus,
+  setDisplayViewport: (value) => { displayViewport = value; },
+  getDisplayAudio: () => displayAudio,
+  setDisplayAudio: (value) => { displayAudio = value; },
+  deleteUploadedFile,
+  IMAGES_DIR,
+  HANDOUT_DIR,
+  AUDIO_DIR,
+  telegramConfig,
+  telegramClient
+};
+
 io.on('connection', (socket) => {
   auth.socketGuard(socket);
   protectSocketHandlers(socket);
@@ -594,113 +621,7 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  socket.on('location:set', ({ locationId }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location) return;
-    state.activeLocationId = locationId;
-    state.activeImageId = null;
-    audioModel.clearOneshots(state);
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('location:create', () => {
-    const location = {
-      id: nanoid(),
-      name: 'Nuova location',
-      map: {
-        file: null,
-        type: 'image',
-        scale: 1,
-        flip180: false,
-        rotate90: false,
-        liveView: { scale: 1, offsetX: 0, offsetY: 0 },
-        grid: { ...DEFAULT_GRID },
-        compass: { ...DEFAULT_COMPASS },
-        audio: audioModel.emptyAudio(),
-        polygons: [],
-        aoes: []
-      },
-      images: [],
-      archived: false,
-      isDefault: false
-    };
-    state.locations.push(location);
-    state.activeLocationId = location.id;
-    state.activeImageId = null;
-    audioModel.clearOneshots(state);
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('location:rename', ({ locationId, name }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location) return;
-    location.name = String(name || '').slice(0, 120);
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('location:archive', ({ locationId }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location) return;
-    location.archived = true;
-    if (state.activeLocationId === locationId) {
-      state.activeLocationId = null;
-      // Come il cambio location: gli one-shot della location archiviata finiscono qui.
-      audioModel.clearOneshots(state);
-    }
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('location:restore', ({ locationId }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location) return;
-    location.archived = false;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('location:delete', ({ locationId }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location || !location.archived) return;
-    state.locations = state.locations.filter((l) => l.id !== locationId);
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('location:setDefault', ({ locationId }) => {
-    if (!state.locations.some((l) => l.id === locationId)) return;
-    state.locations.forEach((l) => { l.isDefault = l.id === locationId; });
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('location:reorder', ({ orderedIds }) => {
-    if (!Array.isArray(orderedIds)) {
-      socket.emit('state:update', statePayload());
-      return;
-    }
-    const activeIds = state.locations.filter((l) => !l.archived).map((l) => l.id);
-    const activeSet = new Set(activeIds);
-    const seen = new Set();
-    const validOrder = orderedIds.filter((id) => {
-      if (!activeSet.has(id) || seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
-    if (validOrder.length !== activeIds.length) {
-      socket.emit('state:update', statePayload());
-      return;
-    }
-    const byId = new Map(state.locations.map((l) => [l.id, l]));
-    const reorderedActive = validOrder.map((id) => byId.get(id));
-    const archivedInPlace = state.locations.filter((l) => l.archived);
-    state.locations = [...reorderedActive, ...archivedInPlace];
-    saveState(state);
-    broadcastState();
-  });
+  registerLocationEvents(socket, socketCtx);
 
   socket.on('fow:toggle', ({ locationId, polygonId }) => {
     const location = state.locations.find((l) => l.id === locationId);
