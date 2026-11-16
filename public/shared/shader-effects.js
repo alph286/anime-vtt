@@ -2118,13 +2118,13 @@ class ShaderLayer {
       const originXPx = Math.round(xPx);
       gl.viewport(originXPx, yPx, wPx, hPx);
       gl.useProgram(program);
-      gl.uniform1f(gl.getUniformLocation(program, 'u_time'), time);
-      gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), wPx, hPx);
-      gl.uniform2f(gl.getUniformLocation(program, 'u_viewportOrigin'), originXPx, yPx);
+      gl.uniform1f(cachedUniformLocation(gl, program, 'u_time'), time);
+      gl.uniform2f(cachedUniformLocation(gl, program, 'u_resolution'), wPx, hPx);
+      gl.uniform2f(cachedUniformLocation(gl, program, 'u_viewportOrigin'), originXPx, yPx);
       if (def.usesNoiseTexture) {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.ensureNoiseTexture());
-        gl.uniform1i(gl.getUniformLocation(program, 'u_noise'), 0);
+        gl.uniform1i(cachedUniformLocation(gl, program, 'u_noise'), 0);
       }
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     });
@@ -2294,7 +2294,7 @@ class PingLayer {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(program);
     if (!this.uniforms) {
-      const loc = (n) => gl.getUniformLocation(program, n);
+      const loc = (n) => cachedUniformLocation(gl, program, n);
       this.uniforms = {
         points: loc('u_points'),
         ages: loc('u_ages'),
@@ -2369,6 +2369,19 @@ function evocationStepParams(dtMs, maxScale = EVOCATION_MAX_STEP_SCALE) {
   return { stepScale, decay: Math.pow(0.9981, stepScale), inject: 0.07 * stepScale };
 }
 
+// Posizioni degli uniform tenute in memoria per programma: evita ~25
+// getUniformLocation a ogni frame. Chiave: il programma (WeakMap).
+const uniformLocationCache = new WeakMap();
+function cachedUniformLocation(gl, prog, name) {
+  let m = uniformLocationCache.get(prog);
+  if (!m) {
+    m = new Map();
+    uniformLocationCache.set(prog, m);
+  }
+  if (!m.has(name)) m.set(name, gl.getUniformLocation(prog, name));
+  return m.get(name);
+}
+
 // Stato della simulazione della scia di UNA area (texture e framebuffer a
 // risoluzione ridotta): rune (RGBA8), fluido e colore in ping-pong (RGBA16F,
 // serve EXT_color_buffer_float). `ok` false se i framebuffer float non sono
@@ -2394,8 +2407,10 @@ class EvocationSim {
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
       const complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
       gl.viewport(0, 0, w, h);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
+      if (complete) {
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
       this.textures.push(t);
       this.framebuffers.push(fb);
       return { tex: t, fb, complete };
@@ -2420,7 +2435,7 @@ class EvocationSim {
     const gl = this.gl;
     const { stepScale, decay, inject } = evocationStepParams(this.lastStepMs == null ? null : nowMs - this.lastStepMs);
     this.lastStepMs = nowMs;
-    const u = (prog, name) => gl.getUniformLocation(prog, name);
+    const u = (prog, name) => cachedUniformLocation(gl, prog, name);
     const bindTex = (unit, t, prog, name) => {
       gl.activeTexture(gl.TEXTURE0 + unit);
       gl.bindTexture(gl.TEXTURE_2D, t);
@@ -2520,11 +2535,11 @@ class AoeShaderLayer {
     }
     if (!sim) {
       const gl = this.gl;
-      sim = gl.getExtension('EXT_color_buffer_float') ? new EvocationSim(gl, size.w, size.h) : null;
+      sim = (gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float')) ? new EvocationSim(gl, size.w, size.h) : null;
       if (!sim || !sim.ok) {
         if (sim) sim.dispose();
         this.simUnavailable = true;
-        console.warn('AoeShaderLayer: niente render target float (EXT_color_buffer_float): cerchio d\'evocazione senza scia');
+        console.warn('AoeShaderLayer: niente render target float (EXT_color_buffer_float / EXT_color_buffer_half_float): cerchio d\'evocazione senza scia');
         return null;
       }
       this.sims.set(id, sim);
@@ -2645,20 +2660,20 @@ class AoeShaderLayer {
       gl.viewport(originXPx, yPx, wPx, hPx);
       gl.useProgram(program);
       if (def.multipass) {
-        gl.uniform1i(gl.getUniformLocation(program, 'u_hasDye'), sim ? 1 : 0);
+        gl.uniform1i(cachedUniformLocation(gl, program, 'u_hasDye'), sim ? 1 : 0);
         if (sim) {
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, sim.dyeTexture);
-          gl.uniform1i(gl.getUniformLocation(program, 'u_dye'), 0);
-          gl.uniform2f(gl.getUniformLocation(program, 'u_dyeTexel'), 1 / sim.w, 1 / sim.h);
+          gl.uniform1i(cachedUniformLocation(gl, program, 'u_dye'), 0);
+          gl.uniform2f(cachedUniformLocation(gl, program, 'u_dyeTexel'), 1 / sim.w, 1 / sim.h);
         }
       }
-      gl.uniform1f(gl.getUniformLocation(program, 'u_time'), time);
-      gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), wPx, hPx);
-      gl.uniform2f(gl.getUniformLocation(program, 'u_viewportOrigin'), originXPx, yPx);
+      gl.uniform1f(cachedUniformLocation(gl, program, 'u_time'), time);
+      gl.uniform2f(cachedUniformLocation(gl, program, 'u_resolution'), wPx, hPx);
+      gl.uniform2f(cachedUniformLocation(gl, program, 'u_viewportOrigin'), originXPx, yPx);
       // Solo i cerchi d'evocazione dichiarano u_age: per gli altri la
       // location è null e la chiamata non fa niente.
-      gl.uniform1f(gl.getUniformLocation(program, 'u_age'), age);
+      gl.uniform1f(cachedUniformLocation(gl, program, 'u_age'), age);
 
       const maxPts = Math.min(maskPointsPx.length, 32);
       const flat = new Float32Array(32 * 2);
@@ -2676,8 +2691,8 @@ class AoeShaderLayer {
         const reach = Math.hypot(px - wPx / 2, py - hPx / 2) / (hPx / 2);
         if (reach > maxReachP) maxReachP = reach;
       }
-      gl.uniform2fv(gl.getUniformLocation(program, 'u_maskPoints'), flat);
-      gl.uniform1i(gl.getUniformLocation(program, 'u_maskCount'), maxPts);
+      gl.uniform2fv(cachedUniformLocation(gl, program, 'u_maskPoints'), flat);
+      gl.uniform1i(cachedUniformLocation(gl, program, 'u_maskCount'), maxPts);
 
       // Questi shader portati spengono il proprio bagliore radiale ben
       // prima del bordo del loro rettangolo "nativo" (un cerchio inscritto
@@ -2697,14 +2712,14 @@ class AoeShaderLayer {
       const warp = allowFillScale ? aoeShapeWarpParams(aoe.shape, maskPointsPx, scaleX, scaleY, hPx) : null;
       const maxReachForScale = warp ? Math.SQRT2 : maxReachP;
       const fillScale = allowFillScale ? Math.min(1, AOE_FILL_TARGET_REACH / Math.max(maxReachForScale, 0.001)) : 1;
-      gl.uniform1f(gl.getUniformLocation(program, 'u_fillScale'), fillScale);
-      gl.uniform1i(gl.getUniformLocation(program, 'u_shapeWarp'), warp ? 1 : 0);
+      gl.uniform1f(cachedUniformLocation(gl, program, 'u_fillScale'), fillScale);
+      gl.uniform1i(cachedUniformLocation(gl, program, 'u_shapeWarp'), warp ? 1 : 0);
       if (warp) {
-        gl.uniform2f(gl.getUniformLocation(program, 'u_shapeOrigin'), warp.origin[0], warp.origin[1]);
-        gl.uniform2f(gl.getUniformLocation(program, 'u_shapeAxis'), warp.axis[0], warp.axis[1]);
-        gl.uniform1f(gl.getUniformLocation(program, 'u_shapeLength'), warp.length);
-        gl.uniform1f(gl.getUniformLocation(program, 'u_shapeNearHalfWidth'), warp.nearHalfWidth);
-        gl.uniform1f(gl.getUniformLocation(program, 'u_shapeFarHalfWidth'), warp.farHalfWidth);
+        gl.uniform2f(cachedUniformLocation(gl, program, 'u_shapeOrigin'), warp.origin[0], warp.origin[1]);
+        gl.uniform2f(cachedUniformLocation(gl, program, 'u_shapeAxis'), warp.axis[0], warp.axis[1]);
+        gl.uniform1f(cachedUniformLocation(gl, program, 'u_shapeLength'), warp.length);
+        gl.uniform1f(cachedUniformLocation(gl, program, 'u_shapeNearHalfWidth'), warp.nearHalfWidth);
+        gl.uniform1f(cachedUniformLocation(gl, program, 'u_shapeFarHalfWidth'), warp.farHalfWidth);
       }
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
