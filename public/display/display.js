@@ -533,6 +533,11 @@ function stepShaderLayer() {
         mediaW(activeMapEl),
         mediaH(activeMapEl)
       );
+    } else {
+      // Senza mappa (o con un'immagine mostrata) le aree lanciate non si
+      // disegnano: il canvas si nasconde invece di tenere i pixel della
+      // location precedente (no-op se è già nascosto).
+      aoeShaderLayer.render([], null, 0, 0);
     }
   }
   const pingActive = pruneAndRenderPing();
