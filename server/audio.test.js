@@ -311,3 +311,38 @@ test('syncAudioLibrary: con tutte le righe già abbinate non calcola nessuna chi
   A.syncAudioLibrary(s, () => { calls += 1; return 'k'; });
   assert.equal(calls, 0);
 });
+
+test('addLibraryItemDeduped: stesso contenuto riusa la voce esistente e segnala il doppione', () => {
+  const state = { audioLibrary: [] };
+  const content = { 'a.mp3': 'X', 'b.mp3': 'X', 'c.mp3': 'Y' };
+  const key = (f) => content[f] ?? null;
+  const first = A.addLibraryItemDeduped(state, { name: 'Pioggia', file: 'a.mp3' }, key);
+  assert.equal(first.reused, false);
+  const dup = A.addLibraryItemDeduped(state, { name: 'Pioggia 2', file: 'b.mp3' }, key);
+  assert.equal(dup.reused, true);
+  assert.equal(dup.item.id, first.item.id);
+  assert.equal(dup.item.file, 'a.mp3');
+  assert.equal(state.audioLibrary.length, 1);
+  const other = A.addLibraryItemDeduped(state, { name: 'Vento', file: 'c.mp3' }, key);
+  assert.equal(other.reused, false);
+  assert.equal(state.audioLibrary.length, 2);
+});
+
+test('addLibraryItemDeduped: chiave illeggibile (null) non unisce nulla', () => {
+  const state = { audioLibrary: [] };
+  A.addLibraryItemDeduped(state, { name: 'A', file: 'a.mp3' }, () => null);
+  const r = A.addLibraryItemDeduped(state, { name: 'B', file: 'b.mp3' }, () => null);
+  assert.equal(r.reused, false);
+  assert.equal(state.audioLibrary.length, 2);
+});
+
+test('addLibraryItemDeduped + addTrackFromLibrary: la riga punta alla voce esistente', () => {
+  const state = { audioLibrary: [] };
+  const loc = { map: { audio: A.emptyAudio() } };
+  const key = () => 'same';
+  A.addLibraryItemDeduped(state, { name: 'A', file: 'a.mp3' }, key);
+  const { item } = A.addLibraryItemDeduped(state, { name: 'B', file: 'b.mp3' }, key);
+  const track = A.addTrackFromLibrary(state, loc, 'background', item.id);
+  assert.equal(track.audioId, state.audioLibrary[0].id);
+  assert.equal(state.audioLibrary.length, 1);
+});
