@@ -32,14 +32,14 @@ cosa è successo e dove si è fermato. Decide Alph come proseguire.
   da giudicare dal vivo; fps sul Raspberry non misurati.
 - Ping sul Raspberry misurati: 12,3 → 36,6 fps senza ping, 4,3 → 9,4 con
   tap e scia (tabella in `docs/storia/2026-11-16-ping-veloci-display.md`).
-- Branch `ping-scia-buffer`, NON unito
-  (`docs/storia/2026-11-16-ping-scia-buffer.md`): buffer del ping che cresce
-  senza restringersi, metà risoluzione su /display, contesti senza MSAA.
-  Sul Pi la scia passa da 12,0 a 20,6 fps e il misto da 9,3 a 19,5.
-- **Prossimo passo, Alph**: giudicare la scia a metà risoluzione sulla TV,
-  poi unire. Altri rimedi possibili nella cronaca (sezione «Indagine sul Pi»).
-- Poi: fase 1 (serata di prova, giudicare anche i cerchi d'evocazione e i loro
-  fps), fase 5. Fase 3 sospesa (PIN spento). `main` non è ancora su GitHub.
+- Scia del ping: `ping-scia-buffer` unito in `main`
+  (`docs/storia/2026-11-16-ping-scia-buffer.md`): buffer che non si
+  restringe, metà risoluzione su /display, contesti senza MSAA. Sul Pi la
+  scia passa da 12,0 a 20,6 fps e il misto da 9,3 a 19,5. Resa a metà
+  risoluzione approvata da Alph su kratosHard (non sulla TV). Altri rimedi
+  possibili nella cronaca (sezione «Indagine sul Pi»).
+- **Prossimo passo**: fase 1 (serata di prova, giudicare anche i cerchi
+  d'evocazione e i loro fps), poi fase 5. Fase 3 sospesa (PIN spento).
 
 ## Fasi
 
