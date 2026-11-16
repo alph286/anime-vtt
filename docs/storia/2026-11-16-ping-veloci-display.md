@@ -63,3 +63,25 @@ Le API restano le stesse: /control e /party non cambiano.
   `Runtime.evaluate`, oppure la pagina agganciata non è quella giusta.
 - `bench-ping.js` riporta la risoluzione del contenitore, non quella del buffer
   ridotto.
+
+## Misura sul Raspberry (16 nov 2026)
+
+Kiosk vero, Tarrasque 5 (mappa webm 1421x1080, 3 aree lanciate), TV 1920x1080,
+8 s per prova con `tools/perf-ping/pi-measure.mjs` (sul Pi funziona: i layer
+sono globali di `display.js`). Prima = `b836bf9`, dopo = `main` con
+`shader-effects.js` e `display.js` copiati a mano e poi rimessi com'erano.
+
+| prova | fps prima | fps dopo | canvas visibili (Mpx) |
+|---|---|---|---|
+| nessun ping | 12,3 | 36,6 | 5,53 → 0,62 |
+| solo tap | 8,6 | 26,7 | 5,53 → 0,62 |
+| solo scia | 4,9 | 11,7 | 5,53 → 1,29 |
+| misto | 4,3 | 9,4 | 5,53 → 1,29 |
+
+Temperatura 38-51 °C, `throttled=0x0`.
+
+Resta pesante la scia: il tempo CPU di `PingLayer.render()` sale da 0,7 a 25 ms
+(scia) e 71 ms (misto) per frame. Ipotesi non verificata: il canvas ridotto
+cambia misura a scatti di 32 px mentre la scia si muove e ogni volta il buffer
+WebGL viene riallocato. Possibile rimedio: buffer che cresce e non si
+restringe finché ci sono ping vivi.
