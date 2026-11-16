@@ -85,3 +85,23 @@ Resta pesante la scia: il tempo CPU di `PingLayer.render()` sale da 0,7 a 25 ms
 cambia misura a scatti di 32 px mentre la scia si muove e ogni volta il buffer
 WebGL viene riallocato. Possibile rimedio: buffer che cresce e non si
 restringe finché ci sono ping vivi.
+
+### Come rifare la misura sul Pi
+
+Solo con il Pi acceso e nessuna partita in corso, e con il consenso di Alph.
+
+1. Porta di debug temporanea: `/etc/chromium.d/zz-perf-debug-temp` con
+   `export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --remote-debugging-port=9222"`,
+   poi `pkill -o -f /usr/lib/chromium/chromium` (il loop del kiosk lo rilancia
+   dopo 3 s).
+2. Tunnel dal PC: `ssh -N -L 9222:127.0.0.1:9222 raspymedia`.
+3. Location attiva su Tarrasque 5 (`YjGGQyHBJQTZjSitXom9v`) con un client
+   socket: `location:set { locationId }`.
+4. Misura «prima»: `node tools/perf-ping/pi-measure.mjs
+   --server=http://192.168.178.80:3000 --location=YjGGQyHBJQTZjSitXom9v`.
+5. Per il «dopo»: backup dei file del Pi, copia dei file nuovi con `scp`,
+   `Page.reload` con `ignoreCache` via CDP, stessa misura.
+6. Ripristino: file originali, `sudo rm /etc/chromium.d/zz-perf-debug-temp`,
+   di nuovo `pkill` di Chromium, location attiva su Copertina
+   (`VQLMeDOvF9UEU8C0Jis1K`), chiudere il tunnel. Controllo: `git status` del
+   Pi senza modifiche sotto `public/`.
