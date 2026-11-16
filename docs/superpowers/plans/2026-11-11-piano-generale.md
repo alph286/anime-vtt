@@ -28,7 +28,8 @@ cosa è successo e dove si è fermato. Decide Alph come proseguire.
   (`protectSocketHandlers`), ping e aree lanciate più leggeri su /display
   (`docs/storia/2026-11-16-ping-veloci-display.md`), BUG noti 2-12 dei payload
   (`docs/storia/2026-11-16-bug-payload.md`).
-- Fase 7: branch `shader-evocazione`, da giudicare dal vivo.
+- Fase 7: unita in `main` (`docs/storia/2026-11-16-shader-evocazione.md`),
+  da giudicare dal vivo; fps sul Raspberry non misurati.
 - Da fare: misura dei ping sul Raspberry (prima/dopo su Tarrasque 5), fase 1
   (serata di prova), poi fase 5. Fase 3 sospesa (PIN spento).
 
