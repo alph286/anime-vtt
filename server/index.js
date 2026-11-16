@@ -21,6 +21,7 @@ const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js'
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
 const packageJson = require('../package.json');
+const { registerViewEvents } = require('./socket-view');
 const { registerImageEvents } = require('./socket-images');
 const { registerFogEvents } = require('./socket-fog');
 const { registerLocationEvents } = require('./socket-location');
@@ -629,28 +630,7 @@ io.on('connection', (socket) => {
 
   registerImageEvents(socket, socketCtx);
 
-  socket.on('view:pan', ({ locationId, dx, dy }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location) return;
-    location.map.liveView.offsetX += dx;
-    location.map.liveView.offsetY += dy;
-    scheduleSaveAndBroadcast();
-  });
-
-  socket.on('view:zoom', ({ locationId, scale }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location) return;
-    location.map.liveView.scale = scale;
-    scheduleSaveAndBroadcast();
-  });
-
-  socket.on('view:reset', ({ locationId }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location) return;
-    location.map.liveView = { scale: 1, offsetX: 0, offsetY: 0 };
-    saveState(state);
-    broadcastState();
-  });
+  registerViewEvents(socket, socketCtx);
 
   socket.on('polygon:create', ({ locationId, name, points }) => {
     const location = state.locations.find((l) => l.id === locationId);
@@ -980,22 +960,6 @@ io.on('connection', (socket) => {
     });
     saveState(state);
     broadcastState();
-  });
-
-  // Gesto momentaneo, non una proprietà della mappa: niente saveState/
-  // broadcastState, solo un rilancio a chi è connesso ora. Ignorato se non
-  // punta alla location davvero attiva -- altrimenti un ping in preview
-  // (mai mostrata ai giocatori) apparirebbe comunque sullo schermo sbagliato.
-  // strokeId distingue un gesto dall'altro (tap singolo o trascinamento):
-  // senza, due tap ravvicinati finirebbero mischiati nello stesso elenco
-  // di punti lato client e verrebbero disegnati come se fossero lo stesso
-  // gesto (una scia che li collega) invece di due "sonar" indipendenti.
-  // Solo passthrough qui, nessuna validazione di formato: è un id opaco,
-  // generato e consumato solo dal client.
-  socket.on('ping:show', ({ locationId, x, y, strokeId }) => {
-    if (locationId !== state.activeLocationId) return;
-    if (typeof x !== 'number' || typeof y !== 'number') return;
-    io.emit('ping:show', { x, y, strokeId });
   });
 
   // Audio a righe. `audio:toggle` agisce sempre sulla location attiva (non
