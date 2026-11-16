@@ -1182,6 +1182,11 @@ uniform vec3 u_trailColor;
 uniform float u_lineWidth;
 uniform float u_fadeDistance;
 uniform sampler2D u_noise;
+// Posizione (px, dal basso a sinistra) del canvas ridotto dentro il canvas
+// "pieno" grande quanto la mappa: PingLayer disegna solo sul riquadro dei
+// gruppi vivi (vedi pingGroupsBoundsPx), ma tutte le coordinate (punti,
+// rumore campionato sulla posizione) restano quelle del canvas pieno.
+uniform vec2 u_offset;
 
 out vec4 fragColor;
 
@@ -1218,6 +1223,18 @@ const float TRAIL_TAIL_WIDTH_FRAC = 0.25;
 const float TRAIL_WHITE_CORE_LOW = 0.5;
 const float TRAIL_WHITE_CORE_HIGH = 0.85;
 const float TRAIL_CRACKLE_FRAC = 0.35;
+
+// Oltre queste distanze un gruppo contribuisce esattamente 0 (uscita
+// anticipata, niente atan/rumore sui pixel lontani). Margini con un po' di
+// gioco sul caso peggiore del crackle (crackleFbm vale al più 1.05):
+// - sonar: r si accorcia al più di 0.55*RING_CRACKLE_FRAC = 0.022 di
+//   u_fadeDistance, e ringAt() è 0 per r >= u_fadeDistance;
+// - scia: dist si accorcia al più di 0.5*TRAIL_CRACKLE_FRAC = 0.175 di
+//   width (<= u_lineWidth), e glow è 0 per dist >= width.
+// Stessi valori di PING_SONAR_REACH/PING_TRAIL_REACH in JS: vanno tenuti
+// uguali (il riquadro del canvas ridotto usa quelli).
+const float SONAR_REACH = 1.05;
+const float TRAIL_REACH = 1.2;
 
 // .x = distanza dal segmento, .y = quanto avanti lungo a→b cade il punto
 // più vicino (0 = su a, 1 = su b) -- serve a interpolare l'età tra i due
@@ -1267,6 +1284,8 @@ float ringAt(float r, float time) {
 float sonarAlphaAt(vec2 p, vec2 center, float age, out vec3 outColor) {
   vec2 diff = center - p;
   float r = length(diff);
+  outColor = u_ringColor;
+  if (r > SONAR_REACH * u_fadeDistance) return 0.0;
   float angle = atan(diff.y, diff.x);
 
   // age*2.5 (non *6.0 come prima): crepitio più lento, stesso motivo per
@@ -1329,6 +1348,8 @@ float trailAlphaAt(vec2 p, int start, int count, out vec3 outColor) {
       age = mix(u_ages[a], u_ages[b], dt.y);
     }
   }
+  outColor = u_trailColor;
+  if (minDist > TRAIL_REACH * u_lineWidth) return 0.0;
 
   float t = clamp(age / u_lifespan, 0.0, 1.0);
   float eased = 1.0 - (1.0 - t) * (1.0 - t);
@@ -1368,7 +1389,7 @@ float trailAlphaAt(vec2 p, int start, int count, out vec3 outColor) {
 }
 
 void main() {
-  vec2 p = gl_FragCoord.xy;
+  vec2 p = gl_FragCoord.xy + u_offset;
   float alpha = 0.0;
   vec3 color = vec3(0.0);
 
@@ -1440,6 +1461,145 @@ const PING_TRAIL_COLOR_RGB = [0.9, 0.16, 0.08];
 // canvas (non px fissi -- vedi il commento in PingLayer.render()).
 const PING_RING_SIZE_PCT = 0.113;
 
+// Larghezza (px, prima della compensazione zoom) della scia alla TESTA.
+const PING_TRAIL_WIDTH_PX = 13;
+
+// Raggio d'azione di un gruppo oltre il quale lo shader del ping disegna 0:
+// stessi valori di SONAR_REACH/TRAIL_REACH in PING_FRAGMENT_SRC (motivati
+// lì). Servono a dimensionare il canvas ridotto del ping.
+const PING_SONAR_REACH = 1.05;
+const PING_TRAIL_REACH = 1.2;
+
+// Passo (px del buffer) a cui si arrotonda VERSO L'ESTERNO il riquadro dei
+// canvas ridotti di ping e AOE: il buffer si rialloca solo quando il
+// riquadro supera un multiplo, non a ogni pixel di spostamento della scia.
+const SUBCANVAS_SNAP_PX = 32;
+
+// Frame rate massimo delle aree AOE lanciate (AoeShaderLayer): sono animate
+// di continuo e ripresentarle a ogni frame del browser costa composizione
+// sul Raspberry. Fuoco/fumo/luce a 30 fps non si distinguono dai 60. Unico
+// punto da cambiare (vale per /display, /control e /party).
+const AOE_SHADER_MAX_FPS = 30;
+
+// Rettangolo [x0,y0,x1,y1] (px) ritagliato al canvas pieno fullW x fullH e
+// allargato ai multipli di `snap`. null se vuoto o tutto fuori.
+function snapRectPx(x0, y0, x1, y1, fullW, fullH, snap = SUBCANVAS_SNAP_PX) {
+  const cx0 = Math.max(0, x0);
+  const cy0 = Math.max(0, y0);
+  const cx1 = Math.min(fullW, x1);
+  const cy1 = Math.min(fullH, y1);
+  if (!(cx1 > cx0 && cy1 > cy0)) return null;
+  const s = Math.max(1, snap);
+  const sx0 = Math.max(0, Math.floor(cx0 / s) * s);
+  const sy0 = Math.max(0, Math.floor(cy0 / s) * s);
+  const sx1 = Math.min(fullW, Math.ceil(cx1 / s) * s);
+  const sy1 = Math.min(fullH, Math.ceil(cy1 / s) * s);
+  return { x: sx0, y: sy0, w: sx1 - sx0, h: sy1 - sy0 };
+}
+
+// Riquadro (px del canvas pieno, stessa convenzione dei punti in ingresso)
+// fuori dal quale nessun gruppo del ping disegna: sonar (gruppo da 1 punto)
+// = cerchio di raggio PING_SONAR_REACH*fadeDistance, scia = riquadro dei
+// suoi punti allargato di PING_TRAIL_REACH*lineWidth. `groupsPx`: array di
+// array di [x, y]. 2 px di margine per l'antialias. null se non resta niente.
+function pingGroupsBoundsPx(groupsPx, fadeDistancePx, lineWidthPx, fullW, fullH, snap = SUBCANVAS_SNAP_PX) {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const group of groupsPx) {
+    if (!group || !group.length) continue;
+    const reach = (group.length === 1 ? PING_SONAR_REACH * fadeDistancePx : PING_TRAIL_REACH * lineWidthPx) + 2;
+    for (const [x, y] of group) {
+      if (x - reach < x0) x0 = x - reach;
+      if (y - reach < y0) y0 = y - reach;
+      if (x + reach > x1) x1 = x + reach;
+      if (y + reach > y1) y1 = y + reach;
+    }
+  }
+  if (x0 === Infinity) return null;
+  return snapRectPx(x0, y0, x1, y1, fullW, fullH, snap);
+}
+
+// Unione di rettangoli {x, y, w, h} (px), ritagliata e arrotondata come
+// snapRectPx. null se la lista è vuota.
+function unionRectsPx(rects, fullW, fullH, snap = SUBCANVAS_SNAP_PX) {
+  if (!rects.length) return null;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const r of rects) {
+    x0 = Math.min(x0, r.x);
+    y0 = Math.min(y0, r.y);
+    x1 = Math.max(x1, r.x + r.w);
+    y1 = Math.max(y1, r.y + r.h);
+  }
+  return snapRectPx(x0, y0, x1, y1, fullW, fullH, snap);
+}
+
+// true se è ora di ridisegnare un layer limitato a `maxFps`. Tolleranza del
+// 15% sull'intervallo: a 60 Hz i rAF arrivano ogni ~16,7 ms, così si
+// disegna un frame sì e uno no (30 fps) anche con un po' di jitter; sotto i
+// 30 fps della pagina si disegna a ogni frame.
+function frameDue(nowMs, lastMs, maxFps) {
+  if (lastMs == null || !(maxFps > 0)) return true;
+  return nowMs - lastMs >= (1000 / maxFps) * 0.85;
+}
+
+// Canvas "ridotto": invece di un canvas WebGL grande quanto la mappa
+// (ripulito, ripresentato e ricomposto sopra il video a ogni frame), il
+// buffer copre solo `rect` (px del canvas pieno, origine in basso a
+// sinistra come gl.viewport) e il canvas è posizionato via CSS, in
+// percentuale del contenitore, esattamente su quel riquadro. Il canvas
+// pieno è quello che il canvas avrebbe con inset:0 (la classe CSS di
+// sempre): dimensione del genitore x devicePixelRatio. `rect` null =
+// niente da disegnare: canvas nascosto (display:none), non ripulito né
+// ripresentato.
+class SubCanvas {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.styleKey = '';
+    // Nascosto finché non c'è qualcosa da disegnare: un canvas WebGL mai
+    // disegnato resta comunque un layer (trasparente) da comporre.
+    this.shown = false;
+    canvas.style.display = 'none';
+  }
+
+  fullSize() {
+    const dpr = window.devicePixelRatio || 1;
+    const parent = this.canvas.parentElement;
+    const cssW = Math.max(1, Math.round(parent ? parent.clientWidth : this.canvas.clientWidth));
+    const cssH = Math.max(1, Math.round(parent ? parent.clientHeight : this.canvas.clientHeight));
+    return { w: Math.max(1, Math.round(cssW * dpr)), h: Math.max(1, Math.round(cssH * dpr)) };
+  }
+
+  hide() {
+    if (!this.shown) return;
+    this.shown = false;
+    this.canvas.style.display = 'none';
+  }
+
+  place(rect, full) {
+    if (this.canvas.width !== rect.w) this.canvas.width = rect.w;
+    if (this.canvas.height !== rect.h) this.canvas.height = rect.h;
+    const key = `${rect.x},${rect.y},${rect.w},${rect.h},${full.w},${full.h}`;
+    if (key !== this.styleKey) {
+      this.styleKey = key;
+      const st = this.canvas.style;
+      st.inset = 'auto';
+      st.left = `${(rect.x / full.w) * 100}%`;
+      st.top = `${((full.h - rect.y - rect.h) / full.h) * 100}%`;
+      st.width = `${(rect.w / full.w) * 100}%`;
+      st.height = `${(rect.h / full.h) * 100}%`;
+    }
+    if (!this.shown) {
+      this.shown = true;
+      this.canvas.style.display = '';
+    }
+  }
+}
+
 function compileShader(gl, type, source) {
   const shader = gl.createShader(type);
   gl.shaderSource(shader, source);
@@ -1481,6 +1641,10 @@ class ShaderLayer {
     this.noiseTexture = null;
     this.lastCssW = 0;
     this.lastCssH = 0;
+    // Nascosto (visibility: il layout resta valido per syncCanvasSize)
+    // finché render() non riceve decorazioni da disegnare.
+    this.hidden = true;
+    canvasEl.style.visibility = 'hidden';
   }
 
   get available() {
@@ -1537,14 +1701,28 @@ class ShaderLayer {
 
   // `decorations`: array di `{ id, shaderId, x, y, widthM, heightM }`.
   render(decorations, grid, naturalW, naturalH) {
-    if (!this.available || !naturalW || !naturalH) return;
+    if (!this.available) return;
     const gl = this.gl;
+    // Niente da disegnare: il canvas si nasconde (visibility, così
+    // clientWidth resta valido per syncCanvasSize) invece di essere
+    // ripulito e ripresentato a ogni frame del loop.
+    if (!decorations || !decorations.length) {
+      if (!this.hidden) {
+        this.hidden = true;
+        this.canvas.style.visibility = 'hidden';
+      }
+      return;
+    }
+    if (!naturalW || !naturalH) return;
+    if (this.hidden) {
+      this.hidden = false;
+      this.canvas.style.visibility = '';
+    }
     this.syncCanvasSize();
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    if (!decorations.length) return;
 
     const time = performance.now() / 1000;
 
@@ -1590,8 +1768,7 @@ class PingLayer {
     this.gl = canvasEl.getContext('webgl2');
     this.program = null;
     this.noiseTexture = null;
-    this.lastCssW = 0;
-    this.lastCssH = 0;
+    this.sub = new SubCanvas(canvasEl);
   }
 
   get available() {
@@ -1630,17 +1807,6 @@ class PingLayer {
     return texture;
   }
 
-  syncCanvasSize() {
-    const dpr = window.devicePixelRatio || 1;
-    const cssW = Math.max(1, Math.round(this.canvas.clientWidth));
-    const cssH = Math.max(1, Math.round(this.canvas.clientHeight));
-    if (cssW === this.lastCssW && cssH === this.lastCssH) return;
-    this.lastCssW = cssW;
-    this.lastCssH = cssH;
-    this.canvas.width = Math.max(1, Math.round(cssW * dpr));
-    this.canvas.height = Math.max(1, Math.round(cssH * dpr));
-  }
-
   // `points`: array di `{x, y, age}` -- x/y in percentuale (0-100, stesso
   // spazio locale pre-rotazione di fog/aoe/grid), age in secondi da quando
   // il punto è stato aggiunto (0 = appena piazzato). `lifespanSec`: durata
@@ -1662,18 +1828,25 @@ class PingLayer {
   render(groups, lifespanSec, zoomScale = 1) {
     if (!this.available) return;
     const gl = this.gl;
-    this.syncCanvasSize();
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    if (!groups.length) return;
+    // Niente ping vivi: canvas nascosto, né ripulito né ripresentato.
+    if (!groups || !groups.length) {
+      this.sub.hide();
+      return;
+    }
     const program = this.ensureProgram();
-    if (!program) return;
+    if (!program) {
+      this.sub.hide();
+      return;
+    }
+    // Coordinate nel canvas "pieno" (grande quanto la mappa, come prima):
+    // il canvas vero copre solo il riquadro dei gruppi vivi (SubCanvas).
+    const full = this.sub.fullSize();
 
     const xy = new Float32Array(MAX_PING_POINTS * 2);
     const ages = new Float32Array(MAX_PING_POINTS);
     const groupStart = new Int32Array(MAX_PING_GROUPS);
     const groupCount = new Int32Array(MAX_PING_GROUPS);
+    const groupsPx = [];
     let flatIdx = 0;
     let groupIdx = 0;
     for (const group of groups) {
@@ -1689,52 +1862,95 @@ class PingLayer {
       const tailStart = Math.max(0, group.length - count);
       groupStart[groupIdx] = flatIdx;
       groupCount[groupIdx] = count;
+      const groupPx = [];
       for (let i = 0; i < count; i++) {
         const pt = group[tailStart + i];
-        xy[flatIdx * 2] = (pt.x / 100) * this.canvas.width;
+        const x = (pt.x / 100) * full.w;
         // gl_FragCoord ha origine in basso a sinistra, la nostra
         // percentuale in alto a sinistra (come il DOM/CSS): l'asse Y va
         // invertito, stesso motivo di ShaderLayer.render().
-        xy[flatIdx * 2 + 1] = this.canvas.height - (pt.y / 100) * this.canvas.height;
+        const y = full.h - (pt.y / 100) * full.h;
+        xy[flatIdx * 2] = x;
+        xy[flatIdx * 2 + 1] = y;
         ages[flatIdx] = pt.age;
+        groupPx.push([x, y]);
         flatIdx++;
       }
+      groupsPx.push(groupPx);
       groupIdx++;
     }
-    if (!flatIdx) return;
+    if (!flatIdx) {
+      this.sub.hide();
+      return;
+    }
 
     const dpr = window.devicePixelRatio || 1;
     const zoomComp = Math.max(zoomScale, 0.01);
-    gl.useProgram(program);
-    gl.uniform2fv(gl.getUniformLocation(program, 'u_points'), xy);
-    gl.uniform1fv(gl.getUniformLocation(program, 'u_ages'), ages);
-    gl.uniform1iv(gl.getUniformLocation(program, 'u_groupStart'), groupStart);
-    gl.uniform1iv(gl.getUniformLocation(program, 'u_groupCount'), groupCount);
-    gl.uniform1i(gl.getUniformLocation(program, 'u_groupTotal'), groupIdx);
-    gl.uniform1f(gl.getUniformLocation(program, 'u_lifespan'), lifespanSec);
-    gl.uniform3f(gl.getUniformLocation(program, 'u_ringColor'), PING_RING_COLOR_RGB[0], PING_RING_COLOR_RGB[1], PING_RING_COLOR_RGB[2]);
-    gl.uniform3f(gl.getUniformLocation(program, 'u_trailColor'), PING_TRAIL_COLOR_RGB[0], PING_TRAIL_COLOR_RGB[1], PING_TRAIL_COLOR_RGB[2]);
     // Larghezza alla TESTA della cometa (vedi TRAIL_TAIL_WIDTH_FRAC nello
     // shader per quella in coda): 13, non più 7 -- richiesta esplicita,
     // "più spesso tutto".
-    gl.uniform1f(gl.getUniformLocation(program, 'u_lineWidth'), (13 * dpr) / zoomComp);
+    const lineWidth = (PING_TRAIL_WIDTH_PX * dpr) / zoomComp;
     // Raggio massimo dell'anello "radar ping" del tap fermo (vedi
     // PING_FRAGMENT_SRC): PERCENTUALE della larghezza del canvas, non px
     // fissi -- /control e /display hanno canvas di risoluzione molto
     // diversa (telefono del DM vs TV/monitor dei giocatori), quindi un
     // valore fisso appariva piccolo su uno schermo grande anche a parità
     // di zoom (richiesta dell'utente: "da display lo vedo ancora
-    // piccolo"). dpr è già incluso in this.canvas.width (syncCanvasSize
-    // lo moltiplica lì), non va applicato una seconda volta qui.
+    // piccolo"). dpr è già incluso in full.w (larghezza in px del buffer
+    // del canvas pieno), non va applicato una seconda volta qui.
     // Spessore/spaziatura/crackle sono tutti frazioni di questo valore
     // (vedi RING_*_FRAC nello shader), quindi scalarlo scala l'intero
     // effetto insieme -- PING_RING_SIZE_PCT include già il fattore 1,3×
     // richiesto in precedenza (prima era 45*1.3px su un canvas tipico di
     // ~516px, cioè ~0.113 della larghezza).
-    gl.uniform1f(gl.getUniformLocation(program, 'u_fadeDistance'), (PING_RING_SIZE_PCT * this.canvas.width) / zoomComp);
+    const fadeDistance = (PING_RING_SIZE_PCT * full.w) / zoomComp;
+
+    // Solo il riquadro dove almeno un gruppo può disegnare qualcosa: fuori
+    // lo shader darebbe comunque alpha 0 (vedi SONAR_REACH/TRAIL_REACH).
+    const rect = pingGroupsBoundsPx(groupsPx, fadeDistance, lineWidth, full.w, full.h);
+    if (!rect) {
+      this.sub.hide();
+      return;
+    }
+    this.sub.place(rect, full);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, rect.w, rect.h);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(program);
+    if (!this.uniforms) {
+      const loc = (n) => gl.getUniformLocation(program, n);
+      this.uniforms = {
+        points: loc('u_points'),
+        ages: loc('u_ages'),
+        groupStart: loc('u_groupStart'),
+        groupCount: loc('u_groupCount'),
+        groupTotal: loc('u_groupTotal'),
+        lifespan: loc('u_lifespan'),
+        ringColor: loc('u_ringColor'),
+        trailColor: loc('u_trailColor'),
+        lineWidth: loc('u_lineWidth'),
+        fadeDistance: loc('u_fadeDistance'),
+        noise: loc('u_noise'),
+        offset: loc('u_offset')
+      };
+    }
+    const u = this.uniforms;
+    gl.uniform2fv(u.points, xy);
+    gl.uniform1fv(u.ages, ages);
+    gl.uniform1iv(u.groupStart, groupStart);
+    gl.uniform1iv(u.groupCount, groupCount);
+    gl.uniform1i(u.groupTotal, groupIdx);
+    gl.uniform1f(u.lifespan, lifespanSec);
+    gl.uniform3f(u.ringColor, PING_RING_COLOR_RGB[0], PING_RING_COLOR_RGB[1], PING_RING_COLOR_RGB[2]);
+    gl.uniform3f(u.trailColor, PING_TRAIL_COLOR_RGB[0], PING_TRAIL_COLOR_RGB[1], PING_TRAIL_COLOR_RGB[2]);
+    gl.uniform1f(u.lineWidth, lineWidth);
+    gl.uniform1f(u.fadeDistance, fadeDistance);
+    gl.uniform2f(u.offset, rect.x, rect.y);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.ensureNoiseTexture());
-    gl.uniform1i(gl.getUniformLocation(program, 'u_noise'), 0);
+    gl.uniform1i(u.noise, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 }
@@ -1752,8 +1968,9 @@ class AoeShaderLayer {
     this.canvas = canvasEl;
     this.gl = canvasEl.getContext('webgl2');
     this.programs = new Map(); // shaderId -> WebGLProgram
-    this.lastCssW = 0;
-    this.lastCssH = 0;
+    this.sub = new SubCanvas(canvasEl);
+    this.lastDrawMs = null;
+    this.lastKey = '';
   }
 
   get available() {
@@ -1775,55 +1992,75 @@ class AoeShaderLayer {
     }
   }
 
-  syncCanvasSize() {
-    const dpr = window.devicePixelRatio || 1;
-    const cssW = Math.max(1, Math.round(this.canvas.clientWidth));
-    const cssH = Math.max(1, Math.round(this.canvas.clientHeight));
-    if (cssW === this.lastCssW && cssH === this.lastCssH) return;
-    this.lastCssW = cssW;
-    this.lastCssH = cssH;
-    this.canvas.width = Math.max(1, Math.round(cssW * dpr));
-    this.canvas.height = Math.max(1, Math.round(cssH * dpr));
-  }
-
   // `aoes`: array di AoE con `shaderId` già risolto (vedi resolveAoeShaderId
   // in media.js) -- solo quelle "lanciate" (cast === true); il chiamante
   // filtra, qui non si controlla aoe.cast.
   render(aoes, grid, naturalW, naturalH) {
-    if (!this.available || !naturalW || !naturalH) return;
+    if (!this.available) return;
     const gl = this.gl;
-    this.syncCanvasSize();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    if (!aoes.length) return;
+    // Niente aree lanciate: canvas nascosto, né ripulito né ripresentato.
+    if (!aoes || !aoes.length) {
+      this.sub.hide();
+      this.lastKey = '';
+      return;
+    }
+    if (!naturalW || !naturalH) return;
+    // Canvas "pieno" grande quanto la mappa (come prima): le coordinate di
+    // ogni area si calcolano lì, poi il canvas vero copre solo l'unione dei
+    // riquadri delle aree (SubCanvas).
+    const full = this.sub.fullSize();
+    const nowMs = performance.now();
+    // Le aree sono animate di continuo: si ridisegnano al più a
+    // AOE_SHADER_MAX_FPS. Se cambia qualcosa (aree, griglia, misure) si
+    // ridisegna subito, senza aspettare il turno.
+    const key = JSON.stringify([aoes, grid, naturalW, naturalH, full.w, full.h]);
+    if (key === this.lastKey && !frameDue(nowMs, this.lastDrawMs, AOE_SHADER_MAX_FPS)) return;
 
-    const time = performance.now() / 1000;
-    // Stesso rapporto per entrambi gli assi: naturalW/H -> canvas.width/
-    // height è sempre lo stesso fattore già usato per rectPct -> xPx/wPx
-    // qui sotto, quindi riusarlo diretto per i punti della maschera evita
-    // di ricalcolarlo (con un arrotondamento diverso) da wPx/hPx già
+    const time = nowMs / 1000;
+    // Stesso rapporto per entrambi gli assi: naturalW/H -> canvas pieno è
+    // sempre lo stesso fattore già usato per rectPct -> xPx/wPx qui sotto,
+    // quindi riusarlo diretto per i punti della maschera evita di
+    // ricalcolarlo (con un arrotondamento diverso) da wPx/hPx già
     // arrotondati.
-    const scaleX = this.canvas.width / naturalW;
-    const scaleY = this.canvas.height / naturalH;
+    const scaleX = full.w / naturalW;
+    const scaleY = full.h / naturalH;
 
+    const items = [];
     aoes.forEach((aoe) => {
       if (!aoe.shaderId) return;
       const program = this.getProgram(aoe.shaderId);
       if (!program) return;
       const { rectPct, maskPointsPx } = aoeShaderMaskRect(aoe, grid, naturalW, naturalH);
-
-      const xPx = (rectPct.leftPct / 100) * this.canvas.width;
-      const topPx = (rectPct.topPct / 100) * this.canvas.height;
-      const wPx = Math.max(1, Math.round((rectPct.widthPct / 100) * this.canvas.width));
-      const hPx = Math.max(1, Math.round((rectPct.heightPct / 100) * this.canvas.height));
+      const xPx = (rectPct.leftPct / 100) * full.w;
+      const topPx = (rectPct.topPct / 100) * full.h;
+      const wPx = Math.max(1, Math.round((rectPct.widthPct / 100) * full.w));
+      const hPx = Math.max(1, Math.round((rectPct.heightPct / 100) * full.h));
       // gl.viewport usa origine in basso a sinistra, la nostra percentuale
       // è in alto a sinistra (come il DOM/CSS): l'asse Y va invertito,
       // stesso motivo di ShaderLayer.render().
-      const yPx = Math.round(this.canvas.height - topPx - hPx);
+      const yPx = Math.round(full.h - topPx - hPx);
       const originXPx = Math.round(xPx);
+      items.push({ aoe, program, maskPointsPx, x: originXPx, y: yPx, w: wPx, h: hPx });
+    });
+    this.lastKey = key;
+    const rect = unionRectsPx(items, full.w, full.h);
+    if (!rect) {
+      this.sub.hide();
+      return;
+    }
+    this.lastDrawMs = nowMs;
+    this.sub.place(rect, full);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, rect.w, rect.h);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
+    items.forEach(({ aoe, program, maskPointsPx, x, y, w: wPx, h: hPx }) => {
+      // Stesso rettangolo del canvas pieno, spostato nel canvas ridotto:
+      // dentro il rettangolo (fragCoord = gl_FragCoord - u_viewportOrigin)
+      // i pixel restano identici.
+      const originXPx = x - rect.x;
+      const yPx = y - rect.y;
       gl.viewport(originXPx, yPx, wPx, hPx);
       gl.useProgram(program);
       gl.uniform1f(gl.getUniformLocation(program, 'u_time'), time);
@@ -1932,4 +2169,20 @@ function aoeShapeWarpParams(shape, maskPointsPx, scaleX, scaleY, hPx) {
   }
 
   return null;
+}
+
+// Funzioni pure esportate per i test (node --test); nel browser il file resta
+// uno script classico con globali.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    snapRectPx,
+    pingGroupsBoundsPx,
+    unionRectsPx,
+    frameDue,
+    PING_SONAR_REACH,
+    PING_TRAIL_REACH,
+    SUBCANVAS_SNAP_PX,
+    AOE_SHADER_MAX_FPS,
+    PING_FRAGMENT_SRC
+  };
 }
