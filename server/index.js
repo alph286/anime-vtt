@@ -21,6 +21,7 @@ const { normalizeDisplayAudioStatus } = require('../public/shared/audio-fade.js'
 const tar = require('tar-stream');
 const exportImport = require('./exportImport');
 const packageJson = require('../package.json');
+const { registerImageEvents } = require('./socket-images');
 const { registerFogEvents } = require('./socket-fog');
 const { registerLocationEvents } = require('./socket-location');
 
@@ -626,120 +627,7 @@ io.on('connection', (socket) => {
 
   registerFogEvents(socket, socketCtx);
 
-  socket.on('image:show', ({ imageId }) => {
-    const location = getActiveLocation();
-    if (!location?.images.some((i) => i.id === imageId)) return;
-    state.activeImageId = imageId;
-    broadcastState();
-  });
-
-  // Default di /handout: `locationId` null = globale, `id` null = nessuno.
-  socket.on('handout:setDefault', ({ locationId = null, id = null } = {}) => {
-    if (!handoutModel.setHandoutDefault(state, { locationId, id })) return;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('handoutLibrary:update', ({ id, name } = {}) => {
-    if (!handoutModel.renameHandoutItem(state, id, name)) return;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('handoutLibrary:delete', ({ id } = {}) => {
-    const file = handoutModel.removeHandoutItem(state, id);
-    if (!file) return;
-    deleteUploadedFile(HANDOUT_DIR, file);
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('image:hide', () => {
-    state.activeImageId = null;
-    broadcastState();
-  });
-
-  socket.on('image:rename', ({ locationId, imageId, name }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    const image = location?.images.find((i) => i.id === imageId);
-    if (!image) return;
-    image.name = String(name || '').slice(0, 120);
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('image:delete', ({ locationId, imageId }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    const image = location?.images.find((i) => i.id === imageId);
-    if (!image) return;
-
-    location.images = location.images.filter((i) => i.id !== imageId);
-    if (state.activeImageId === imageId) state.activeImageId = null;
-    if (image.file) deleteUploadedFile(IMAGES_DIR, image.file);
-
-    saveState(state);
-    broadcastState();
-  });
-
-  // Stesso schema di validazione di location:reorder: l'ordine proposto deve
-  // essere una permutazione esatta degli id già presenti, altrimenti viene
-  // ignorato (nessun id perso o duplicato per un client rimasto indietro).
-  socket.on('image:reorder', ({ locationId, orderedIds }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    if (!location || !Array.isArray(orderedIds)) return;
-    const currentIds = (location.images || []).map((img) => img.id);
-    const currentSet = new Set(currentIds);
-    const seen = new Set();
-    const validOrder = orderedIds.filter((id) => {
-      if (!currentSet.has(id) || seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
-    if (validOrder.length !== currentIds.length) return;
-    const byId = new Map(location.images.map((img) => [img.id, img]));
-    location.images = validOrder.map((id) => byId.get(id));
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('image:caption', ({ locationId, imageId, caption }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    const image = location?.images.find((i) => i.id === imageId);
-    if (!image) return;
-    image.caption = String(caption || '').slice(0, 1024); // limite didascalia di Telegram
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('image:destination', ({ locationId, imageId, destination }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    const image = location?.images.find((i) => i.id === imageId);
-    if (!image) return;
-    image.telegramDestination = destination || null;
-    saveState(state);
-    broadcastState();
-  });
-
-  socket.on('image:sendTelegram', async ({ locationId, imageId }) => {
-    const location = state.locations.find((l) => l.id === locationId);
-    const image = location?.images.find((i) => i.id === imageId);
-    if (!image) {
-      socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Immagine non trovata' });
-      return;
-    }
-    if (image.url) {
-      socket.emit('telegram:sendResult', { imageId, ok: false, error: 'Le pagine web non si inviano su Telegram' });
-      return;
-    }
-    const result = await sendStoredMedia({
-      config: telegramConfig,
-      client: telegramClient,
-      filePath: path.join(IMAGES_DIR, image.file),
-      caption: image.caption,
-      destinationName: image.telegramDestination
-    });
-    socket.emit('telegram:sendResult', { imageId, ok: result.ok, error: result.error });
-  });
+  registerImageEvents(socket, socketCtx);
 
   socket.on('view:pan', ({ locationId, dx, dy }) => {
     const location = state.locations.find((l) => l.id === locationId);
